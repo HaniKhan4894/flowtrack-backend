@@ -1,0 +1,157 @@
+<?php
+
+namespace App\Controllers\API\V1;
+
+use CodeIgniter\RESTful\ResourceController;
+use App\Services\ActivityLogService;
+
+class ActivityLogController extends ResourceController
+{
+    /** @var \App\Services\ActivityLogService */
+    protected $activityLogService;
+    protected $format = 'json';
+
+    public function __construct()
+    {
+        $this->activityLogService = new \App\Services\ActivityLogService();
+    }
+
+    /**
+     * GET /api/v1/activity-logs?user_id=1&category=productive&start_date=2024-01-01&page=1
+     */
+    public function index()
+    {
+        try {
+            $userId = (int)($this->request->user_id ?? 1);
+            $organizationId = (int)$this->request->organization_id;
+            
+            $permissionService = new \App\Services\PermissionService();
+            $canViewTeam = $permissionService->userHasPermission($userId, $organizationId, 'activity.view_team');
+
+            $requestedUserId = $this->request->getGet('user_id');
+
+            $filters = [
+                'user_id' => $canViewTeam ? $requestedUserId : $userId,
+                'time_entry_id' => $this->request->getGet('time_entry_id'),
+                'category' => $this->request->getGet('category'),
+                'start_date' => $this->request->getGet('start_date'),
+                'end_date' => $this->request->getGet('end_date'),
+                'page' => $this->request->getGet('page') ?? 1,
+                'per_page' => $this->request->getGet('per_page') ?? 50,
+            ];
+
+            $filters = array_filter($filters, fn($value) => $value !== null);
+
+            $result = $this->activityLogService->getActivityLogs($filters);
+
+            return $this->respond([
+                'success' => true,
+                'data' => $result['data'],
+                'pagination' => $result['pagination']
+            ]);
+
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+
+    /**
+     * POST /api/v1/activity-logs/sync
+     * Batch log activity
+     */
+    public function sync()
+    {
+        try {
+            /** @var \App\Entities\User $user */
+            $userId = (int)($this->request->user_id ?? 1);
+            $data = $this->request->getJSON(true);
+
+            if (!isset($data['time_entry_id'])) {
+                return $this->fail('time_entry_id is required', 400);
+            }
+
+            // If it's a single log, wrap in array
+            $logs = isset($data['logs']) ? $data['logs'] : [$data];
+
+            $results = [];
+            foreach ($logs as $log) {
+                $results[] = $this->activityLogService->logActivity($data['time_entry_id'], $userId, $log);
+            }
+
+            return $this->respondCreated([
+                'success' => true,
+                'message' => 'Activity logs synced successfully',
+                'count' => count($results)
+            ]);
+
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+
+    /**
+     * POST /api/v1/activity-logs
+     */
+    public function create()
+    {
+        try {
+            $userId = (int)($this->request->user_id ?? 1);
+            $data = $this->request->getJSON(true);
+
+            $rules = [
+                'time_entry_id' => 'required|is_natural_no_zero',
+            ];
+
+            if (!$this->validate($rules)) {
+                return $this->failValidationErrors($this->validator->getErrors());
+            }
+
+            $log = $this->activityLogService->logActivity($data['time_entry_id'], $userId, $data);
+
+            return $this->respondCreated([
+                'success' => true,
+                'message' => 'Activity logged successfully',
+                'data' => $log
+            ]);
+
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+
+    /**
+     * GET /api/v1/activity-logs/productivity-stats?user_id=1&start_date=2024-01-01&end_date=2024-01-31
+     */
+    public function productivityStats()
+    {
+        try {
+            $currentUserId = (int)($this->request->user_id ?? 1);
+            $organizationId = (int)$this->request->organization_id;
+            
+            $permissionService = new \App\Services\PermissionService();
+            $canViewTeam = $permissionService->userHasPermission($currentUserId, $organizationId, 'activity.view_team');
+
+            $requestedUserId = $this->request->getGet('user_id') ?? $currentUserId;
+            
+            // Enforce ownership
+            $targetUserId = $canViewTeam ? $requestedUserId : $currentUserId;
+
+            $startDate = $this->request->getGet('start_date');
+            $endDate = $this->request->getGet('end_date');
+
+            if (!$startDate || !$endDate) {
+                return $this->fail('start_date and end_date are required', 400);
+            }
+
+            $stats = $this->activityLogService->getProductivityStats($targetUserId, $startDate, $endDate);
+
+            return $this->respond([
+                'success' => true,
+                'data' => $stats
+            ]);
+
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+}

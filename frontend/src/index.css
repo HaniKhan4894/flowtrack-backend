@@ -1,0 +1,82 @@
+@import "tailwindcss";
+
+@theme {
+  --color-background: #0A0C12;
+  --color-primary-50: #EEF2FF;
+  --color-primary-100: #E0E7FF;
+  --color-primary-200: #C7D2FE;
+  --color-primary-300: #A5B4FC;
+  --color-primary-400: #818CF8;
+  --color-primary-500: #6366F1;
+  --color-primary-600: #4F46E5;
+  --color-primary-700: #4338CA;
+  --color-primary-800: #3730A3;
+  --color-primary-900: #312E81;
+  --color-primary: var(--color-primary-500);
+
+  --color-secondary-50: #ECFEFF;
+  --color-secondary-100: #CFFAFE;
+  --color-secondary-200: #A5F3FC;
+  --color-secondary-300: #67E8F9;
+  --color-secondary-400: #22D3EE;
+  --color-secondary-500: #06B6D4;
+  --color-secondary-600: #0891B2;
+  --color-secondary-700: #0E7490;
+  --color-secondary-800: #155E75;
+  --color-secondary-900: #164E63;
+  --color-secondary: var(--color-secondary-500);
+
+  --color-accent: #F43F5E;
+  
+  --font-sans: "Inter", "system-ui", sans-serif;
+  --font-display: "Outfit", "Inter", sans-serif;
+
+  --background-image-ai-gradient: linear-gradient(135deg, #6366F1 0%, #06B6D4 100%);
+  
+  --shadow-glass: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  --shadow-ai: 0 0 20px rgba(99, 102, 241, 0.3);
+}
+
+@layer base {
+  body {
+    @apply bg-background text-slate-200 antialiased font-sans;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display text-white;
+  }
+}
+
+@layer components {
+  .glass {
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: var(--shadow-glass);
+  }
+
+  .glass-card {
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: var(--shadow-glass);
+    @apply rounded-2xl p-6 transition-all duration-300;
+  }
+  
+  .glass-card:hover {
+    border-color: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .ai-button {
+    @apply relative px-6 py-3 rounded-full font-semibold transition-all duration-300
+    bg-[image:var(--background-image-ai-gradient)] text-white shadow-[var(--shadow-ai)] hover:opacity-90 active:scale-95 disabled:opacity-50;
+  }
+
+  .gradient-text {
+    background: var(--background-image-ai-gradient);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+}

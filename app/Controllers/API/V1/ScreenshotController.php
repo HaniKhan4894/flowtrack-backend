@@ -1,0 +1,164 @@
+<?php
+
+namespace App\Controllers\API\V1;
+
+use CodeIgniter\RESTful\ResourceController;
+use App\Services\ScreenshotService;
+
+class ScreenshotController extends ResourceController
+{
+    protected $screenshotService;
+    protected $format = 'json';
+
+    public function __construct()
+    {
+        $this->screenshotService = new ScreenshotService();
+    }
+
+    /**
+     * GET /api/v1/screenshots?user_id=1&time_entry_id=5&start_date=2024-01-01&page=1
+     */
+    public function index()
+    {
+        try {
+            $userId = (int)($this->request->user_id ?? 1);
+            $organizationId = (int)$this->request->organization_id;
+            
+            $permissionService = new \App\Services\PermissionService();
+            $canViewTeam = $permissionService->userHasPermission($userId, $organizationId, 'screenshots.view_team');
+
+            $requestedUserId = $this->request->getGet('user_id');
+
+            $filters = [
+                'user_id' => $canViewTeam ? $requestedUserId : $userId,
+                'time_entry_id' => $this->request->getGet('time_entry_id'),
+                'start_date' => $this->request->getGet('start_date'),
+                'end_date' => $this->request->getGet('end_date'),
+                'page' => $this->request->getGet('page') ?? 1,
+                'per_page' => $this->request->getGet('per_page') ?? 20,
+            ];
+
+            $filters = array_filter($filters, fn($value) => $value !== null);
+
+            $result = $this->screenshotService->getScreenshots($filters);
+
+            return $this->respond([
+                'success' => true,
+                'data' => $result['data'],
+                'pagination' => $result['pagination']
+            ]);
+
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+
+    /**
+     * POST /api/v1/screenshots/upload
+     */
+    public function upload()
+    {
+        try {
+            $userId = (int)($this->request->user_id ?? 1);
+            $timeEntryId = $this->request->getPost('time_entry_id');
+
+            if (!$timeEntryId) {
+                return $this->fail('time_entry_id is required', 400);
+            }
+
+            $file = $this->request->getFile('screenshot');
+
+            if (!$file || !$file->isValid()) {
+                return $this->fail('No valid screenshot file uploaded', 400);
+            }
+
+            $data = [
+                'is_blurred' => $this->request->getPost('is_blurred') ?? false,
+                'activity_level' => $this->request->getPost('activity_level') ?? 0,
+            ];
+
+            $screenshot = $this->screenshotService->saveScreenshot($timeEntryId, $userId, $file, $data);
+
+            return $this->respondCreated([
+                'success' => true,
+                'message' => 'Screenshot uploaded successfully',
+                'data' => $screenshot
+            ]);
+
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+
+    /**
+     * GET /api/v1/screenshots/time-entry/{timeEntryId}
+     */
+    public function byTimeEntry($timeEntryId = null)
+    {
+        try {
+            $screenshots = $this->screenshotService->getScreenshotsByTimeEntry($timeEntryId);
+
+            return $this->respond([
+                'success' => true,
+                'data' => $screenshots
+            ]);
+
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+
+    /**
+     * GET /api/v1/screenshots/view/(:num)
+     * Serve screenshot file
+     */
+    public function view($id = null)
+    {
+        try {
+            $screenshot = $this->screenshotService->getScreenshot($id);
+            if (!$screenshot) {
+                return $this->fail('Screenshot not found', 404);
+            }
+
+            // Path to file in writable
+            $path = WRITEPATH . 'uploads/screenshots/' . $screenshot['file_path'];
+
+            if (!file_exists($path)) {
+                return $this->fail('File not found', 404);
+            }
+
+            $mimeType = mime_content_type($path);
+            
+            return $this->response
+                ->setHeader('Content-Type', $mimeType)
+                ->setBody(file_get_contents($path));
+
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+
+    /**
+     * DELETE /api/v1/screenshots/(:num)
+     */
+    public function delete($id = null)
+    {
+        try {
+            $userId = (int)($this->request->user_id ?? 1);
+
+            $deleted = $this->screenshotService->deleteScreenshot($id, $userId);
+
+            if (!$deleted) {
+                return $this->fail('Failed to delete screenshot', 400);
+            }
+
+            return $this->respondDeleted([
+                'success' => true,
+                'message' => 'Screenshot deleted successfully'
+            ]);
+
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+}
