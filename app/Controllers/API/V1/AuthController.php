@@ -41,21 +41,21 @@ class AuthController extends ResourceController
             if ($invitationToken && isset($result['id'])) {
                 $organizationService = new \App\Services\OrganizationService();
                 $invitationModel = new \App\Models\InvitationModel();
-                
+
                 $invite = $invitationModel->where('token', $invitationToken)
-                                        ->where('expires_at >=', date('Y-m-d H:i:s'))
-                                        ->first();
-                                        
+                    ->where('expires_at >=', date('Y-m-d H:i:s'))
+                    ->first();
+
                 if ($invite) {
                     try {
-                         $organizationService->addMember(
-                             $invite['organization_id'],
-                             $result['id'],
-                             $invite['role'],
-                             null
-                         );
-                         // Delete invitation after use
-                         $invitationModel->delete($invite['id']);
+                        $organizationService->addMember(
+                            $invite['organization_id'],
+                            $result['id'],
+                            $invite['role'],
+                            null
+                        );
+                        // Delete invitation after use
+                        $invitationModel->delete($invite['id']);
                     } catch (\Exception $ex) {
                         // Log error but don't fail registration
                         log_message('error', 'Failed to process invitation: ' . $ex->getMessage());

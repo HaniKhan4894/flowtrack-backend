@@ -61,14 +61,14 @@ class PermissionFilter implements FilterInterface
 
         // Attach user data to request
         $userId = $userData['user_id'] ?? null;
-        $request->user_id = $userId ? (int)$userId : null;
+        $request->user_id = $userId ? (int) $userId : null;
         $request->email = $userData['email'] ?? null;
         $request->role = $userData['role'] ?? null;
 
         // Check permission if specified
         if (!empty($arguments)) {
             $requiredPermission = $arguments[0];
-            
+
             // Get organization ID from request (set by AuthFilter) or query or token
             $organizationId = $request->organization_id ?? service('request')->getGet('organization_id') ?? $userData['organization_id'] ?? null;
 
@@ -80,9 +80,9 @@ class PermissionFilter implements FilterInterface
                     ->orderBy('joined_at', 'ASC')
                     ->get()
                     ->getRowArray();
-                
+
                 if ($orgMember) {
-                    $organizationId = (int)$orgMember['organization_id'];
+                    $organizationId = (int) $orgMember['organization_id'];
                 }
             }
 

@@ -4,15 +4,16 @@ import { Button, Input } from '../../components/ui';
 import { UserPlus, Github, Mail, Sparkles, ArrowRight } from 'lucide-react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { authService } from '../../api/authService';
+import { useAuthStore } from '../../store/authStore';
 
 const RegisterPage = () => {
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
   const invitationToken = searchParams.get('invitation_token');
+  const setAuth = useAuthStore((state) => state.setAuth);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -23,8 +24,13 @@ const RegisterPage = () => {
     const data = Object.fromEntries(formData.entries());
 
     try {
-      await authService.register(data);
-      navigate('/login', { state: { message: 'Registration successful! Please login.' } });
+      const response = await authService.register(data);
+      
+      // Auto-login the user with the returned tokens
+      setAuth(response.data.user, response.data.tokens.access_token);
+      
+      // Navigate directly to dashboard
+      navigate('/');
     } catch (err: any) {
       setError(err.response?.data?.message || 'Registration failed. Please try again.');
     } finally {

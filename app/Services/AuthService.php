@@ -46,7 +46,7 @@ class AuthService
             $this->db->transComplete();
 
             // Refresh user data (if needed, though createUser returns it)
-            
+
             // Generate tokens
             $tokens = $this->generateTokens($user);
 
@@ -118,7 +118,7 @@ class AuthService
             'user_id' => $user['id'],
             'email' => $user['email'],
             'role' => $user['role'],
-            'organization_id' => $orgMember ? (int)$orgMember['organization_id'] : null
+            'organization_id' => $orgMember ? (int) $orgMember['organization_id'] : null
         ]);
 
         return [
@@ -160,10 +160,10 @@ class AuthService
             'user_id' => $user['id'],
             'email' => $user['email'],
             'role' => $user['role'],
-            'organization_id' => $orgMember ? (int)$orgMember['organization_id'] : null
+            'organization_id' => $orgMember ? (int) $orgMember['organization_id'] : null
         ];
 
-        $accessToken = $this->jwtHandler->generateAccessToken($payload, 900); // 15 minutes
+        $accessToken = $this->jwtHandler->generateAccessToken($payload, 2592000); // 30 days
         $refreshToken = $this->jwtHandler->generateRefreshToken(['user_id' => $user['id']], 2592000); // 30 days
 
         return [
