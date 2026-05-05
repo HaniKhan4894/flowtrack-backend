@@ -21,7 +21,12 @@ const RegisterPage = () => {
     setError(null);
     
     const formData = new FormData(e.currentTarget);
-    const data = Object.fromEntries(formData.entries());
+    const data: any = Object.fromEntries(formData.entries());
+
+    // Include invitation token if present in URL
+    if (invitationToken) {
+      data.invitation_token = invitationToken;
+    }
 
     try {
       const response = await authService.register(data);

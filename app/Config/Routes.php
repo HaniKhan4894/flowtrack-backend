@@ -17,15 +17,15 @@ $routes->get('/', 'Home::index');
  * Example: /api/v1/users?role=admin&page=1
  */
 
-$routes->group('api/v1', ['namespace' => 'App\Controllers\API\V1'], function($routes) {
-    
+$routes->group('api/v1', ['namespace' => 'App\Controllers\API\V1'], function ($routes) {
+
     // OPTIONS routes for CORS preflight (must be before other routes)
-    $routes->options('(:any)', function() {
+    $routes->options('(:any)', function () {
         $response = service('response');
         $response->setStatusCode(200);
         return $response;
     });
-    
+
     // Public Authentication Routes (No Auth Required)
     $routes->post('auth/register', 'AuthController::register');
     $routes->post('auth/login', 'AuthController::login');
@@ -33,7 +33,7 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\API\V1'], function($ro
     $routes->post('auth/logout', 'AuthController::logout');
     $routes->post('auth/forgot-password', 'AuthController::forgotPassword');
     $routes->post('auth/reset-password', 'AuthController::resetPassword');
-    
+
     // Protected Authentication Routes (Auth Required)
     $routes->get('auth/me', 'AuthController::me', ['filter' => 'auth']);
 
@@ -71,11 +71,13 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\API\V1'], function($ro
     $routes->get('time-entries', 'TimeEntryController::index');
     $routes->post('time-entries/start', 'TimeEntryController::start');
     $routes->post('time-entries/(:num)/stop', 'TimeEntryController::stop/$1');
+    $routes->post('time-entries/(:num)/pause', 'TimeEntryController::pause/$1');
+    $routes->post('time-entries/(:num)/resume', 'TimeEntryController::resume/$1');
     $routes->get('time-entries/active', 'TimeEntryController::active');
     $routes->post('time-entries/manual', 'TimeEntryController::manual');
 
     // Screenshot Routes
-    $routes->group('screenshots', ['filter' => ['auth', 'planFeature:screenshots']], function($routes) {
+    $routes->group('screenshots', ['filter' => ['auth', 'planFeature:screenshots']], function ($routes) {
         $routes->get('(:num)', 'ScreenshotController::show/$1', ['filter' => 'permission:screenshots.view_own']);
         $routes->get('view/(:num)', 'ScreenshotController::view/$1', ['filter' => 'permission:screenshots.view_own']);
         $routes->post('upload', 'ScreenshotController::upload', ['filter' => 'permission:screenshots.create']);
@@ -84,14 +86,14 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\API\V1'], function($ro
     });
 
     // Activity Log Routes
-    $routes->group('activity-logs', ['filter' => ['auth', 'planFeature:activity_tracking']], function($routes) {
+    $routes->group('activity-logs', ['filter' => ['auth', 'planFeature:activity_tracking']], function ($routes) {
         $routes->get('/', 'ActivityLogController::index', ['filter' => 'permission:activity.view_own']);
         $routes->post('sync', 'ActivityLogController::sync', ['filter' => 'permission:activity.create']);
         $routes->get('stats', 'ActivityLogController::stats', ['filter' => 'permission:activity.view_team']);
     });
 
     // Invoice Routes
-    $routes->group('invoices', ['filter' => ['auth', 'planFeature:invoicing']], function($routes) {
+    $routes->group('invoices', ['filter' => ['auth', 'planFeature:invoicing']], function ($routes) {
         $routes->get('/', 'InvoiceController::index', ['filter' => 'permission:invoices.view']);
         $routes->post('/', 'InvoiceController::create', ['filter' => 'permission:invoices.create']);
         $routes->get('(:num)', 'InvoiceController::show/$1', ['filter' => 'permission:invoices.view']);
@@ -122,7 +124,7 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\API\V1'], function($ro
     // Plans & Subscription Routes (Public - no auth for plans)
     $routes->get('plans', 'SubscriptionController::plans');
     $routes->get('plans/(:num)', 'SubscriptionController::planDetails/$1');
-    
+
     // Subscription Management (Auth required)
     $routes->post('subscriptions', 'SubscriptionController::subscribe', ['filter' => 'auth']);
     $routes->get('subscriptions/current', 'SubscriptionController::current', ['filter' => 'auth']);

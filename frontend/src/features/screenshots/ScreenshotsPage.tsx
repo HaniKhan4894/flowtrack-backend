@@ -1,20 +1,35 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { Camera, Calendar, Filter, ZoomIn, Trash2, Download, RefreshCw, X } from 'lucide-react';
+import { Camera, Calendar, ZoomIn, Trash2, Download, RefreshCw, X, Zap, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '../../components/ui';
 import { screenshotService } from '../../api/screenshotService';
+import { monitoringService } from '../../api/monitoringService';
 import { useAuthStore } from '../../store/authStore';
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 
 const ScreenshotsPage = () => {
   const { accessToken } = useAuthStore();
   const [screenshots, setScreenshots] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedScreenshot, setSelectedScreenshot] = useState<any | null>(null);
+  const [isCapturing, setIsCapturing] = useState(false);
+  const [captureToast, setCaptureToast] = useState<string | null>(null);
+  
+  // Default to today
+  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
+
+  const isDesktop = monitoringService.isDesktop;
 
   const fetchScreenshots = async () => {
     try {
       setIsLoading(true);
-      const response = await screenshotService.getAll();
+      const filters: any = {};
+      if (selectedDate) {
+        // Backend compares with captured_at, so include full day range
+        filters.start_date = `${selectedDate} 00:00:00`;
+        filters.end_date = `${selectedDate} 23:59:59`;
+      }
+      
+      const response = await screenshotService.getAll(filters);
       setScreenshots(response.data);
     } catch (error) {
       console.error('Failed to fetch screenshots', error);
@@ -25,7 +40,7 @@ const ScreenshotsPage = () => {
 
   useEffect(() => {
     fetchScreenshots();
-  }, []);
+  }, [selectedDate]);
 
   const handleDelete = async (id: number) => {
     try {
@@ -36,9 +51,41 @@ const ScreenshotsPage = () => {
     }
   };
 
+  const handleCaptureNow = async () => {
+    setIsCapturing(true);
+    try {
+      const result = await monitoringService.captureNow();
+      if (result.success) {
+        setCaptureToast('✅ Screenshot captured!');
+        // Small delay to ensure DB is updated before fetch
+        setTimeout(() => fetchScreenshots(), 2000); 
+      } else {
+        setCaptureToast(result.error || '❌ Capture failed. Start a timer first.');
+      }
+    } catch {
+      setCaptureToast('❌ Capture failed.');
+    } finally {
+      setIsCapturing(false);
+      setTimeout(() => setCaptureToast(null), 3000);
+    }
+  };
+
+  const changeDate = (days: number) => {
+    const d = new Date(selectedDate);
+    d.setDate(d.getDate() + days);
+    setSelectedDate(d.toISOString().split('T')[0]);
+  };
+
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between">
+      {/* Toast */}
+      {captureToast && (
+        <div className="fixed top-6 right-6 z-50 bg-surface-700 border border-white/10 text-white px-5 py-3 rounded-2xl shadow-2xl text-sm font-semibold">
+          {captureToast}
+        </div>
+      )}
+
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
           <h1 className="text-3xl font-bold text-white mb-2 flex items-center gap-2">
             <Camera className="text-primary-400" />
@@ -47,29 +94,60 @@ const ScreenshotsPage = () => {
           <p className="text-slate-400">Monitor work progress with periodic desktop captures.</p>
         </div>
         
-        <div className="flex gap-4">
+        <div className="flex flex-wrap items-center gap-3">
+          {isDesktop && (
+            <Button variant="primary" size="sm" onClick={handleCaptureNow} isLoading={isCapturing}>
+              <Zap className="w-4 h-4 mr-2" />
+              Capture Now
+            </Button>
+          )}
+          
+          <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-xl px-2 py-1.5 h-[38px]">
+             <button onClick={() => changeDate(-1)} className="p-1 hover:bg-white/10 rounded-lg text-slate-400">
+               <ChevronLeft size={16} />
+             </button>
+             
+             <div className="flex items-center gap-2 px-1">
+                <Calendar size={14} className="text-primary-400" />
+                <input 
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  className="bg-transparent border-0 text-xs font-bold text-white p-0 focus:ring-0 w-28 uppercase"
+                />
+             </div>
+
+             <button onClick={() => changeDate(1)} className="p-1 hover:bg-white/10 rounded-lg text-slate-400">
+               <ChevronRight size={16} />
+             </button>
+          </div>
+
           <Button variant="secondary" size="sm" onClick={fetchScreenshots} isLoading={isLoading}>
             <RefreshCw className="w-4 h-4 mr-2" />
             Refresh
           </Button>
-          <Button variant="secondary" size="sm">
-            <Calendar className="w-4 h-4 mr-2" />
-            Feb 1, 2026
-          </Button>
-          <Button variant="secondary" size="sm">
-            <Filter className="w-4 h-4 mr-2" />
-            Filter
-          </Button>
+          
+          {selectedDate !== new Date().toISOString().split('T')[0] && (
+            <button 
+              onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}
+              className="text-xs font-bold text-primary-400 hover:text-primary-300 hover:underline px-2"
+            >
+              Today
+            </button>
+          )}
         </div>
       </div>
 
       {screenshots.length === 0 && !isLoading && (
         <div className="glass-card flex flex-col items-center justify-center py-20 text-center">
           <Camera className="w-16 h-16 text-slate-700 mb-4" />
-          <h3 className="text-xl font-bold text-white mb-2">No screenshots yet</h3>
-          <p className="text-slate-400 max-w-sm">
-            Screenshots will appear here once the timer is started and activity is being monitored.
+          <h3 className="text-xl font-bold text-white mb-2">No screenshots found</h3>
+          <p className="text-slate-400 max-w-sm mb-6">
+            There are no screenshots for {selectedDate === new Date().toISOString().split('T')[0] ? 'today' : selectedDate}.
           </p>
+          <Button variant="secondary" size="sm" onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}>
+            Go to Today
+          </Button>
         </div>
       )}
 
@@ -84,8 +162,8 @@ const ScreenshotsPage = () => {
               key={item.id}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.1 }}
-              className="glass-card group relative overflow-hidden p-0"
+              transition={{ delay: index * 0.05 }}
+              className="glass-card group relative overflow-hidden p-0 border-white/5"
             >
               <div 
                 className={`aspect-video w-full overflow-hidden cursor-pointer ${isBlurred ? 'blur-md grayscale' : ''}`}
@@ -93,7 +171,7 @@ const ScreenshotsPage = () => {
               >
                 <img 
                   src={imageUrl} 
-                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" 
+                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" 
                   alt="Workspace capture" 
                 />
               </div>
@@ -102,11 +180,11 @@ const ScreenshotsPage = () => {
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
                     <div className="w-6 h-6 rounded-full bg-primary-500/20 flex items-center justify-center text-[10px] text-primary-400 font-bold uppercase">
-                      U
+                      ID
                     </div>
-                    <span className="text-sm font-semibold text-white">User #{item.user_id}</span>
+                    <span className="text-sm font-semibold text-white">Capture #{item.id}</span>
                   </div>
-                  <span className="text-[10px] text-slate-400 uppercase tracking-widest">
+                  <span className="text-[10px] text-slate-400 uppercase tracking-widest font-mono">
                     {new Date(item.captured_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </span>
                 </div>
@@ -120,7 +198,7 @@ const ScreenshotsPage = () => {
                         className={`h-full ${item.activity_level > 70 ? 'bg-green-500' : item.activity_level > 30 ? 'bg-yellow-500' : 'bg-red-500'}`}
                       />
                     </div>
-                    <span className="text-[10px] font-bold text-slate-400">{item.activity_level}% Activity</span>
+                    <span className="text-[10px] font-bold text-slate-500">{item.activity_level}% Activity</span>
                   </div>
                   
                   <div className="flex gap-1">
@@ -131,7 +209,9 @@ const ScreenshotsPage = () => {
                       <ZoomIn size={14} />
                     </button>
                     <button 
-                      onClick={() => handleDelete(item.id)}
+                      onClick={() => {
+                        if(confirm('Delete this screenshot?')) handleDelete(item.id);
+                      }}
                       className="p-1.5 rounded-lg hover:bg-white/10 text-slate-400 hover:text-accent transition-all"
                     >
                       <Trash2 size={14} />
@@ -174,42 +254,43 @@ const ScreenshotsPage = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-10 bg-black/90 backdrop-blur-sm"
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-8 bg-black/90 backdrop-blur-sm"
             onClick={() => setSelectedScreenshot(null)}
           >
             <motion.div
               initial={{ scale: 0.95, y: 20 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.95, y: 20 }}
-              className="relative max-w-6xl w-full max-h-[90vh] glass-card p-0 overflow-hidden flex flex-col shadow-[0_0_50px_rgba(0,0,0,0.5)] border-white/20"
+              className="relative w-full max-w-5xl glass-card p-0 overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] border-white/20"
               onClick={(e) => e.stopPropagation()}
             >
-              {/* Image Container */}
-              <div className="flex-1 overflow-auto bg-slate-950/60 flex items-center justify-center min-h-0">
+              {/* Image — shrinks to fit, no extra space */}
+              <div className="bg-slate-950 overflow-hidden">
                 <img 
                   src={`${import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1'}/screenshots/view/${selectedScreenshot.id}?token=${accessToken}`}
-                  className="max-w-full max-h-full object-contain"
+                  className="w-full max-h-[70vh] object-contain block"
                   alt="Full size capture"
                 />
               </div>
 
               {/* Footer Info */}
-              <div className="p-6 bg-surface-900 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-4">
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-full bg-primary-500/20 flex items-center justify-center text-primary-400 font-bold">
-                    U
+              <div className="p-4 bg-surface-900 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-full bg-primary-500/20 flex items-center justify-center text-primary-400 font-bold text-xs">
+                    ID
                   </div>
                   <div>
-                    <h3 className="text-white font-bold">User #{selectedScreenshot.user_id}</h3>
-                    <p className="text-slate-400 text-sm">
+                    <h3 className="text-white font-bold text-sm">Screenshot #{selectedScreenshot.id}</h3>
+                    <p className="text-slate-400 text-xs">
                       Captured at {new Date(selectedScreenshot.captured_at).toLocaleString()}
                     </p>
                   </div>
                 </div>
                 
-                <div className="flex gap-3 w-full sm:w-auto">
+                <div className="flex gap-2 w-full sm:w-auto">
                   <Button 
                     variant="secondary" 
+                    size="sm"
                     className="flex-1 sm:flex-none"
                     onClick={() => {
                         const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1';
@@ -221,6 +302,7 @@ const ScreenshotsPage = () => {
                   </Button>
                   <Button 
                     variant="primary"
+                    size="sm"
                     className="flex-1 sm:flex-none"
                     onClick={() => setSelectedScreenshot(null)}
                   >
@@ -231,9 +313,9 @@ const ScreenshotsPage = () => {
 
               <button 
                 onClick={() => setSelectedScreenshot(null)}
-                className="absolute top-4 right-4 p-2 rounded-xl glass text-white hover:bg-white/10 transition-colors z-10"
+                className="absolute top-3 right-3 p-1.5 rounded-xl glass text-white hover:bg-white/10 transition-colors z-10"
               >
-                <X size={20} />
+                <X size={18} />
               </button>
             </motion.div>
           </motion.div>

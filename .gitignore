@@ -87,6 +87,11 @@ phpunit
 vendor/
 
 #-------------------------
+# Node dependencies
+#-------------------------
+node_modules/
+
+#-------------------------
 # IDE / Development Files
 #-------------------------
 

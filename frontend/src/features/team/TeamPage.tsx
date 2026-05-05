@@ -8,6 +8,7 @@ const TeamPage = () => {
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedRole, setSelectedRole] = useState('all');
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [isInviting, setIsInviting] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
@@ -66,10 +67,12 @@ const TeamPage = () => {
       // Optional: Show toast
   };
 
-  const filteredMembers = members.filter(m => 
-    `${m.first_name} ${m.last_name}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    m.email.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredMembers = members.filter(m => {
+    const matchesSearch = `${m.first_name} ${m.last_name}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         m.email.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesRole = selectedRole === 'all' || m.role === selectedRole;
+    return matchesSearch && matchesRole;
+  });
 
   if (loading) {
     return (
@@ -119,10 +122,20 @@ const TeamPage = () => {
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
-        <button className="h-14 bg-white/5 border border-white/10 rounded-2xl flex items-center justify-center gap-2 text-slate-400 hover:text-white hover:bg-white/10 transition-all px-4 font-medium">
-          <Filter size={20} />
-          Filter: All Roles
-        </button>
+        <div className="relative group">
+          <Shield className="absolute inset-y-0 left-4 flex items-center text-slate-500 group-focus-within:text-primary-400 pointer-events-none" size={20} />
+          <select 
+            className="appearance-none h-14 bg-white/5 border border-white/10 rounded-2xl pl-12 pr-10 text-white focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500/50 outline-none transition-all cursor-pointer font-medium w-full"
+            value={selectedRole}
+            onChange={(e) => setSelectedRole(e.target.value)}
+          >
+            <option value="all">All Roles</option>
+            <option value="owner">Owner</option>
+            <option value="admin">Administrator</option>
+            <option value="member">Member</option>
+          </select>
+          <Filter className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" size={18} />
+        </div>
       </div>
 
       <div className="glass rounded-3xl overflow-hidden border border-white/5 shadow-ai">
@@ -166,7 +179,18 @@ const TeamPage = () => {
                   {new Date(member.joined_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
                 </td>
                 <td className="px-6 py-4 text-right">
-                  <button className="p-2 rounded-lg text-slate-500 hover:text-accent hover:bg-accent/10 transition-all opacity-0 group-hover:opacity-100">
+                  <button 
+                    className="p-2 rounded-lg text-slate-500 hover:text-accent hover:bg-accent/10 transition-all opacity-0 group-hover:opacity-100"
+                    onClick={async () => {
+                      if (!confirm(`Remove ${member.first_name} ${member.last_name} from the team?`)) return;
+                      try {
+                        await teamService.remove(member.user_id ?? member.id);
+                        fetchMembers();
+                      } catch (e) {
+                        console.error('Remove failed', e);
+                      }
+                    }}
+                  >
                     <Trash2 size={18} />
                   </button>
                 </td>

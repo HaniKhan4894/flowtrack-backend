@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Play, Square, ChevronDown } from 'lucide-react';
+import { Play, Square, ChevronDown, Pause } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTimerStore } from '../store/timerStore';
 import { projectService, type Project } from '../api/projectService';
 
 export const TimerWidget = () => {
-  const { activeEntry, isRunning, elapsed, start, stop, loadActive } = useTimerStore();
+  const { activeEntry, isRunning, isPaused, elapsed, start, stop, pause, resume, loadActive } = useTimerStore();
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
   const [description, setDescription] = useState('');
@@ -59,10 +59,10 @@ export const TimerWidget = () => {
             <AnimatePresence>
               {showProjectSelect && (
                 <motion.div 
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 10 }}
-                  className="absolute top-full mt-2 left-0 w-48 bg-[#1A1C26] border border-white/10 rounded-xl overflow-hidden z-50 shadow-2xl"
+                   initial={{ opacity: 0, y: 10 }}
+                   animate={{ opacity: 1, y: 0 }}
+                   exit={{ opacity: 0, y: 10 }}
+                   className="absolute top-full mt-2 left-0 w-48 bg-[#1A1C26] border border-white/10 rounded-xl overflow-hidden z-50 shadow-2xl"
                 >
                   {projects.map(p => (
                     <button
@@ -92,7 +92,9 @@ export const TimerWidget = () => {
       ) : (
         <div className="flex items-center gap-4">
           <div className="flex flex-col">
-            <span className="text-[10px] uppercase font-bold text-primary-400 tracking-tighter">Recording...</span>
+            <span className={`text-[10px] uppercase font-bold tracking-tighter ${isPaused ? 'text-amber-500' : 'text-primary-400'}`}>
+              {isPaused ? 'Paused' : 'Recording...'}
+            </span>
             <span className="text-sm font-medium text-white truncate max-w-[150px]">
               {activeEntry?.description || 'Active Session'}
             </span>
@@ -106,16 +108,31 @@ export const TimerWidget = () => {
           {formatTime(elapsed)}
         </div>
         
-        <button
-          onClick={handleToggle}
-          className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300 ${
-            isRunning 
-              ? 'bg-accent/20 text-accent hover:bg-accent/30 shadow-[0_0_15px_rgba(244,63,94,0.3)]' 
-              : 'bg-primary-500 text-white hover:scale-105 shadow-ai'
-          }`}
-        >
-          {isRunning ? <Square size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" className="ml-0.5" />}
-        </button>
+        <div className="flex items-center gap-2">
+          {isRunning && (
+            <button
+               onClick={isPaused ? resume : pause}
+               className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300 ${
+                 isPaused 
+                   ? 'bg-primary-500 text-white shadow-ai' 
+                   : 'bg-white/10 text-white hover:bg-white/20'
+               }`}
+            >
+               {isPaused ? <Play size={20} fill="currentColor" /> : <Pause size={20} fill="currentColor" />}
+            </button>
+          )}
+
+          <button
+            onClick={handleToggle}
+            className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300 ${
+              isRunning 
+                ? 'bg-accent/20 text-accent hover:bg-accent/30 shadow-[0_0_15px_rgba(244,63,94,0.3)]' 
+                : 'bg-primary-500 text-white hover:scale-105 shadow-ai'
+            }`}
+          >
+            {isRunning ? <Square size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" className="ml-0.5" />}
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -19,6 +19,7 @@ import {
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { TimerWidget } from '../components/TimerWidget';
+import { monitoringService } from '../api/monitoringService';
 
 const navItems = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
@@ -78,7 +79,7 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
       {/* Sidebar */}
       <motion.aside
         animate={{ width: isCollapsed ? 80 : 260 }}
-        className="glass rounded-3xl flex flex-col relative z-20"
+        className="glass rounded-3xl flex flex-col relative z-20 drag-region"
       >
         <div className="p-6 flex items-center justify-between">
           <AnimatePresence mode="wait">
@@ -99,13 +100,13 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
           
           <button 
             onClick={() => setIsCollapsed(!isCollapsed)}
-            className="p-1.5 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
+            className="p-1.5 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition-colors no-drag"
           >
             {isCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
           </button>
         </div>
 
-        <nav className="flex-1 px-4 space-y-2 mt-4">
+        <nav className="flex-1 px-4 space-y-2 mt-4 no-drag">
           {navItems.map((item) => (
             <SidebarItem key={item.path} {...item} isCollapsed={isCollapsed} />
           ))}
@@ -126,7 +127,9 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col gap-4 overflow-hidden">
         {/* Header */}
-        <header className="glass h-20 px-8 rounded-3xl flex items-center justify-between relative z-30">
+        <header 
+          className={`glass h-20 px-8 rounded-3xl flex items-center justify-between relative z-30 drag-region ${monitoringService.isDesktop ? 'pr-40' : ''}`}
+        >
           <div className="flex items-center gap-4 text-slate-400">
             <h2 className="text-xl font-semibold text-white">
               {navItems.find(item => item.path === location.pathname)?.label || 'Dashboard'}
@@ -135,7 +138,7 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
             <span className="text-sm">Welcome back, {user?.first_name || 'Agent'}</span>
           </div>
 
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-6 no-drag">
             <TimerWidget />
             <div className="flex items-center gap-4 relative">
               <button 

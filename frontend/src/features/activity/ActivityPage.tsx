@@ -1,57 +1,76 @@
 import { motion } from 'framer-motion';
-import { Activity, AppWindow, Globe, Clock, Search, Filter, TrendingUp, RefreshCw } from 'lucide-react';
+import { Activity, AppWindow, Globe, Clock, Search, TrendingUp, RefreshCw, ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
 import { Button } from '../../components/ui';
 import { activityService } from '../../api/activityService';
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 const ActivityPage = () => {
   const [logs, setLogs] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
 
-  const fetchLogs = async () => {
+  const fetchLogs = useCallback(async () => {
     try {
       setIsLoading(true);
-      const response = await activityService.getAll();
+      const response = await activityService.getAll({
+        start_date: `${selectedDate} 00:00:00`,
+        end_date: `${selectedDate} 23:59:59`,
+      });
       setLogs(response.data);
     } catch (error) {
       console.error('Failed to fetch activity logs', error);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [selectedDate]);
 
   useEffect(() => {
     fetchLogs();
-  }, []);
+  }, [fetchLogs]);
 
-  // Process logs for top apps visualization
-  const topApps = logs.reduce((acc: any[], log: any) => {
+  const changeDate = (days: number) => {
+    const d = new Date(selectedDate);
+    d.setDate(d.getDate() + days);
+    setSelectedDate(d.toISOString().split('T')[0]);
+  };
+
+  // Process logs: use real duration_seconds from the API
+  const filteredLogs = logs.filter(log =>
+    !searchTerm ||
+    (log.app_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (log.window_title || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (log.url || '').toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const topApps = filteredLogs.reduce((acc: any[], log: any) => {
     const existing = acc.find(a => a.name === log.app_name);
     if (existing) {
-      existing.duration_seconds += 10; // Simulation assumption
+      existing.duration_seconds += Number(log.duration_seconds) || 0;
     } else {
-      acc.push({ name: log.app_name, duration_seconds: 10, status: log.category });
+      acc.push({ name: log.app_name, duration_seconds: Number(log.duration_seconds) || 0, status: log.category });
     }
     return acc;
   }, []).sort((a, b) => b.duration_seconds - a.duration_seconds).slice(0, 5);
 
   const totalTime = topApps.reduce((sum, app) => sum + app.duration_seconds, 0);
 
-  // Process logs for top URLs
-  const topUrls = logs.filter(log => log.url).reduce((acc: any[], log: any) => {
+  const topUrls = filteredLogs.filter(log => log.url).reduce((acc: any[], log: any) => {
     const existing = acc.find(u => u.name === log.url);
     if (existing) {
-      existing.duration_seconds += 10;
+      existing.duration_seconds += Number(log.duration_seconds) || 0;
       existing.visits += 1;
     } else {
-      acc.push({ name: log.url, duration_seconds: 10, visits: 1, status: log.category });
+      acc.push({ name: log.url, duration_seconds: Number(log.duration_seconds) || 0, visits: 1, status: log.category });
     }
     return acc;
   }, []).sort((a, b) => b.duration_seconds - a.duration_seconds).slice(0, 5);
 
+  const totalLoggedSeconds = filteredLogs.reduce((s, l) => s + (Number(l.duration_seconds) || 0), 0);
+
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-white mb-2 flex items-center gap-2">
             <Activity className="text-primary-400" />
@@ -60,21 +79,72 @@ const ActivityPage = () => {
           <p className="text-slate-400">Deep dive into application and website usage patterns.</p>
         </div>
         
-        <div className="flex gap-4">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Date navigator */}
+          <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-xl px-2 py-1.5 h-10">
+            <button onClick={() => changeDate(-1)} className="p-1 hover:bg-white/10 rounded-lg text-slate-400">
+              <ChevronLeft size={16} />
+            </button>
+            <div className="flex items-center gap-1.5 px-1">
+              <Calendar size={13} className="text-primary-400" />
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="bg-transparent border-0 text-xs font-bold text-white p-0 focus:ring-0 w-28 uppercase"
+              />
+            </div>
+            <button onClick={() => changeDate(1)} className="p-1 hover:bg-white/10 rounded-lg text-slate-400">
+              <ChevronRight size={16} />
+            </button>
+          </div>
+
+          {selectedDate !== new Date().toISOString().split('T')[0] && (
+            <button
+              onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}
+              className="text-xs font-bold text-primary-400 hover:underline"
+            >
+              Today
+            </button>
+          )}
+
           <Button variant="secondary" size="sm" onClick={fetchLogs} isLoading={isLoading}>
             <RefreshCw className="w-4 h-4 mr-2" />
             Refresh
           </Button>
+
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
             <input 
               type="text" 
               placeholder="Search..." 
-              className="bg-white/5 border border-white/10 rounded-xl pl-10 pr-4 py-2 text-sm text-white focus:outline-none focus:border-primary-500/50 min-w-[200px]"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="bg-white/5 border border-white/10 rounded-xl pl-10 pr-4 py-2 text-sm text-white focus:outline-none focus:border-primary-500/50 min-w-[180px]"
             />
           </div>
         </div>
       </div>
+
+      {/* Summary bar */}
+      {!isLoading && logs.length > 0 && (
+        <div className="flex items-center gap-6 glass-card py-3 px-6">
+          <div className="text-center">
+            <p className="text-2xl font-bold text-white">{filteredLogs.length}</p>
+            <p className="text-xs text-slate-500 uppercase tracking-wider">Events</p>
+          </div>
+          <div className="h-8 w-px bg-white/10" />
+          <div className="text-center">
+            <p className="text-2xl font-bold text-white">{Math.floor(totalLoggedSeconds / 3600)}h {Math.floor((totalLoggedSeconds % 3600) / 60)}m</p>
+            <p className="text-xs text-slate-500 uppercase tracking-wider">Total Time</p>
+          </div>
+          <div className="h-8 w-px bg-white/10" />
+          <div className="text-center">
+            <p className="text-2xl font-bold text-white">{topApps.length}</p>
+            <p className="text-xs text-slate-500 uppercase tracking-wider">Apps Used</p>
+          </div>
+        </div>
+      )}
 
       {isLoading ? (
         <div className="flex items-center justify-center py-20">

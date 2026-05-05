@@ -19,6 +19,11 @@ export const useAuthStore = create<AuthState>((set) => ({
         localStorage.setItem('access_token', token);
         localStorage.setItem('user', JSON.stringify(user));
         set({ user, accessToken: token, isAuthenticated: true });
+
+        // Sync token with Electron main process (no-op in browser)
+        if (typeof window !== 'undefined' && 'electronAPI' in window) {
+            (window as any).electronAPI.setAuthToken(token);
+        }
     },
 
     logout: () => {

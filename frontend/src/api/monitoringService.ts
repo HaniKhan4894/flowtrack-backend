@@ -1,100 +1,185 @@
 import client from './client';
 
-let monitoringInterval: any = null;
-let activityData = {
-    mouseMovement: 0,
+// Detect if running inside Electron desktop app
+const isElectron = typeof window !== 'undefined' && 'electronAPI' in window;
+const electronAPI = isElectron ? (window as any).electronAPI : null;
+
+// ─────────────────────────────────────────────────────────
+//  Web-only activity tracking (fallback when not in Electron)
+// ─────────────────────────────────────────────────────────
+let monitoringInterval: ReturnType<typeof setInterval> | null = null;
+let screenshotInterval: ReturnType<typeof setInterval> | null = null;
+let cleanupScreenshotListener: (() => void) | null = null;
+
+const webActivityData = {
+    mouseMovements: 0,
     clicks: 0,
     keystrokes: 0,
-    lastApp: 'FlowTrack Web',
-    lastTitle: document.title
 };
 
-// Event listeners for activity tracking
-const trackActivity = () => {
-    window.addEventListener('mousemove', () => activityData.mouseMovement++);
-    window.addEventListener('click', () => activityData.clicks++);
-    window.addEventListener('keydown', () => activityData.keystrokes++);
-};
+function trackWebActivity() {
+    window.addEventListener('mousemove', () => webActivityData.mouseMovements++);
+    window.addEventListener('click', () => webActivityData.clicks++);
+    window.addEventListener('keydown', () => webActivityData.keystrokes++);
+}
 
+function calcWebActivityLevel() {
+    const total = webActivityData.mouseMovements + (webActivityData.clicks * 5) + (webActivityData.keystrokes * 3);
+    return Math.min(100, Math.round(total / 10));
+}
+
+function resetWebActivity() {
+    webActivityData.mouseMovements = 0;
+    webActivityData.clicks = 0;
+    webActivityData.keystrokes = 0;
+}
+
+// ─────────────────────────────────────────────────────────
+//  Web screenshot fallback (canvas placeholder)
+// ─────────────────────────────────────────────────────────
+async function captureWebScreenshot(timeEntryId: number, activityLevel: number) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1280;
+    canvas.height = 720;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+        ctx.fillStyle = '#0f172a';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#3b82f6';
+        ctx.font = 'bold 24px Arial';
+        ctx.fillText('FlowTrack – Web Session Capture', 60, 120);
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '18px Arial';
+        ctx.fillText(new Date().toLocaleString(), 60, 160);
+        ctx.fillText(`Activity: ${activityLevel}%`, 60, 200);
+    }
+    const blob = await new Promise<Blob>((resolve) =>
+        canvas.toBlob((b) => resolve(b!), 'image/jpeg', 0.85)
+    );
+    const formData = new FormData();
+    formData.append('time_entry_id', timeEntryId.toString());
+    formData.append('activity_level', activityLevel.toString());
+    formData.append('is_blurred', '0');
+    formData.append('screenshot', blob, 'screenshot.jpg');
+    await client.post('/screenshots/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+    });
+}
+
+// ─────────────────────────────────────────────────────────
+//  Electron activity forwarding
+// ─────────────────────────────────────────────────────────
+let electronActivityListeners: Array<() => void> = [];
+
+function startElectronActivityForwarding() {
+    const onMouseMove = () => electronAPI?.sendActivityEvent('mousemove');
+    const onClick = () => electronAPI?.sendActivityEvent('click');
+    const onKeyDown = () => electronAPI?.sendActivityEvent('keydown');
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('click', onClick);
+    window.addEventListener('keydown', onKeyDown);
+
+    electronActivityListeners = [
+        () => window.removeEventListener('mousemove', onMouseMove),
+        () => window.removeEventListener('click', onClick),
+        () => window.removeEventListener('keydown', onKeyDown),
+    ];
+}
+
+function stopElectronActivityForwarding() {
+    electronActivityListeners.forEach(fn => fn());
+    electronActivityListeners = [];
+}
+
+// ─────────────────────────────────────────────────────────
+//  Public API
+// ─────────────────────────────────────────────────────────
 export const monitoringService = {
-    startMonitoring: (timeEntryId: number) => {
-        if (monitoringInterval) return;
+    isDesktop: isElectron,
 
-        trackActivity();
+    startMonitoring: (timeEntryId: number, token?: string) => {
+        if (isElectron && electronAPI) {
+            // ── DESKTOP MODE ─────────────────────────────────────
+            console.log('[Desktop] Starting tracking via Electron IPC');
+            electronAPI.startTracking(timeEntryId, token ?? null);
+            startElectronActivityForwarding();
 
-        // 1. Activity Logging (Every 1 minute)
-        monitoringInterval = setInterval(async () => {
-            try {
-                const logData = {
-                    time_entry_id: timeEntryId,
-                    app_name: activityData.lastApp,
-                    window_title: document.title,
-                    mouse_movement: activityData.mouseMovement,
-                    mouse_clicks: activityData.clicks,
-                    keyboard_strokes: activityData.keystrokes,
-                    logged_at: new Date().toISOString()
-                };
+            // Listen for events pushed from the main process
+            cleanupScreenshotListener = electronAPI.onScreenshotCaptured((data: any) => {
+                console.log('[Desktop] Screenshot captured, activity:', data.activityLevel);
+            });
 
-                await client.post('/activity-logs/sync', logData);
+            return () => {
+                monitoringService.stopMonitoring();
+            };
+        } else {
+            // ── WEB FALLBACK MODE ─────────────────────────────────
+            console.log('[Web] Starting monitoring via browser APIs');
+            if (monitoringInterval) return;
+            trackWebActivity();
 
-                // Reset counters
-                activityData.mouseMovement = 0;
-                activityData.clicks = 0;
-                activityData.keystrokes = 0;
-
-            } catch (error) {
-                console.error('Monitoring Error:', error);
-            }
-        }, 60000); // 1 minute intervals for demo, usually 5-10 mins
-
-        // 2. Screenshot Capture (Every 3 minutes for simulation)
-        const screenshotInterval = setInterval(async () => {
-            try {
-                // In a browser, we simulate screenshots for the SaaS demo
-                // or use html2canvas if we wanted a real "web app" screenshot.
-                // For now, we'll send a signal to the backend to "generate" or "store" a capture.
-
-                const formData = new FormData();
-                formData.append('time_entry_id', timeEntryId.toString());
-                formData.append('activity_level', Math.floor(Math.random() * 100).toString());
-
-                // Generate a dummy screenshot using canvas
-                const canvas = document.createElement('canvas');
-                canvas.width = 320;
-                canvas.height = 180;
-                const ctx = canvas.getContext('2d');
-                if (ctx) {
-                    ctx.fillStyle = '#1e293b';
-                    ctx.fillRect(0, 0, 320, 180);
-                    ctx.fillStyle = '#3b82f6';
-                    ctx.font = '12px Arial';
-                    ctx.fillText('FlowTrack Screenshot Capture', 20, 40);
-                    ctx.fillText(new Date().toLocaleTimeString(), 20, 60);
+            // Activity sync every 1 minute
+            monitoringInterval = setInterval(async () => {
+                try {
+                    await client.post('/activity-logs/sync', {
+                        time_entry_id: timeEntryId,
+                        app_name: 'FlowTrack Web',
+                        window_title: document.title,
+                        mouse_movement: webActivityData.mouseMovements,
+                        mouse_clicks: webActivityData.clicks,
+                        keyboard_strokes: webActivityData.keystrokes,
+                        logged_at: new Date().toISOString()
+                    });
+                    resetWebActivity();
+                } catch (err) {
+                    console.error('[Web] Activity sync error:', err);
                 }
+            }, 60_000);
 
-                const blob = await new Promise<Blob>((resolve) => canvas.toBlob((b) => resolve(b!), 'image/jpeg'));
-                formData.append('screenshot', blob, 'screenshot.jpg');
+            // Screenshot every 3 minutes
+            screenshotInterval = setInterval(async () => {
+                const level = calcWebActivityLevel();
+                await captureWebScreenshot(timeEntryId, level);
+                resetWebActivity();
+            }, 180_000);
 
-                await client.post(`/screenshots/upload`, formData, {
-                    headers: { 'Content-Type': 'multipart/form-data' }
-                });
-
-            } catch (error) {
-                console.error('Screenshot Error:', error);
-            }
-        }, 180000); // 3 minutes
-
-        return () => {
-            clearInterval(monitoringInterval);
-            clearInterval(screenshotInterval);
-            monitoringInterval = null;
-        };
+            return () => {
+                monitoringService.stopMonitoring();
+            };
+        }
     },
 
     stopMonitoring: () => {
-        if (monitoringInterval) {
-            clearInterval(monitoringInterval);
-            monitoringInterval = null;
+        if (isElectron && electronAPI) {
+            electronAPI.stopTracking();
+            stopElectronActivityForwarding();
+            if (cleanupScreenshotListener) {
+                cleanupScreenshotListener();
+                cleanupScreenshotListener = null;
+            }
+        } else {
+            if (monitoringInterval) { clearInterval(monitoringInterval); monitoringInterval = null; }
+            if (screenshotInterval) { clearInterval(screenshotInterval); screenshotInterval = null; }
         }
+    },
+
+    /**
+     * Push auth token to the main process (call after login).
+     */
+    syncAuthToken: (token: string) => {
+        if (isElectron && electronAPI) {
+            electronAPI.setAuthToken(token);
+        }
+    },
+
+    /**
+     * Trigger an immediate screenshot (e.g. from a UI button).
+     */
+    captureNow: async () => {
+        if (isElectron && electronAPI) {
+            return electronAPI.captureNow();
+        }
+        return { success: false, error: 'Only available in desktop app' };
     }
 };

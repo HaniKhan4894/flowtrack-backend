@@ -95,6 +95,48 @@ class TimeEntryController extends ResourceController
     }
 
     /**
+     * POST /api/v1/time-entries/{id}/pause
+     */
+    public function pause($id)
+    {
+        try {
+            $userId = $this->request->user_id ?? 1;
+
+            $entry = $this->timeEntryService->pauseTimer($userId, $id);
+
+            return $this->respond([
+                'success' => true,
+                'message' => 'Timer paused successfully',
+                'data' => $entry
+            ]);
+
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+
+    /**
+     * POST /api/v1/time-entries/{id}/resume
+     */
+    public function resume($id)
+    {
+        try {
+            $userId = $this->request->user_id ?? 1;
+
+            $entry = $this->timeEntryService->resumeTimer($userId, $id);
+
+            return $this->respond([
+                'success' => true,
+                'message' => 'Timer resumed successfully',
+                'data' => $entry
+            ]);
+
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+
+    /**
      * GET /api/v1/time-entries/active
      */
     public function active()

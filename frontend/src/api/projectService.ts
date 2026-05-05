@@ -7,11 +7,18 @@ export interface Project {
     status: 'active' | 'archived' | 'completed';
     color: string;
     organization_id: number;
+    is_active?: number;
+    is_billable?: number;
+    client_name?: string;
+    budget_hours?: number;
+    budget_amount?: number;
+    total_time_seconds?: number;
+    member_count?: number;
 }
 
 export const projectService = {
-    getAll: async (): Promise<{ data: Project[] }> => {
-        const response = await client.get<{ data: Project[] }>('/projects');
+    getAll: async (params?: { search?: string; is_active?: number }): Promise<{ data: Project[] }> => {
+        const response = await client.get<{ data: Project[] }>('/projects', { params });
         return response.data;
     },
 

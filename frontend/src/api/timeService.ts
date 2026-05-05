@@ -21,8 +21,18 @@ export const timeService = {
         return response.data;
     },
 
-    getAll: async () => {
-        const response = await client.get('/time-entries');
+    getAll: async (params?: any) => {
+        const response = await client.get('/time-entries', { params });
+        return response.data;
+    },
+
+    pauseTimer: async (id: number) => {
+        const response = await client.post(`/time-entries/${id}/pause`);
+        return response.data;
+    },
+
+    resumeTimer: async (id: number) => {
+        const response = await client.post(`/time-entries/${id}/resume`);
         return response.data;
     },
 };

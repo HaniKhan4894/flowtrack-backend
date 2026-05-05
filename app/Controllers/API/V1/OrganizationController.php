@@ -45,7 +45,7 @@ class OrganizationController extends ResourceController
         try {
             // TODO: Get from JWT
             $ownerId = $this->request->getGet('user_id') ?? 1;
-            
+
             $data = $this->request->getJSON(true);
 
             $rules = [
@@ -147,15 +147,10 @@ class OrganizationController extends ResourceController
                 return $this->fail('Either user_id or email is required', 400);
             }
 
-            if (!$userId && $email) {
-                $userModel = new \App\Models\UserModel();
-                $user = $userModel->where('email', $email)->first();
-                if (!$user) {
-                    return $this->fail('User with this email not found', 404);
-                }
-                $userId = $user['id'];
-            }
-
+            // NOTE: We do NOT resolve user by email here.
+            // OrganizationService::addMember() handles both cases:
+            // 1) If a user with this email exists -> adds them directly
+            // 2) If no user exists -> creates an invitation with a secure token
             $member = $this->organizationService->addMember(
                 $id,
                 $userId,
@@ -166,10 +161,10 @@ class OrganizationController extends ResourceController
 
             // Check if it was an invitation
             if (isset($member['token'])) {
-                 // Construct invitation link (frontend URL)
-                 // Assuming frontend runs on different port or same domain
-                 // We'll return the token and let frontend construct the link
-                 return $this->respondCreated([
+                // Construct invitation link (frontend URL)
+                // Assuming frontend runs on different port or same domain
+                // We'll return the token and let frontend construct the link
+                return $this->respondCreated([
                     'success' => true,
                     'message' => isset($member['status']) && $member['status'] === 're-invited' ? 'Invitation resent successfully' : 'Invitation created successfully',
                     'data' => [
@@ -179,7 +174,7 @@ class OrganizationController extends ResourceController
                         'expires_at' => $member['expires_at'],
                         'link' => getenv('app.baseURL') . '/register?invitation_token=' . $member['token'] // Example link
                     ]
-                 ]);
+                ]);
             }
 
             return $this->respondCreated([

@@ -1,0 +1,14 @@
+{
+    "name": "flowtrack-root",
+    "version": "1.0.0",
+    "private": true,
+    "scripts": {
+        "dev:frontend": "cd frontend && npm run dev",
+        "dev:backend": "php spark serve",
+        "dev:desktop": "cd desktop && npm run dev",
+        "dev:all": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\" \"npm run dev:desktop\""
+    },
+    "devDependencies": {
+        "concurrently": "^8.2.2"
+    }
+}

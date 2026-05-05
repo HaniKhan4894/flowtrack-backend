@@ -88,11 +88,72 @@ class TimeEntryService
         }
 
         $endedAt = date('Y-m-d H:i:s');
-        $duration = strtotime($endedAt) - strtotime($entry['started_at']);
+
+        // Calculate total duration excluding the time spent paused
+        $totalSeconds = strtotime($endedAt) - strtotime($entry['started_at']);
+
+        // If it was paused when stopped, we need to handle that
+        $pausedDuration = (int) ($entry['paused_duration_seconds'] ?? 0);
+        if ($entry['paused_at']) {
+            $pausedDuration += (strtotime($endedAt) - strtotime($entry['paused_at']));
+        }
+
+        $netDuration = $totalSeconds - $pausedDuration;
 
         $this->timeEntryModel->update($entryId, [
             'ended_at' => $endedAt,
-            'duration_seconds' => $duration
+            'paused_at' => null, // Clear pause state if any
+            'paused_duration_seconds' => $pausedDuration,
+            'duration_seconds' => $netDuration > 0 ? $netDuration : 0
+        ]);
+
+        return $this->timeEntryModel->find($entryId);
+    }
+
+    /**
+     * Pause timer
+     */
+    public function pauseTimer(int $userId, int $entryId): array
+    {
+        $entry = $this->timeEntryModel->find($entryId);
+
+        if (!$entry || $entry['user_id'] != $userId || $entry['ended_at']) {
+            throw new \Exception('Invalid time entry');
+        }
+
+        if ($entry['paused_at']) {
+            throw new \Exception('Timer is already paused');
+        }
+
+        $this->timeEntryModel->update($entryId, [
+            'paused_at' => date('Y-m-d H:i:s')
+        ]);
+
+        return $this->timeEntryModel->find($entryId);
+    }
+
+    /**
+     * Resume timer
+     */
+    public function resumeTimer(int $userId, int $entryId): array
+    {
+        $entry = $this->timeEntryModel->find($entryId);
+
+        if (!$entry || $entry['user_id'] != $userId || $entry['ended_at']) {
+            throw new \Exception('Invalid time entry');
+        }
+
+        if (!$entry['paused_at']) {
+            throw new \Exception('Timer is not paused');
+        }
+
+        $now = date('Y-m-d H:i:s');
+        $pauseDuration = strtotime($now) - strtotime($entry['paused_at']);
+        $totalPaused = (int) $entry['paused_duration_seconds'] + $pauseDuration;
+
+        $this->timeEntryModel->update($entryId, [
+            'paused_at' => null,
+            'paused_duration_seconds' => $totalPaused
         ]);
 
         return $this->timeEntryModel->find($entryId);
@@ -152,8 +213,8 @@ class TimeEntryService
         return [
             'data' => $entries,
             'pagination' => [
-                'current_page' => (int)$page,
-                'per_page' => (int)$perPage,
+                'current_page' => (int) $page,
+                'per_page' => (int) $perPage,
                 'total' => $total,
                 'total_pages' => ceil($total / $perPage),
                 'has_more' => $page < ceil($total / $perPage)
