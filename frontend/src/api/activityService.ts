@@ -14,5 +14,15 @@ export const activityService = {
     getStats: async (filters: any = {}) => {
         const response = await client.get('/activity-logs/stats', { params: filters });
         return response.data;
-    }
+    },
+
+    getTopApps: async (filters: any = {}) => {
+        const response = await client.get('/activity-logs/top-apps', { params: filters });
+        return response.data;
+    },
+
+    syncPresence: async (data: any) => {
+        const response = await client.post('/activity-logs/sync', data);
+        return response.data;
+    },
 };

@@ -13,7 +13,9 @@ class OrganizationMemberModel extends Model
     protected $useSoftDeletes   = false;
     protected $protectFields    = true;
     protected $allowedFields    = [
-        'organization_id', 'user_id', 'role', 'hourly_rate', 'joined_at'
+        'organization_id', 'user_id', 'role_id', 'role', 'hourly_rate', 'joined_at',
+        'tracking_enabled', 'screenshots_enabled', 'screenshot_disabled_until',
+        'screenshot_disabled_from', 'screenshot_disabled_to',
     ];
 
     protected bool $allowEmptyInserts = false;

@@ -1,14 +1,25 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { FileText, Plus, Download, Mail, MoreVertical, Search, Filter, CheckCircle2, Clock } from 'lucide-react';
+import { FileText, Plus, Download, Mail, MoreVertical, Search, Filter, CheckCircle2, Clock, X } from 'lucide-react';
 import { Button } from '../../components/ui';
 
 import { invoiceService, type Invoice } from '../../api/invoiceService';
 
+const toNumber = (value: unknown): number => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+};
+
+const invoiceAmount = (inv: Invoice): number => {
+  return toNumber(inv.total ?? inv.amount ?? inv.subtotal ?? 0);
+};
+
 const InvoicesPage = () => {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [stats, setStats] = useState({ total_invoiced: 0, paid_amount: 0, outstanding: 0 });
-  const [loading, setLoading] = useState(true);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+  const [form, setForm] = useState({ client_name: '', due_date: '', notes: '' });
 
   useEffect(() => {
     fetchInvoices();
@@ -17,12 +28,13 @@ const InvoicesPage = () => {
   const fetchInvoices = async () => {
     try {
       const resp = await invoiceService.getAll();
-      setInvoices(resp);
+      const records = resp.data ?? [];
+      setInvoices(records);
       
       // Calculate stats on frontend
-      const total = resp.reduce((sum, inv) => sum + Number(inv.amount), 0);
-      const paid = resp.filter(inv => inv.status === 'paid').reduce((sum, inv) => sum + Number(inv.amount), 0);
-      const outstanding = resp.filter(inv => inv.status !== 'paid').reduce((sum, inv) => sum + Number(inv.amount), 0);
+      const total = records.reduce((sum, inv) => sum + invoiceAmount(inv), 0);
+      const paid = records.filter(inv => inv.status === 'paid').reduce((sum, inv) => sum + invoiceAmount(inv), 0);
+      const outstanding = records.filter(inv => inv.status !== 'paid').reduce((sum, inv) => sum + invoiceAmount(inv), 0);
       
       setStats({
           total_invoiced: total,
@@ -31,14 +43,22 @@ const InvoicesPage = () => {
       });
     } catch (e) {
       console.error(e);
-      // Fallback
-       setInvoices([
-        { id: 1, invoice_number: 'INV-2026-001', client_name: 'Acme Corp', project_name: 'Website Redesign', amount: 4500.00, status: 'paid', issue_date: '2026-01-15', due_date: '2026-02-15' },
-        { id: 2, invoice_number: 'INV-2026-002', client_name: 'Global Tech', project_name: 'API Integration', amount: 2800.00, status: 'sent', issue_date: '2026-01-28', due_date: '2026-02-28' },
-        { id: 3, invoice_number: 'INV-2026-003', client_name: 'Startup Inc', project_name: 'Mobile App', amount: 12000.00, status: 'draft', issue_date: '2026-02-01', due_date: '2026-03-01' },
-       ] as unknown as Invoice[]); 
+      setInvoices([]);
     } finally {
-      setLoading(false);
+      // no-op
+    }
+  };
+
+  const handleCreateInvoice = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsCreating(true);
+    try {
+      await invoiceService.create(form);
+      setShowCreateModal(false);
+      setForm({ client_name: '', due_date: '', notes: '' });
+      await fetchInvoices();
+    } finally {
+      setIsCreating(false);
     }
   };
 
@@ -61,6 +81,7 @@ const InvoicesPage = () => {
   };
 
   return (
+    <>
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div>
@@ -71,7 +92,7 @@ const InvoicesPage = () => {
           <p className="text-slate-400">Manage client billing and track payment status.</p>
         </div>
         
-        <Button>
+        <Button onClick={() => setShowCreateModal(true)}>
           <Plus className="w-4 h-4 mr-2" />
           Create Invoice
         </Button>
@@ -142,7 +163,7 @@ const InvoicesPage = () => {
                     </td>
                     <td className="px-6 py-4 text-sm text-slate-300 font-medium">{inv.client_name}</td>
                     <td className="px-6 py-4 text-sm text-slate-400">{inv.project_name || '-'}</td>
-                    <td className="px-6 py-4 text-sm font-bold text-white">${Number(inv.amount).toLocaleString()}</td>
+                    <td className="px-6 py-4 text-sm font-bold text-white">${invoiceAmount(inv).toLocaleString()}</td>
                     <td className="px-6 py-4">
                       <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-[10px] font-bold uppercase tracking-wider ${getStatusColor(inv.status)}`}>
                         <Icon size={12} />
@@ -170,6 +191,40 @@ const InvoicesPage = () => {
         </div>
       </div>
     </div>
+    {showCreateModal && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+        <form onSubmit={handleCreateInvoice} className="w-full max-w-lg glass-card border border-white/10 p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xl font-bold text-white">Create Invoice</h3>
+            <button type="button" onClick={() => setShowCreateModal(false)} className="text-slate-500 hover:text-white">
+              <X size={20} />
+            </button>
+          </div>
+          <input
+            required
+            placeholder="Client name"
+            value={form.client_name}
+            onChange={(e) => setForm((f) => ({ ...f, client_name: e.target.value }))}
+            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white outline-none"
+          />
+          <input
+            required
+            type="date"
+            value={form.due_date}
+            onChange={(e) => setForm((f) => ({ ...f, due_date: e.target.value }))}
+            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white outline-none"
+          />
+          <textarea
+            placeholder="Invoice notes"
+            value={form.notes}
+            onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
+            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white outline-none min-h-28"
+          />
+          <Button type="submit" isLoading={isCreating} className="w-full">Create</Button>
+        </form>
+      </div>
+    )}
+    </>
   );
 };
 

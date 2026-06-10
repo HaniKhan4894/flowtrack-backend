@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { timeService } from '../api/timeService';
 import { monitoringService } from '../api/monitoringService';
+import { syncElectronAuthToken } from '../utils/electronAuth';
 import { useAuthStore } from './authStore';
 import { type TimeEntry } from '../types';
 
@@ -15,6 +16,7 @@ interface TimerState {
     resume: () => Promise<void>;
     loadActive: () => Promise<void>;
     tick: () => void;
+    resetLocal: () => void;
 }
 
 export const useTimerStore = create<TimerState>((set, get) => ({
@@ -35,6 +37,7 @@ export const useTimerStore = create<TimerState>((set, get) => ({
             // Start monitoring — pass current auth token so Electron has it immediately
             const token = useAuthStore.getState().accessToken ?? undefined;
             monitoringService.startMonitoring(response.data.id, token);
+            syncElectronAuthToken(token ?? localStorage.getItem('access_token'));
         } catch (error) {
             console.error('Failed to start timer', error);
             throw error;
@@ -48,11 +51,17 @@ export const useTimerStore = create<TimerState>((set, get) => ({
         try {
             await timeService.stopTimer(activeEntry.id);
             set({ activeEntry: null, isRunning: false, isPaused: false, elapsed: 0 });
-            // Stop monitoring
             monitoringService.stopMonitoring();
         } catch (error) {
             console.error('Failed to stop timer', error);
+            throw error;
         }
+    },
+
+    /** Local reset only — used during logout (do not await API). */
+    resetLocal: () => {
+        set({ activeEntry: null, isRunning: false, isPaused: false, elapsed: 0 });
+        monitoringService.stopMonitoring();
     },
 
     pause: async () => {
@@ -62,6 +71,7 @@ export const useTimerStore = create<TimerState>((set, get) => ({
         try {
             await timeService.pauseTimer(activeEntry.id);
             set({ isPaused: true });
+            monitoringService.pauseMonitoring();
         } catch (error) {
             console.error('Failed to pause timer', error);
         }
@@ -74,6 +84,8 @@ export const useTimerStore = create<TimerState>((set, get) => ({
         try {
             await timeService.resumeTimer(activeEntry.id);
             set({ isPaused: false });
+            const token = useAuthStore.getState().accessToken ?? undefined;
+            monitoringService.resumeMonitoring(token);
         } catch (error) {
             console.error('Failed to resume timer', error);
         }
@@ -103,9 +115,11 @@ export const useTimerStore = create<TimerState>((set, get) => ({
                     isPaused: isPaused,
                     elapsed: elapsed > 0 ? elapsed : 0
                 });
-                // Resume monitoring — pass current auth token so Electron has it immediately
-                const token = useAuthStore.getState().accessToken ?? undefined;
-                monitoringService.startMonitoring(response.data.id, token);
+                if (!isPaused) {
+                    // Resume monitoring only when timer is running
+                    const token = useAuthStore.getState().accessToken ?? undefined;
+                    monitoringService.startMonitoring(response.data.id, token);
+                }
             } else {
                 set({ activeEntry: null, isRunning: false, isPaused: false });
             }
@@ -127,4 +141,16 @@ if (typeof window !== 'undefined') {
     setInterval(() => {
         useTimerStore.getState().tick();
     }, 1000);
+
+    // Desktop: auto pause/resume timer when system is locked/unlocked
+    if ('electronAPI' in window && window.electronAPI?.onSystemLockChange) {
+        window.electronAPI.onSystemLockChange((locked: boolean) => {
+            const store = useTimerStore.getState();
+            if (locked && store.isRunning && !store.isPaused) {
+                store.pause().catch(() => undefined);
+            } else if (!locked && store.isRunning) {
+                store.resume().catch(() => undefined);
+            }
+        });
+    }
 }

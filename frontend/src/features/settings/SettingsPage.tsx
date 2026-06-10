@@ -2,12 +2,17 @@ import { useState } from 'react';
 import { User, Building, Bell, Shield, Cloud, Save, Camera, Loader2, CheckCircle2 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { motion, AnimatePresence } from 'framer-motion';
+import client from '../../api/client';
 
 const SettingsPage = () => {
   const { user } = useAuthStore();
   const [activeTab, setActiveTab] = useState('profile');
   const [isSaving, setIsSaving] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [profileForm, setProfileForm] = useState({
+    first_name: user?.first_name ?? '',
+    last_name: user?.last_name ?? '',
+  });
 
   const tabs = [
     { id: 'profile', label: 'Profile Settings', icon: User },
@@ -19,8 +24,7 @@ const SettingsPage = () => {
 
   const handleSave = async () => {
     setIsSaving(true);
-    // Mock save logic
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    await client.put(`/users/${user?.id}`, profileForm);
     setIsSaving(false);
     setShowSuccess(true);
     setTimeout(() => setShowSuccess(false), 3000);
@@ -93,7 +97,8 @@ const SettingsPage = () => {
                   <label className="text-sm font-bold text-slate-400 uppercase tracking-wider ml-1">First Name</label>
                   <input 
                     type="text" 
-                    defaultValue={user?.first_name}
+                    value={profileForm.first_name}
+                    onChange={(e) => setProfileForm((prev) => ({ ...prev, first_name: e.target.value }))}
                     className="w-full h-12 bg-white/5 border border-white/10 rounded-xl px-4 text-white focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500/50 outline-none transition-all placeholder:text-slate-600"
                     placeholder="Enter first name"
                   />
@@ -102,7 +107,8 @@ const SettingsPage = () => {
                   <label className="text-sm font-bold text-slate-400 uppercase tracking-wider ml-1">Last Name</label>
                   <input 
                     type="text" 
-                    defaultValue={user?.last_name}
+                    value={profileForm.last_name}
+                    onChange={(e) => setProfileForm((prev) => ({ ...prev, last_name: e.target.value }))}
                     className="w-full h-12 bg-white/5 border border-white/10 rounded-xl px-4 text-white focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500/50 outline-none transition-all placeholder:text-slate-600"
                     placeholder="Enter last name"
                   />

@@ -28,14 +28,12 @@ class PermissionFilter implements FilterInterface
     public function before(RequestInterface $request, $arguments = null)
     {
         /** @var \CodeIgniter\HTTP\IncomingRequest $request */
-        // Get token from Authorization header or 'token' query parameter
+        // Get token from Authorization header
         $authHeader = $request->getHeaderLine('Authorization');
         $token = null;
 
         if ($authHeader) {
             $token = $this->jwtHandler->extractTokenFromHeader($authHeader);
-        } else {
-            $token = $request->getGet('token');
         }
 
         if (!$token) {
@@ -59,24 +57,20 @@ class PermissionFilter implements FilterInterface
                 ->setStatusCode(401);
         }
 
-        // Attach user data to request
-        $userId = $userData['user_id'] ?? null;
-        $request->user_id = $userId ? (int) $userId : null;
-        $request->email = $userData['email'] ?? null;
-        $request->role = $userData['role'] ?? null;
+        $userId = isset($userData['user_id']) ? (int) $userData['user_id'] : null;
 
         // Check permission if specified
         if (!empty($arguments)) {
             $requiredPermission = $arguments[0];
 
             // Get organization ID from request (set by AuthFilter) or query or token
-            $organizationId = $request->organization_id ?? service('request')->getGet('organization_id') ?? $userData['organization_id'] ?? null;
+            $organizationId = $request->getServer('FLOWTRACK_ORGANIZATION_ID') ?? $userData['organization_id'] ?? null;
 
             // Fallback: If still missing, try to fetch primary one (to be extra safe)
-            if (!$organizationId && isset($request->user_id)) {
+            if (!$organizationId && $userId) {
                 $db = \Config\Database::connect();
                 $orgMember = $db->table('organization_members')
-                    ->where('user_id', $request->user_id)
+                    ->where('user_id', $userId)
                     ->orderBy('joined_at', 'ASC')
                     ->get()
                     ->getRowArray();
@@ -96,7 +90,7 @@ class PermissionFilter implements FilterInterface
             }
 
             $hasPermission = $this->permissionService->userHasPermission(
-                $request->user_id,
+                $userId,
                 $organizationId,
                 $requiredPermission
             );
@@ -111,8 +105,13 @@ class PermissionFilter implements FilterInterface
                     ->setStatusCode(403);
             }
 
-            // Attach organization_id to request
-            $request->organization_id = $organizationId;
+            $request->setGlobal('server', [
+                ...$_SERVER,
+                'FLOWTRACK_USER_ID' => $userId,
+                'FLOWTRACK_EMAIL' => $userData['email'] ?? null,
+                'FLOWTRACK_ROLE' => $userData['role'] ?? null,
+                'FLOWTRACK_ORGANIZATION_ID' => (int) $organizationId,
+            ]);
         }
 
         return $request;

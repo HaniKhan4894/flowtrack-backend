@@ -28,6 +28,7 @@ class InvoiceService
         try {
             $invoiceData = [
                 'organization_id' => $organizationId,
+                'invoice_number' => $this->generateInvoiceNumber(),
                 'client_name' => $data['client_name'],
                 'client_email' => $data['client_email'] ?? null,
                 'project_id' => $data['project_id'] ?? null,
@@ -44,6 +45,9 @@ class InvoiceService
             ];
 
             $invoiceId = $this->invoiceModel->insert($invoiceData);
+            if (!$invoiceId) {
+                throw new \RuntimeException('Failed to create invoice: ' . json_encode($this->invoiceModel->errors()));
+            }
 
             // Add items
             if (isset($data['items']) && is_array($data['items'])) {
@@ -56,8 +60,16 @@ class InvoiceService
             $this->recalculateInvoice($invoiceId);
 
             $this->db->transComplete();
+            if ($this->db->transStatus() === false) {
+                throw new \RuntimeException('Invoice transaction failed');
+            }
 
-            return $this->getInvoiceById($invoiceId);
+            $invoice = $this->getInvoiceById((int)$invoiceId);
+            if ($invoice === null) {
+                throw new \RuntimeException('Invoice created but could not be loaded');
+            }
+
+            return $invoice;
 
         } catch (\Exception $e) {
             $this->db->transRollback();
@@ -146,5 +158,11 @@ class InvoiceService
                 'total_pages' => ceil($total / $perPage)
             ]
         ];
+    }
+
+    private function generateInvoiceNumber(): string
+    {
+        // Format: INV-YYYYMMDD-HHMMSS-XXXX
+        return 'INV-' . date('Ymd-His') . '-' . str_pad((string) random_int(0, 9999), 4, '0', STR_PAD_LEFT);
     }
 }

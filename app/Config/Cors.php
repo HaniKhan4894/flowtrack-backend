@@ -31,7 +31,7 @@ class Cors extends BaseConfig
          * @see https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Allow-Origin
          *
          * E.g.:
-         *   - ['http://localhost:8080']
+         *   - ['http://localhost/flowtrack-backend/public']
          *   - ['https://www.example.com']
          */
         'allowedOrigins' => ['http://localhost:5173', 'http://localhost:3000', 'http://127.0.0.1:5173'],

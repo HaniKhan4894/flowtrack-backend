@@ -105,7 +105,13 @@ class UserService
      */
     public function getUsers(array $filters = []): array
     {
-        $builder = $this->userModel->builder();
+        $builder = $this->userModel->builder()->select('users.*');
+
+        if (!empty($filters['organization_id'])) {
+            $builder->join('organization_members', 'organization_members.user_id = users.id');
+            $builder->where('organization_members.organization_id', $filters['organization_id']);
+            $builder->groupBy('users.id');
+        }
 
         // Apply filters
         if (isset($filters['role'])) {

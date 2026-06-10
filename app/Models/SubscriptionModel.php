@@ -13,7 +13,7 @@ class SubscriptionModel extends Model
     protected $useSoftDeletes   = false;
     protected $protectFields    = true;
     protected $allowedFields    = [
-        'organization_id', 'plan_id', 'billing_cycle', 'status',
+        'organization_id', 'plan_id', 'user_count', 'amount', 'billing_cycle', 'status',
         'trial_ends_at', 'current_period_start', 'current_period_end',
         'cancel_at_period_end', 'cancelled_at', 'stripe_subscription_id', 'stripe_customer_id'
     ];

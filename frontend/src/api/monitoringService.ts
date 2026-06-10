@@ -10,6 +10,12 @@ const electronAPI = isElectron ? (window as any).electronAPI : null;
 let monitoringInterval: ReturnType<typeof setInterval> | null = null;
 let screenshotInterval: ReturnType<typeof setInterval> | null = null;
 let cleanupScreenshotListener: (() => void) | null = null;
+let activeTimeEntryId: number | null = null;
+let queuedScreenshots: Array<{ timeEntryId: number; activityLevel: number; blob: Blob }> = [];
+let webActivityHandlersAttached = false;
+let onWebMouseMove: (() => void) | null = null;
+let onWebClick: (() => void) | null = null;
+let onWebKeyDown: (() => void) | null = null;
 
 const webActivityData = {
     mouseMovements: 0,
@@ -18,9 +24,29 @@ const webActivityData = {
 };
 
 function trackWebActivity() {
-    window.addEventListener('mousemove', () => webActivityData.mouseMovements++);
-    window.addEventListener('click', () => webActivityData.clicks++);
-    window.addEventListener('keydown', () => webActivityData.keystrokes++);
+    if (webActivityHandlersAttached) {
+        return;
+    }
+    onWebMouseMove = () => webActivityData.mouseMovements++;
+    onWebClick = () => webActivityData.clicks++;
+    onWebKeyDown = () => webActivityData.keystrokes++;
+    window.addEventListener('mousemove', onWebMouseMove);
+    window.addEventListener('click', onWebClick);
+    window.addEventListener('keydown', onWebKeyDown);
+    webActivityHandlersAttached = true;
+}
+
+function untrackWebActivity() {
+    if (!webActivityHandlersAttached) {
+        return;
+    }
+    if (onWebMouseMove) window.removeEventListener('mousemove', onWebMouseMove);
+    if (onWebClick) window.removeEventListener('click', onWebClick);
+    if (onWebKeyDown) window.removeEventListener('keydown', onWebKeyDown);
+    webActivityHandlersAttached = false;
+    onWebMouseMove = null;
+    onWebClick = null;
+    onWebKeyDown = null;
 }
 
 function calcWebActivityLevel() {
@@ -61,9 +87,34 @@ async function captureWebScreenshot(timeEntryId: number, activityLevel: number) 
     formData.append('activity_level', activityLevel.toString());
     formData.append('is_blurred', '0');
     formData.append('screenshot', blob, 'screenshot.jpg');
-    await client.post('/screenshots/upload', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-    });
+    try {
+        await client.post('/screenshots/upload', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+        });
+    } catch {
+        queuedScreenshots.push({ timeEntryId, activityLevel, blob });
+    }
+}
+
+async function flushQueuedScreenshots() {
+    if (!queuedScreenshots.length) return;
+    const queue = [...queuedScreenshots];
+    queuedScreenshots = [];
+
+    for (const item of queue) {
+        const formData = new FormData();
+        formData.append('time_entry_id', item.timeEntryId.toString());
+        formData.append('activity_level', item.activityLevel.toString());
+        formData.append('is_blurred', '0');
+        formData.append('screenshot', item.blob, 'queued_screenshot.jpg');
+        try {
+            await client.post('/screenshots/upload', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
+        } catch {
+            queuedScreenshots.push(item);
+        }
+    }
 }
 
 // ─────────────────────────────────────────────────────────
@@ -99,6 +150,7 @@ export const monitoringService = {
     isDesktop: isElectron,
 
     startMonitoring: (timeEntryId: number, token?: string) => {
+        activeTimeEntryId = timeEntryId;
         if (isElectron && electronAPI) {
             // ── DESKTOP MODE ─────────────────────────────────────
             console.log('[Desktop] Starting tracking via Electron IPC');
@@ -122,13 +174,15 @@ export const monitoringService = {
             // Activity sync every 1 minute
             monitoringInterval = setInterval(async () => {
                 try {
+                    await flushQueuedScreenshots();
                     await client.post('/activity-logs/sync', {
-                        time_entry_id: timeEntryId,
+                        time_entry_id: activeTimeEntryId ?? timeEntryId,
                         app_name: 'FlowTrack Web',
                         window_title: document.title,
                         mouse_movement: webActivityData.mouseMovements,
                         mouse_clicks: webActivityData.clicks,
                         keyboard_strokes: webActivityData.keystrokes,
+                        duration_seconds: 60,
                         logged_at: new Date().toISOString()
                     });
                     resetWebActivity();
@@ -140,7 +194,7 @@ export const monitoringService = {
             // Screenshot every 3 minutes
             screenshotInterval = setInterval(async () => {
                 const level = calcWebActivityLevel();
-                await captureWebScreenshot(timeEntryId, level);
+                await captureWebScreenshot(activeTimeEntryId ?? timeEntryId, level);
                 resetWebActivity();
             }, 180_000);
 
@@ -151,6 +205,7 @@ export const monitoringService = {
     },
 
     stopMonitoring: () => {
+        activeTimeEntryId = null;
         if (isElectron && electronAPI) {
             electronAPI.stopTracking();
             stopElectronActivityForwarding();
@@ -161,6 +216,28 @@ export const monitoringService = {
         } else {
             if (monitoringInterval) { clearInterval(monitoringInterval); monitoringInterval = null; }
             if (screenshotInterval) { clearInterval(screenshotInterval); screenshotInterval = null; }
+            untrackWebActivity();
+        }
+    },
+
+    pauseMonitoring: () => {
+        if (isElectron && electronAPI) {
+            electronAPI.pauseTracking();
+        } else {
+            if (monitoringInterval) { clearInterval(monitoringInterval); monitoringInterval = null; }
+            if (screenshotInterval) { clearInterval(screenshotInterval); screenshotInterval = null; }
+        }
+    },
+
+    resumeMonitoring: (token?: string) => {
+        if (!activeTimeEntryId) return;
+        if (isElectron && electronAPI) {
+            electronAPI.resumeTracking();
+            if (token) {
+                electronAPI.setAuthToken(token);
+            }
+        } else if (!monitoringInterval) {
+            monitoringService.startMonitoring(activeTimeEntryId, token);
         }
     },
 

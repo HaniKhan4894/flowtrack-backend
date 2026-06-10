@@ -10,6 +10,7 @@ export interface DashboardStats {
         day: string;
         hours: number;
     }[];
+    scope?: 'own' | 'organization';
 }
 
 export const dashboardService = {

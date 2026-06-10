@@ -33,8 +33,8 @@ class PlanFeatureFilter implements FilterInterface
         $organizationId = $incomingRequest->getGet('organization_id') ?: $incomingRequest->getPost('organization_id');
         
         // If not in params, check if it was attached to request object by AuthFilter
-        if (!$organizationId && isset($request->organization_id)) {
-            $organizationId = $request->organization_id;
+        if (!$organizationId && $request->getServer('FLOWTRACK_ORGANIZATION_ID')) {
+            $organizationId = (int) $request->getServer('FLOWTRACK_ORGANIZATION_ID');
         }
 
         if (!$organizationId) {

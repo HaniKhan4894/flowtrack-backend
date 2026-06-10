@@ -16,8 +16,8 @@ class CreateInvitationsTable extends Migration
                 'auto_increment' => true,
             ],
             'organization_id' => [
-                'type'       => 'INT',
-                'constraint' => 11,
+                'type'       => 'BIGINT',
+                'constraint' => 20,
                 'unsigned'   => true,
             ],
             'email' => [

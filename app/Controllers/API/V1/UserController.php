@@ -21,11 +21,16 @@ class UserController extends ResourceController
     public function index()
     {
         try {
+            $organizationId = (int)($this->request->getServer('FLOWTRACK_ORGANIZATION_ID') ?? 0);
+            if (!$organizationId) {
+                return $this->fail('Organization context required', 400);
+            }
             // Get query parameters
             $filters = [
                 'role' => $this->request->getGet('role'),
                 'is_active' => $this->request->getGet('is_active'),
                 'search' => $this->request->getGet('search'),
+                'organization_id' => $organizationId,
                 'page' => $this->request->getGet('page') ?? 1,
                 'per_page' => $this->request->getGet('per_page') ?? 20,
             ];

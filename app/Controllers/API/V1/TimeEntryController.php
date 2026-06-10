@@ -15,16 +15,28 @@ class TimeEntryController extends ResourceController
         $this->timeEntryService = new TimeEntryService();
     }
 
+    private function requireAuthContext(): ?\CodeIgniter\HTTP\ResponseInterface
+    {
+        if (!$this->request->getServer('FLOWTRACK_USER_ID') || !$this->request->getServer('FLOWTRACK_ORGANIZATION_ID')) {
+            return $this->fail('Unauthorized', 401);
+        }
+        return null;
+    }
+
     /**
      * GET /api/v1/time-entries?user_id=1&project_id=5&start_date=2024-01-01&page=1&per_page=20
      */
     public function index()
     {
         try {
+            if ($authError = $this->requireAuthContext()) {
+                return $authError;
+            }
+
             // Get query parameters
             $filters = [
-                'user_id' => $this->request->getGet('user_id') ?? $this->request->user_id ?? null,
-                'organization_id' => $this->request->getGet('organization_id') ?? $this->request->organization_id ?? null,
+                'user_id' => (int)($this->request->getServer('FLOWTRACK_USER_ID') ?? 0),
+                'organization_id' => $this->request->getGet('organization_id') ?? (int)($this->request->getServer('FLOWTRACK_ORGANIZATION_ID') ?? 0),
                 'project_id' => $this->request->getGet('project_id'),
                 'start_date' => $this->request->getGet('start_date'),
                 'end_date' => $this->request->getGet('end_date'),
@@ -49,14 +61,30 @@ class TimeEntryController extends ResourceController
         }
     }
 
+    private function requireTrackingEnabled(int $organizationId, int $userId): ?\CodeIgniter\HTTP\ResponseInterface
+    {
+        $monitoring = new \App\Services\MemberMonitoringService();
+        if (!$monitoring->canTrackTime($organizationId, $userId)) {
+            return $this->fail('Time tracking is disabled for your account. Contact your administrator.', 403);
+        }
+        return null;
+    }
+
     /**
      * POST /api/v1/time-entries/start
      */
     public function start()
     {
         try {
-            $userId = $this->request->user_id ?? 1;
-            $organizationId = $this->request->getGet('organization_id') ?? $this->request->organization_id ?? 1;
+            if ($authError = $this->requireAuthContext()) {
+                return $authError;
+            }
+            $userId = (int)($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
+            $organizationId = (int)($this->request->getServer('FLOWTRACK_ORGANIZATION_ID') ?? 0);
+
+            if ($trackingError = $this->requireTrackingEnabled($organizationId, $userId)) {
+                return $trackingError;
+            }
 
             $data = $this->request->getJSON(true);
 
@@ -79,7 +107,10 @@ class TimeEntryController extends ResourceController
     public function stop($id)
     {
         try {
-            $userId = $this->request->user_id ?? 1;
+            if ($authError = $this->requireAuthContext()) {
+                return $authError;
+            }
+            $userId = (int)($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
 
             $entry = $this->timeEntryService->stopTimer($userId, $id);
 
@@ -100,7 +131,10 @@ class TimeEntryController extends ResourceController
     public function pause($id)
     {
         try {
-            $userId = $this->request->user_id ?? 1;
+            if ($authError = $this->requireAuthContext()) {
+                return $authError;
+            }
+            $userId = (int)($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
 
             $entry = $this->timeEntryService->pauseTimer($userId, $id);
 
@@ -121,7 +155,10 @@ class TimeEntryController extends ResourceController
     public function resume($id)
     {
         try {
-            $userId = $this->request->user_id ?? 1;
+            if ($authError = $this->requireAuthContext()) {
+                return $authError;
+            }
+            $userId = (int)($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
 
             $entry = $this->timeEntryService->resumeTimer($userId, $id);
 
@@ -142,7 +179,10 @@ class TimeEntryController extends ResourceController
     public function active()
     {
         try {
-            $userId = $this->request->user_id ?? 1;
+            if ($authError = $this->requireAuthContext()) {
+                return $authError;
+            }
+            $userId = (int)($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
 
             $entry = $this->timeEntryService->getActiveTimer($userId);
 
@@ -162,8 +202,15 @@ class TimeEntryController extends ResourceController
     public function manual()
     {
         try {
-            $userId = $this->request->user_id ?? 1;
-            $organizationId = $this->request->getGet('organization_id') ?? $this->request->organization_id ?? 1;
+            if ($authError = $this->requireAuthContext()) {
+                return $authError;
+            }
+            $userId = (int)($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
+            $organizationId = (int)($this->request->getServer('FLOWTRACK_ORGANIZATION_ID') ?? 0);
+
+            if ($trackingError = $this->requireTrackingEnabled($organizationId, $userId)) {
+                return $trackingError;
+            }
 
             $data = $this->request->getJSON(true);
 

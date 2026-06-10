@@ -1,33 +1,71 @@
 import { motion } from 'framer-motion';
-import { Activity, AppWindow, Globe, Clock, Search, TrendingUp, RefreshCw, ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
+import { Activity, AppWindow, Search, RefreshCw, ChevronLeft, ChevronRight, Calendar, BarChart3, Keyboard, MousePointer } from 'lucide-react';
 import { Button } from '../../components/ui';
 import { activityService } from '../../api/activityService';
-import { useState, useEffect, useCallback } from 'react';
+import { TeamMemberFilter } from '../../components/TeamMemberFilter';
+import { AppIcon } from '../../components/AppIcon';
+import { getAppDisplayName } from '../../utils/appIcons';
+import { useAuthStore } from '../../store/authStore';
+import { isOrgAdmin } from '../../utils/access';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+
+const formatDuration = (seconds: number) => {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
+};
 
 const ActivityPage = () => {
+  const { user } = useAuthStore();
   const [logs, setLogs] = useState<any[]>([]);
+  const [topApps, setTopApps] = useState<any[]>([]);
+  const [summary, setSummary] = useState({ total_seconds: 0, total_events: 0 });
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
+  const [viewingMemberName, setViewingMemberName] = useState('');
 
-  const fetchLogs = useCallback(async () => {
+  const effectiveUserId = selectedUserId ?? user?.id ?? null;
+  const isToday = selectedDate === new Date().toISOString().split('T')[0];
+
+  const fetchData = useCallback(async () => {
+    if (!effectiveUserId) return;
     try {
       setIsLoading(true);
-      const response = await activityService.getAll({
+      const range = {
         start_date: `${selectedDate} 00:00:00`,
         end_date: `${selectedDate} 23:59:59`,
+        user_id: isOrgAdmin(user) && selectedUserId ? selectedUserId : undefined,
+      };
+
+      const [logsResp, topAppsResp] = await Promise.all([
+        activityService.getAll(range),
+        activityService.getTopApps(range),
+      ]);
+
+      setLogs(logsResp.data ?? []);
+      setTopApps(topAppsResp.data?.apps ?? []);
+      setSummary({
+        total_seconds: topAppsResp.data?.total_seconds ?? 0,
+        total_events: topAppsResp.data?.total_events ?? 0,
       });
-      setLogs(response.data);
     } catch (error) {
       console.error('Failed to fetch activity logs', error);
+      setLogs([]);
+      setTopApps([]);
+      setSummary({ total_seconds: 0, total_events: 0 });
     } finally {
       setIsLoading(false);
     }
-  }, [selectedDate]);
+  }, [selectedDate, effectiveUserId, selectedUserId, user]);
 
   useEffect(() => {
-    fetchLogs();
-  }, [fetchLogs]);
+    fetchData();
+  }, [fetchData]);
 
   const changeDate = (days: number) => {
     const d = new Date(selectedDate);
@@ -35,7 +73,6 @@ const ActivityPage = () => {
     setSelectedDate(d.toISOString().split('T')[0]);
   };
 
-  // Process logs: use real duration_seconds from the API
   const filteredLogs = logs.filter(log =>
     !searchTerm ||
     (log.app_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -43,30 +80,30 @@ const ActivityPage = () => {
     (log.url || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const topApps = filteredLogs.reduce((acc: any[], log: any) => {
-    const existing = acc.find(a => a.name === log.app_name);
-    if (existing) {
-      existing.duration_seconds += Number(log.duration_seconds) || 0;
-    } else {
-      acc.push({ name: log.app_name, duration_seconds: Number(log.duration_seconds) || 0, status: log.category });
-    }
-    return acc;
-  }, []).sort((a, b) => b.duration_seconds - a.duration_seconds).slice(0, 5);
+  const productivityReport = useMemo(() => {
+    const categories: Record<string, number> = { productive: 0, unproductive: 0, uncategorized: 0 };
+    let keystrokes = 0;
+    let clicks = 0;
+    let mouse = 0;
 
-  const totalTime = topApps.reduce((sum, app) => sum + app.duration_seconds, 0);
+    filteredLogs.forEach((log) => {
+      const dur = Number(log.duration_seconds) || 60;
+      const cat = log.category || 'uncategorized';
+      if (cat in categories) {
+        categories[cat] += dur;
+      } else {
+        categories.uncategorized += dur;
+      }
+      keystrokes += Number(log.keyboard_strokes) || 0;
+      clicks += Number(log.mouse_clicks) || 0;
+      mouse += Number(log.mouse_movement) || 0;
+    });
 
-  const topUrls = filteredLogs.filter(log => log.url).reduce((acc: any[], log: any) => {
-    const existing = acc.find(u => u.name === log.url);
-    if (existing) {
-      existing.duration_seconds += Number(log.duration_seconds) || 0;
-      existing.visits += 1;
-    } else {
-      acc.push({ name: log.url, duration_seconds: Number(log.duration_seconds) || 0, visits: 1, status: log.category });
-    }
-    return acc;
-  }, []).sort((a, b) => b.duration_seconds - a.duration_seconds).slice(0, 5);
+    const total = Object.values(categories).reduce((sum, v) => sum + v, 0);
+    const focusScore = total > 0 ? Math.round((categories.productive / total) * 100) : 0;
 
-  const totalLoggedSeconds = filteredLogs.reduce((s, l) => s + (Number(l.duration_seconds) || 0), 0);
+    return { categories, total, keystrokes, clicks, mouse, focusScore };
+  }, [filteredLogs]);
 
   return (
     <div className="space-y-8">
@@ -76,12 +113,23 @@ const ActivityPage = () => {
             <Activity className="text-primary-400" />
             Activity Logs
           </h1>
-          <p className="text-slate-400">Deep dive into application and website usage patterns.</p>
+          <p className="text-slate-400">
+            {viewingMemberName && isOrgAdmin(user)
+              ? `Viewing activity for ${viewingMemberName}.`
+              : 'Deep dive into application and website usage patterns.'}
+          </p>
         </div>
         
         <div className="flex flex-wrap items-center gap-3">
-          {/* Date navigator */}
-          <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-xl px-2 py-1.5 h-10">
+          <TeamMemberFilter
+            selectedUserId={selectedUserId}
+            onChange={(id, member) => {
+              setSelectedUserId(id);
+              setViewingMemberName(member ? `${member.first_name} ${member.last_name}` : '');
+            }}
+          />
+
+          <div className="flex items-center gap-2 bg-[#12141C] border border-white/10 rounded-xl px-2 py-1.5 h-10">
             <button onClick={() => changeDate(-1)} className="p-1 hover:bg-white/10 rounded-lg text-slate-400">
               <ChevronLeft size={16} />
             </button>
@@ -99,7 +147,13 @@ const ActivityPage = () => {
             </button>
           </div>
 
-          {selectedDate !== new Date().toISOString().split('T')[0] && (
+          {isToday && (
+            <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-1 rounded-full">
+              Live
+            </span>
+          )}
+
+          {!isToday && (
             <button
               onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}
               className="text-xs font-bold text-primary-400 hover:underline"
@@ -108,7 +162,7 @@ const ActivityPage = () => {
             </button>
           )}
 
-          <Button variant="secondary" size="sm" onClick={fetchLogs} isLoading={isLoading}>
+          <Button variant="secondary" size="sm" onClick={fetchData} isLoading={isLoading}>
             <RefreshCw className="w-4 h-4 mr-2" />
             Refresh
           </Button>
@@ -120,22 +174,47 @@ const ActivityPage = () => {
               placeholder="Search..." 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="bg-white/5 border border-white/10 rounded-xl pl-10 pr-4 py-2 text-sm text-white focus:outline-none focus:border-primary-500/50 min-w-[180px]"
+              className="bg-[#12141C] border border-white/10 rounded-xl pl-10 pr-4 py-2 text-sm text-white focus:outline-none focus:border-primary-500/50 min-w-[180px]"
             />
           </div>
         </div>
       </div>
 
+      {/* Trackabi-style top active apps strip */}
+      {!isLoading && topApps.length > 0 && (
+        <div className="overlay-panel p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Top Active Apps</h3>
+            <span className="text-xs text-slate-500">{formatDuration(summary.total_seconds)} tracked</span>
+          </div>
+          <div className="flex flex-wrap gap-4">
+            {topApps.slice(0, 5).map((app) => (
+              <div key={app.app_name} className="flex flex-col items-center gap-2 min-w-[72px]">
+                <AppIcon appName={app.app_name} size={48} />
+                <div className="text-center">
+                  <p className="text-[11px] font-semibold text-white truncate max-w-[80px]" title={app.app_name}>
+                    {getAppDisplayName(app.app_name).length > 10
+                      ? `${getAppDisplayName(app.app_name).slice(0, 10)}…`
+                      : getAppDisplayName(app.app_name)}
+                  </p>
+                  <p className="text-sm font-bold text-primary-400">{app.percentage}%</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Summary bar */}
-      {!isLoading && logs.length > 0 && (
-        <div className="flex items-center gap-6 glass-card py-3 px-6">
+      {!isLoading && (logs.length > 0 || topApps.length > 0) && (
+        <div className="flex items-center gap-6 overlay-panel py-3 px-6">
           <div className="text-center">
-            <p className="text-2xl font-bold text-white">{filteredLogs.length}</p>
+            <p className="text-2xl font-bold text-white">{summary.total_events || filteredLogs.length}</p>
             <p className="text-xs text-slate-500 uppercase tracking-wider">Events</p>
           </div>
           <div className="h-8 w-px bg-white/10" />
           <div className="text-center">
-            <p className="text-2xl font-bold text-white">{Math.floor(totalLoggedSeconds / 3600)}h {Math.floor((totalLoggedSeconds % 3600) / 60)}m</p>
+            <p className="text-2xl font-bold text-white">{formatDuration(summary.total_seconds)}</p>
             <p className="text-xs text-slate-500 uppercase tracking-wider">Total Time</p>
           </div>
           <div className="h-8 w-px bg-white/10" />
@@ -150,8 +229,8 @@ const ActivityPage = () => {
         <div className="flex items-center justify-center py-20">
           <RefreshCw className="w-8 h-8 text-primary-500 animate-spin" />
         </div>
-      ) : logs.length === 0 ? (
-        <div className="glass-card flex flex-col items-center justify-center py-20 text-center">
+      ) : logs.length === 0 && topApps.length === 0 ? (
+        <div className="overlay-panel flex flex-col items-center justify-center py-20 text-center">
           <Activity className="w-16 h-16 text-slate-700 mb-4" />
           <h3 className="text-xl font-bold text-white mb-2">No activity recorded</h3>
           <p className="text-slate-400 max-w-sm">
@@ -160,105 +239,120 @@ const ActivityPage = () => {
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Top Apps */}
+          {/* Top Apps with % bars */}
           <motion.div 
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
-            className="glass-card"
+            className="overlay-panel p-6"
           >
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-lg font-bold text-white flex items-center gap-2">
                 <AppWindow className="text-primary-400" size={20} />
                 Top Applications
               </h3>
-              <span className="text-xs font-bold text-primary-400 bg-primary-500/10 px-3 py-1 rounded-full uppercase tracking-widest">Live Now</span>
+              {isToday && (
+                <span className="text-xs font-bold text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full uppercase tracking-widest">Live</span>
+              )}
             </div>
 
             <div className="space-y-6">
-              {topApps.map((app) => {
-                const percentage = totalTime > 0 ? Math.round((app.duration_seconds / totalTime) * 100) : 0;
-                return (
-                  <div key={app.name} className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center border border-white/10">
-                          <span className="text-lg">{app.name[0]}</span>
-                        </div>
-                        <div>
-                          <p className="font-semibold text-white">{app.name}</p>
-                          <p className="text-xs text-slate-500 capitalize">{app.status}</p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-bold text-white tracking-tight">{Math.floor(app.duration_seconds / 60)}m {app.duration_seconds % 60}s</p>
-                        <p className="text-[10px] text-slate-500">{percentage}% of session</p>
+              {topApps.map((app) => (
+                <div key={app.app_name} className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <AppIcon appName={app.app_name} size={40} />
+                      <div>
+                        <p className="font-semibold text-white">{getAppDisplayName(app.app_name)}</p>
+                        <p className="text-xs text-slate-500 capitalize">{app.category || 'uncategorized'}</p>
                       </div>
                     </div>
+                    <div className="text-right">
+                      <p className="font-bold text-white tracking-tight">{formatDuration(app.duration_seconds)}</p>
+                      <p className="text-[10px] text-slate-500">{app.percentage}% of session</p>
+                    </div>
+                  </div>
+                  <div className="h-2 bg-white/5 rounded-full overflow-hidden">
+                    <motion.div 
+                      initial={{ width: 0 }}
+                      animate={{ width: `${app.percentage}%` }}
+                      className={`h-full ${
+                        app.category === 'productive' ? 'bg-primary-500' : 
+                        app.category === 'unproductive' ? 'bg-accent' : 
+                        'bg-slate-500'
+                      }`}
+                    />
+                  </div>
+                </div>
+              ))}
+              {topApps.length === 0 && (
+                <p className="text-center text-slate-500 py-6 text-sm">No app data for this date.</p>
+              )}
+            </div>
+          </motion.div>
+
+          {/* Productivity Snapshot */}
+          <motion.div 
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            className="overlay-panel p-6"
+          >
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                <BarChart3 className="text-secondary-400" size={20} />
+                Productivity Snapshot
+              </h3>
+              <span className="text-xs font-bold text-primary-400 bg-primary-500/10 px-3 py-1 rounded-full">
+                {productivityReport.focusScore}% focus
+              </span>
+            </div>
+
+            <div className="space-y-5">
+              {[
+                { key: 'productive', label: 'Productive', color: 'bg-primary-500' },
+                { key: 'unproductive', label: 'Unproductive', color: 'bg-accent' },
+                { key: 'uncategorized', label: 'Neutral', color: 'bg-slate-500' },
+              ].map(({ key, label, color }) => {
+                const seconds = productivityReport.categories[key] || 0;
+                const pct = productivityReport.total > 0 ? Math.round((seconds / productivityReport.total) * 100) : 0;
+                return (
+                  <div key={key} className="space-y-1.5">
+                    <div className="flex justify-between text-xs">
+                      <span className="text-slate-400 font-semibold uppercase tracking-wider">{label}</span>
+                      <span className="text-white font-bold">{formatDuration(seconds)} ({pct}%)</span>
+                    </div>
                     <div className="h-2 bg-white/5 rounded-full overflow-hidden">
-                      <motion.div 
-                        initial={{ width: 0 }}
-                        animate={{ width: `${percentage}%` }}
-                        className={`h-full ${
-                          app.status === 'productive' ? 'bg-primary-500 shadow-primary' : 
-                          app.status === 'unproductive' ? 'bg-accent shadow-accent' : 
-                          'bg-slate-500'
-                        }`}
-                      />
+                      <motion.div initial={{ width: 0 }} animate={{ width: `${pct}%` }} className={`h-full ${color}`} />
                     </div>
                   </div>
                 );
               })}
-            </div>
-          </motion.div>
 
-          {/* Top URLs */}
-          <motion.div 
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="glass-card"
-          >
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                <Globe className="text-secondary-400" size={20} />
-                Web Activity
-              </h3>
-              <TrendingUp className="text-green-400" size={18} />
-            </div>
-
-            <div className="space-y-4">
-              {topUrls.map((url) => (
-                <div key={url.name} className="p-4 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition-colors group cursor-pointer">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-secondary-500/10 flex items-center justify-center text-secondary-400">
-                        <Globe size={16} />
-                      </div>
-                      <div>
-                        <p className="text-sm font-semibold text-white group-hover:text-primary-400 transition-colors">{url.name}</p>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <span className={`w-1.5 h-1.5 rounded-full ${url.status === 'productive' ? 'bg-green-500' : 'bg-red-500'}`}></span>
-                          <span className="text-[10px] text-slate-500 uppercase tracking-tighter capitalize">{url.status}</span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="flex items-center gap-2 justify-end">
-                        <Clock size={12} className="text-slate-500" />
-                        <span className="text-sm font-bold text-white">{Math.floor(url.duration_seconds / 60)}m</span>
-                      </div>
-                      <span className="text-[10px] text-slate-500">{url.visits} direct visits</span>
-                    </div>
-                  </div>
+              <div className="pt-4 border-t border-white/10 grid grid-cols-3 gap-3">
+                <div className="text-center p-3 rounded-xl bg-white/5">
+                  <Keyboard size={16} className="mx-auto text-slate-400 mb-1" />
+                  <p className="text-lg font-bold text-white">{productivityReport.keystrokes}</p>
+                  <p className="text-[10px] text-slate-500 uppercase">Keystrokes</p>
                 </div>
-              ))}
-              {topUrls.length === 0 && (
-                <p className="text-center text-slate-500 py-10 text-sm italic">No web activity recorded in this session.</p>
+                <div className="text-center p-3 rounded-xl bg-white/5">
+                  <MousePointer size={16} className="mx-auto text-slate-400 mb-1" />
+                  <p className="text-lg font-bold text-white">{productivityReport.clicks}</p>
+                  <p className="text-[10px] text-slate-500 uppercase">Clicks</p>
+                </div>
+                <div className="text-center p-3 rounded-xl bg-white/5">
+                  <Activity size={16} className="mx-auto text-slate-400 mb-1" />
+                  <p className="text-lg font-bold text-white">{productivityReport.mouse}</p>
+                  <p className="text-[10px] text-slate-500 uppercase">Mouse</p>
+                </div>
+              </div>
+
+              {topApps[0] && (
+                <div className="p-4 rounded-2xl bg-primary-500/5 border border-primary-500/20">
+                  <p className="text-[10px] text-primary-400 font-bold uppercase tracking-widest mb-1">Top Focus App</p>
+                  <p className="text-white font-semibold">{getAppDisplayName(topApps[0].app_name)}</p>
+                  <p className="text-xs text-slate-400 mt-1">{topApps[0].percentage}% of tracked session</p>
+                </div>
               )}
             </div>
-
-            <Button variant="secondary" className="w-full mt-6">
-              View Full Web History
-            </Button>
           </motion.div>
         </div>
       )}

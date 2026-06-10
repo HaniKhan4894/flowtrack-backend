@@ -23,6 +23,12 @@ class OrganizationService
         $this->db = \Config\Database::connect();
     }
 
+    private function getRoleIdBySlug(string $slug): ?int
+    {
+        $role = $this->db->table('roles')->where('slug', $slug)->get()->getRowArray();
+        return $role ? (int) $role['id'] : null;
+    }
+
     public function getOrganizationById(int $id): ?array
     {
         return $this->organizationModel->find($id);
@@ -41,11 +47,13 @@ class OrganizationService
                 throw new \Exception('Failed to create organization');
             }
 
-            // Add owner as admin member
+            $ownerRoleId = $this->getRoleIdBySlug('owner') ?? $this->getRoleIdBySlug('admin');
+            // Add owner as owner/admin member
             $this->memberModel->insert([
                 'organization_id' => $orgId,
                 'user_id' => $ownerId,
-                'role' => 'admin'
+                'role' => 'owner',
+                'role_id' => $ownerRoleId
             ]);
 
             $this->db->transComplete();
@@ -85,10 +93,12 @@ class OrganizationService
                 throw new \Exception('User is already a member');
             }
 
+            $roleId = $this->getRoleIdBySlug($role) ?? $this->getRoleIdBySlug('member');
             $memberId = $this->memberModel->insert([
                 'organization_id' => $organizationId,
                 'user_id' => $userId,
                 'role' => $role,
+                'role_id' => $roleId,
                 'hourly_rate' => $hourlyRate
             ]);
 

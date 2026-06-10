@@ -13,8 +13,18 @@ class JWTHandler
 
     public function __construct()
     {
-        // Get secret key from environment
-        $this->secretKey = getenv('JWT_SECRET_KEY') ?: 'your-secret-key-change-this-in-production';
+        // Resolve secret from CI env first, then PHP env fallbacks.
+        // In some server setups DotEnv values are available in $_ENV/$_SERVER
+        // but not via getenv(), so we intentionally check all locations.
+        $this->secretKey = (string) (
+            env('JWT_SECRET_KEY')
+            ?? getenv('JWT_SECRET_KEY')
+            ?? ($_ENV['JWT_SECRET_KEY'] ?? null)
+            ?? ($_SERVER['JWT_SECRET_KEY'] ?? '')
+        );
+        if ($this->secretKey === '') {
+            throw new \RuntimeException('JWT_SECRET_KEY is not configured');
+        }
     }
 
     /**

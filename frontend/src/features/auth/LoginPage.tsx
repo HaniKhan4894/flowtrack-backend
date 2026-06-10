@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Button, Input } from '../../components/ui';
 import { LogIn, Github, Mail, Sparkles } from 'lucide-react';
@@ -6,6 +6,7 @@ import { LogIn, Github, Mail, Sparkles } from 'lucide-react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { authService } from '../../api/authService';
 import { useAuthStore } from '../../store/authStore';
+import { DesktopTitleBar } from '../../components/WindowControls';
 
 const LoginPage = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -13,8 +14,16 @@ const LoginPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const setAuth = useAuthStore((state) => state.setAuth);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   
-  const successMessage = location.state?.message;
+  const successMessage = location.state?.message 
+    ?? (new URLSearchParams(location.search).get('signed_out') ? 'Signed out successfully. Log in with your account.' : null);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/app', { replace: true });
+    }
+  }, [isAuthenticated, navigate]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -29,9 +38,14 @@ const LoginPage = () => {
       const response = await authService.login(email, password);
       // Attach to global store
       setAuth(response.data.user, response.data.tokens.access_token);
+      localStorage.setItem('refresh_token', response.data.tokens.refresh_token);
+      const orgId = (response.data.tokens as any)?.organization_id ?? (response.data.user as any)?.organization_id;
+      if (orgId) {
+        localStorage.setItem('organization_id', String(orgId));
+      }
       
       // Navigate to dashboard
-      navigate('/');
+      navigate('/app');
     } catch (err: any) {
       setError(err.response?.data?.message || 'Unauthorized: Invalid email or password.');
     } finally {
@@ -41,6 +55,7 @@ const LoginPage = () => {
 
   return (
     <div className="relative min-h-screen flex items-center justify-center p-6 overflow-hidden bg-background">
+      <DesktopTitleBar />
       {/* Background Animated Blobs */}
       <motion.div
         animate={{

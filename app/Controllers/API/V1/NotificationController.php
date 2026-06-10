@@ -21,7 +21,10 @@ class NotificationController extends ResourceController
     public function index()
     {
         try {
-            $userId = $this->request->user_id;
+            $userId = (int)($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
+            if ($userId <= 0) {
+                return $this->fail('Unauthorized', 401);
+            }
             $unreadOnly = $this->request->getGet('unread_only') === '1';
 
             $notifications = $this->notificationService->getUserNotifications($userId, $unreadOnly);
@@ -42,7 +45,10 @@ class NotificationController extends ResourceController
     public function unreadCount()
     {
         try {
-            $userId = $this->request->user_id;
+            $userId = (int)($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
+            if ($userId <= 0) {
+                return $this->fail('Unauthorized', 401);
+            }
             $count = $this->notificationService->getUnreadCount($userId);
 
             return $this->respond([
@@ -61,7 +67,10 @@ class NotificationController extends ResourceController
     public function markAsRead($id = null)
     {
         try {
-            $userId = $this->request->user_id;
+            $userId = (int)($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
+            if ($userId <= 0) {
+                return $this->fail('Unauthorized', 401);
+            }
             $this->notificationService->markAsRead($id, $userId);
 
             return $this->respond([
@@ -80,7 +89,10 @@ class NotificationController extends ResourceController
     public function markAllAsRead()
     {
         try {
-            $userId = $this->request->user_id;
+            $userId = (int)($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
+            if ($userId <= 0) {
+                return $this->fail('Unauthorized', 401);
+            }
             $this->notificationService->markAllAsRead($userId);
 
             return $this->respond([
@@ -99,7 +111,10 @@ class NotificationController extends ResourceController
     public function delete($id = null)
     {
         try {
-            $userId = $this->request->user_id;
+            $userId = (int)($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
+            if ($userId <= 0) {
+                return $this->fail('Unauthorized', 401);
+            }
             $this->notificationService->delete($id, $userId);
 
             return $this->respond([

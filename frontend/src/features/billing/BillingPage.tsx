@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Check, Sparkles, Shield, Loader2, PartyPopper } from 'lucide-react';
 import { Button } from '../../components/ui';
 import { billingService, type Subscription } from '../../api/billingService';
+import { useSearchParams } from 'react-router-dom';
 
 const plans = [
   {
@@ -47,6 +48,7 @@ const plans = [
 ];
 
 const BillingPage = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const [currentSub, setCurrentSub] = useState<Subscription | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -56,6 +58,24 @@ const BillingPage = () => {
   useEffect(() => {
     fetchSubscription();
   }, []);
+
+  useEffect(() => {
+    const checkout = searchParams.get('checkout');
+    const sessionId = searchParams.get('session_id');
+    if (checkout === 'success' && sessionId) {
+      billingService.confirmCheckout(sessionId)
+        .then(() => {
+          setShowSuccess(true);
+          fetchSubscription();
+          setTimeout(() => setShowSuccess(false), 5000);
+          setSearchParams({});
+        })
+        .catch((e) => {
+          console.error('Checkout confirmation failed', e);
+          setSearchParams({});
+        });
+    }
+  }, [searchParams, setSearchParams]);
 
   const fetchSubscription = async () => {
     try {
@@ -73,10 +93,12 @@ const BillingPage = () => {
     
     setSubscribingId(planId);
     try {
-      await billingService.subscribe(planId, billingCycle);
-      setShowSuccess(true);
-      fetchSubscription();
-      setTimeout(() => setShowSuccess(false), 5000);
+      const resp = await billingService.createCheckoutSession(planId, billingCycle);
+      const checkoutUrl = resp?.data?.url;
+      if (!checkoutUrl) {
+        throw new Error('Checkout URL not returned');
+      }
+      window.location.href = checkoutUrl;
     } catch (e) {
       console.error('Subscription failed', e);
     } finally {
@@ -103,14 +125,14 @@ const BillingPage = () => {
             className="fixed top-8 left-1/2 -translate-x-1/2 z-50 bg-emerald-500 text-white px-8 py-4 rounded-3xl shadow-ai flex items-center gap-3"
           >
             <PartyPopper size={24} />
-            <span className="font-bold uppercase tracking-tight">Subscription successful! Welcome to the new tier.</span>
+            <span className="font-bold uppercase tracking-tight">Payment successful! Subscription activated.</span>
           </motion.div>
         )}
       </AnimatePresence>
 
       <div className="text-center max-w-2xl mx-auto">
         <h1 className="text-4xl font-extrabold text-white mb-4">Choose Your <span className="gradient-text">Power Level</span></h1>
-        <p className="text-slate-400">Scalable time tracking that grows with your team. Save 20% on yearly plans.</p>
+        <p className="text-slate-400">Select the plan that fits your team today. Your active package is always highlighted below.</p>
         
         <div className="flex items-center justify-center gap-4 mt-8">
           <span className={`text-sm ${billingCycle === 'monthly' ? 'text-white' : 'text-slate-500'}`}>Monthly</span>
@@ -146,7 +168,7 @@ const BillingPage = () => {
               
               {isCurrent && (
                 <div className="absolute -top-3 right-4 bg-emerald-500 text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-widest shadow-ai flex items-center gap-1">
-                   Active
+                   Selected Package
                 </div>
               )}
 

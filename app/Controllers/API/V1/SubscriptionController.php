@@ -80,8 +80,8 @@ class SubscriptionController extends ResourceController
             $data = $this->request->getJSON(true);
 
             // Inject organization_id from request if missing
-            if (!isset($data['organization_id']) && isset($this->request->organization_id)) {
-                $data['organization_id'] = $this->request->organization_id;
+            if (!isset($data['organization_id']) && $this->request->getServer('FLOWTRACK_ORGANIZATION_ID')) {
+                $data['organization_id'] = (int)$this->request->getServer('FLOWTRACK_ORGANIZATION_ID');
             }
 
             $rules = [
@@ -116,13 +116,76 @@ class SubscriptionController extends ResourceController
     }
 
     /**
+     * POST /api/v1/subscriptions/checkout-session
+     * Create Stripe Checkout session URL
+     */
+    public function checkoutSession()
+    {
+        try {
+            $data = $this->request->getJSON(true);
+            if (!isset($data['organization_id']) && $this->request->getServer('FLOWTRACK_ORGANIZATION_ID')) {
+                $data['organization_id'] = (int)$this->request->getServer('FLOWTRACK_ORGANIZATION_ID');
+            }
+
+            $rules = [
+                'organization_id' => 'required|is_natural_no_zero',
+                'plan_id' => 'required|is_natural_no_zero',
+                'billing_cycle' => 'required|in_list[monthly,yearly]',
+            ];
+
+            $validation = \Config\Services::validation();
+            if (!$validation->setRules($rules)->run($data)) {
+                return $this->failValidationErrors($validation->getErrors());
+            }
+
+            $session = $this->subscriptionService->createCheckoutSession(
+                (int)$data['organization_id'],
+                (int)$data['plan_id'],
+                (string)$data['billing_cycle'],
+                (int)($data['user_count'] ?? 1)
+            );
+
+            return $this->respond([
+                'success' => true,
+                'data' => $session,
+            ]);
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+
+    /**
+     * POST /api/v1/subscriptions/confirm-checkout
+     * Confirm Stripe Checkout and activate plan
+     */
+    public function confirmCheckout()
+    {
+        try {
+            $data = $this->request->getJSON(true);
+            if (empty($data['session_id'])) {
+                return $this->fail('session_id is required', 400);
+            }
+
+            $subscription = $this->subscriptionService->confirmCheckoutSession((string)$data['session_id']);
+
+            return $this->respond([
+                'success' => true,
+                'message' => 'Payment confirmed and subscription activated',
+                'data' => $subscription,
+            ]);
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+
+    /**
      * GET /api/v1/subscriptions/current
      * Get current subscription
      */
     public function current()
     {
         try {
-            $organizationId = $this->request->getGet('organization_id') ?? $this->request->organization_id ?? null;
+            $organizationId = $this->request->getGet('organization_id') ?? $this->request->getServer('FLOWTRACK_ORGANIZATION_ID') ?? null;
 
             if (!$organizationId) {
                 return $this->fail('organization_id is required', 400);
@@ -247,7 +310,7 @@ class SubscriptionController extends ResourceController
     public function usage()
     {
         try {
-            $organizationId = $this->request->getGet('organization_id') ?? $this->request->organization_id ?? null;
+            $organizationId = $this->request->getGet('organization_id') ?? $this->request->getServer('FLOWTRACK_ORGANIZATION_ID') ?? null;
 
             if (!$organizationId) {
                 return $this->fail('organization_id is required', 400);
@@ -272,7 +335,7 @@ class SubscriptionController extends ResourceController
     public function history()
     {
         try {
-            $organizationId = $this->request->getGet('organization_id') ?? $this->request->organization_id ?? null;
+            $organizationId = $this->request->getGet('organization_id') ?? $this->request->getServer('FLOWTRACK_ORGANIZATION_ID') ?? null;
 
             if (!$organizationId) {
                 return $this->fail('organization_id is required', 400);

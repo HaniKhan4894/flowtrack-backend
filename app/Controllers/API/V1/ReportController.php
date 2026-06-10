@@ -21,15 +21,27 @@ class ReportController extends ResourceController
     public function timeSummary()
     {
         try {
+            $currentUserId = (int)($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
+            $organizationId = (int)($this->request->getGet('organization_id') ?? $this->request->getServer('FLOWTRACK_ORGANIZATION_ID') ?? 0);
+            if (!$currentUserId || !$organizationId) {
+                return $this->fail('Unauthorized', 401);
+            }
+
+            $permissionService = new \App\Services\PermissionService();
+            $canViewTeam = $permissionService->userHasPermission($currentUserId, $organizationId, 'reports.view_team');
+
             $filters = [
-                'user_id' => $this->request->getGet('user_id'),
-                'organization_id' => $this->request->getGet('organization_id') ?? $this->request->organization_id ?? null,
+                'organization_id' => $organizationId,
                 'project_id' => $this->request->getGet('project_id'),
                 'start_date' => $this->request->getGet('start_date'),
                 'end_date' => $this->request->getGet('end_date'),
             ];
 
-            $filters = array_filter($filters, fn($value) => $value !== null);
+            if (!$canViewTeam) {
+                $filters['user_id'] = $currentUserId;
+            }
+
+            $filters = array_filter($filters, fn($value) => $value !== null && $value !== '');
 
             $report = $this->reportService->getTimeSummary($filters);
 
@@ -49,14 +61,26 @@ class ReportController extends ResourceController
     public function projectBreakdown()
     {
         try {
+            $currentUserId = (int)($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
+            $organizationId = (int)($this->request->getGet('organization_id') ?? $this->request->getServer('FLOWTRACK_ORGANIZATION_ID') ?? 0);
+            if (!$currentUserId || !$organizationId) {
+                return $this->fail('Unauthorized', 401);
+            }
+
+            $permissionService = new \App\Services\PermissionService();
+            $canViewTeam = $permissionService->userHasPermission($currentUserId, $organizationId, 'reports.view_team');
+
             $filters = [
-                'user_id' => $this->request->getGet('user_id'),
-                'organization_id' => $this->request->getGet('organization_id') ?? $this->request->organization_id ?? null,
+                'organization_id' => $organizationId,
                 'start_date' => $this->request->getGet('start_date'),
                 'end_date' => $this->request->getGet('end_date'),
             ];
 
-            $filters = array_filter($filters, fn($value) => $value !== null);
+            if (!$canViewTeam) {
+                $filters['user_id'] = $currentUserId;
+            }
+
+            $filters = array_filter($filters, fn($value) => $value !== null && $value !== '');
 
             $report = $this->reportService->getProjectBreakdown($filters);
 
@@ -101,7 +125,7 @@ class ReportController extends ResourceController
     public function teamLeaderboard()
     {
         try {
-            $organizationId = $this->request->getGet('organization_id') ?? $this->request->organization_id ?? null;
+            $organizationId = $this->request->getGet('organization_id') ?? (int)($this->request->getServer('FLOWTRACK_ORGANIZATION_ID') ?? 0);
             $startDate = $this->request->getGet('start_date');
             $endDate = $this->request->getGet('end_date');
 
@@ -155,10 +179,17 @@ class ReportController extends ResourceController
     public function summary()
     {
         try {
-            // In a real app, this would come from the authenticated user's organization
-            $organizationId = $this->request->getGet('organization_id') ?? $this->request->organization_id ?? 1;
-            
-            $summary = $this->reportService->getSummary($organizationId);
+            $currentUserId = (int)($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
+            $organizationId = (int)($this->request->getServer('FLOWTRACK_ORGANIZATION_ID') ?? 0);
+            if (!$currentUserId || !$organizationId) {
+                return $this->fail('Organization context required', 400);
+            }
+
+            $permissionService = new \App\Services\PermissionService();
+            $canViewTeam = $permissionService->userHasPermission($currentUserId, $organizationId, 'reports.view_team');
+
+            $scopeUserId = $canViewTeam ? null : $currentUserId;
+            $summary = $this->reportService->getSummary($organizationId, $scopeUserId);
 
             return $this->respond([
                 'success' => true,

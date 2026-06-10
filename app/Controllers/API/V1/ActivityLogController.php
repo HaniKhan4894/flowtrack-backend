@@ -22,16 +22,20 @@ class ActivityLogController extends ResourceController
     public function index()
     {
         try {
-            $userId = (int)($this->request->user_id ?? 1);
-            $organizationId = (int)$this->request->organization_id;
+            $userId = (int)($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
+            $organizationId = (int)($this->request->getServer('FLOWTRACK_ORGANIZATION_ID') ?? 0);
+            if (!$userId || !$organizationId) {
+                return $this->fail('Unauthorized', 401);
+            }
             
             $permissionService = new \App\Services\PermissionService();
             $canViewTeam = $permissionService->userHasPermission($userId, $organizationId, 'activity.view_team');
 
             $requestedUserId = $this->request->getGet('user_id');
+            $targetUserId = $canViewTeam && $requestedUserId ? (int) $requestedUserId : $userId;
 
             $filters = [
-                'user_id' => $canViewTeam ? $requestedUserId : $userId,
+                'user_id' => $targetUserId,
                 'time_entry_id' => $this->request->getGet('time_entry_id'),
                 'category' => $this->request->getGet('category'),
                 'start_date' => $this->request->getGet('start_date'),
@@ -63,7 +67,10 @@ class ActivityLogController extends ResourceController
     {
         try {
             /** @var \App\Entities\User $user */
-            $userId = (int)($this->request->user_id ?? 1);
+            $userId = (int)($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
+            if (!$userId) {
+                return $this->fail('Unauthorized', 401);
+            }
             $data = $this->request->getJSON(true);
 
             if (!isset($data['time_entry_id'])) {
@@ -95,7 +102,10 @@ class ActivityLogController extends ResourceController
     public function create()
     {
         try {
-            $userId = (int)($this->request->user_id ?? 1);
+            $userId = (int)($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
+            if (!$userId) {
+                return $this->fail('Unauthorized', 401);
+            }
             $data = $this->request->getJSON(true);
 
             $rules = [
@@ -125,8 +135,11 @@ class ActivityLogController extends ResourceController
     public function productivityStats()
     {
         try {
-            $currentUserId = (int)($this->request->user_id ?? 1);
-            $organizationId = (int)$this->request->organization_id;
+            $currentUserId = (int)($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
+            $organizationId = (int)($this->request->getServer('FLOWTRACK_ORGANIZATION_ID') ?? 0);
+            if (!$currentUserId || !$organizationId) {
+                return $this->fail('Unauthorized', 401);
+            }
             
             $permissionService = new \App\Services\PermissionService();
             $canViewTeam = $permissionService->userHasPermission($currentUserId, $organizationId, 'activity.view_team');
@@ -150,6 +163,42 @@ class ActivityLogController extends ResourceController
                 'data' => $stats
             ]);
 
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+
+    /**
+     * GET /api/v1/activity-logs/top-apps?user_id=1&start_date=...&end_date=...
+     */
+    public function topApps()
+    {
+        try {
+            $currentUserId = (int)($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
+            $organizationId = (int)($this->request->getServer('FLOWTRACK_ORGANIZATION_ID') ?? 0);
+            if (!$currentUserId || !$organizationId) {
+                return $this->fail('Unauthorized', 401);
+            }
+
+            $permissionService = new \App\Services\PermissionService();
+            $canViewTeam = $permissionService->userHasPermission($currentUserId, $organizationId, 'activity.view_team');
+
+            $requestedUserId = $this->request->getGet('user_id');
+            $targetUserId = $canViewTeam && $requestedUserId ? (int) $requestedUserId : $currentUserId;
+
+            $startDate = $this->request->getGet('start_date');
+            $endDate = $this->request->getGet('end_date');
+
+            if (!$startDate || !$endDate) {
+                return $this->fail('start_date and end_date are required', 400);
+            }
+
+            $stats = $this->activityLogService->getTopApps($targetUserId, $startDate, $endDate);
+
+            return $this->respond([
+                'success' => true,
+                'data' => $stats,
+            ]);
         } catch (\Exception $e) {
             return $this->fail($e->getMessage(), 400);
         }

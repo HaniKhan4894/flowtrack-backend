@@ -5,7 +5,9 @@ export interface Invoice {
     invoice_number: string;
     client_name: string;
     project_name?: string;
-    amount: number;
+    amount?: number;
+    subtotal?: number;
+    total?: number;
     status: 'draft' | 'sent' | 'paid' | 'overdue';
     issue_date: string;
     due_date: string;

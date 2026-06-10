@@ -22,15 +22,12 @@ class AuthFilter implements FilterInterface
     public function before(RequestInterface $request, $arguments = null)
     {
         /** @var \CodeIgniter\HTTP\IncomingRequest $request */
-        // Get token from Authorization header or 'token' query parameter
+        // Get token from Authorization header
         $authHeader = $request->getHeaderLine('Authorization');
         $token = null;
 
         if ($authHeader) {
             $token = $this->jwtHandler->extractTokenFromHeader($authHeader);
-        } else {
-            // Check query parameter for cases like <img> tags
-            $token = $request->getGet('token');
         }
 
         if (!$token) {
@@ -54,17 +51,14 @@ class AuthFilter implements FilterInterface
                 ->setStatusCode(401);
         }
 
-        // Attach user data to request
-        $userId = $userData['user_id'] ?? null;
-        $request->user_id = $userId ? (int)$userId : null;
-        $request->email = $userData['email'] ?? null;
-        $request->role = $userData['role'] ?? null;
+        // Attach user data to request context via server bag (IDE-safe)
+        $userId = isset($userData['user_id']) ? (int) $userData['user_id'] : null;
 
         $organizationId = $userData['organization_id'] ?? null;
         $organizationId = $organizationId ? (int)$organizationId : null;
 
         // Fallback: If organization_id is missing from token, fetch primary one from DB
-        $userId = $request->user_id ?? ($userData['sub'] ?? null); // Assuming 'sub' might be used for user_id in some JWTs
+        $userId = $userId ?? ($userData['sub'] ?? null); // Assuming 'sub' might be used for user_id in some JWTs
         if (!$organizationId && $userId) {
             $db = \Config\Database::connect();
             $orgMember = $db->table('organization_members')
@@ -78,7 +72,13 @@ class AuthFilter implements FilterInterface
             }
         }
 
-        $request->organization_id = (int)$organizationId;
+        $request->setGlobal('server', [
+            ...$_SERVER,
+            'FLOWTRACK_USER_ID' => $userId,
+            'FLOWTRACK_EMAIL' => $userData['email'] ?? null,
+            'FLOWTRACK_ROLE' => $userData['role'] ?? null,
+            'FLOWTRACK_ORGANIZATION_ID' => $organizationId ? (int) $organizationId : null,
+        ]);
 
         return $request;
     }

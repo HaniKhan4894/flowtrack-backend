@@ -1,8 +1,11 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { UserPlus, Mail, Shield, Trash2, Search, Filter, X, Loader2, CheckCircle2 } from 'lucide-react';
+import { UserPlus, Mail, Shield, Trash2, Search, Filter, X, Loader2, CheckCircle2, SlidersHorizontal } from 'lucide-react';
 import { teamService, type TeamMember } from '../../api/teamService';
 import { Button, Input } from '../../components/ui';
+import { useAuthStore } from '../../store/authStore';
+import { isOrgAdmin } from '../../utils/access';
+import type { MemberMonitoringSettings } from '../../types';
 
 const TeamPage = () => {
   const [members, setMembers] = useState<TeamMember[]>([]);
@@ -16,6 +19,11 @@ const TeamPage = () => {
   const [showSuccess, setShowSuccess] = useState(false);
   const [invitationLink, setInvitationLink] = useState('');
   const [showInvitationModal, setShowInvitationModal] = useState(false);
+  const [monitorMember, setMonitorMember] = useState<TeamMember | null>(null);
+  const [monitorSettings, setMonitorSettings] = useState<MemberMonitoringSettings | null>(null);
+  const [savingMonitoring, setSavingMonitoring] = useState(false);
+  const { user } = useAuthStore();
+  const canManageTeam = isOrgAdmin(user);
 
   useEffect(() => {
     fetchMembers();
@@ -27,12 +35,7 @@ const TeamPage = () => {
       setMembers(resp.data);
     } catch (e) {
       console.error(e);
-      // Fallback dummy data
-      setMembers([
-        { id: '1', first_name: 'Muhammad', last_name: 'Irfan', email: 'irfan@flowtrack.com', role: 'owner', joined_at: '2025-01-01' },
-        { id: '2', first_name: 'Alice', last_name: 'Johnson', email: 'alice@flowtrack.com', role: 'admin', joined_at: '2025-01-10' },
-        { id: '3', first_name: 'Bob', last_name: 'Smith', email: 'bob@flowtrack.com', role: 'member', joined_at: '2025-01-15' },
-      ]);
+      setMembers([]);
     } finally {
       setLoading(false);
     }
@@ -64,7 +67,41 @@ const TeamPage = () => {
 
   const copyToClipboard = () => {
       navigator.clipboard.writeText(invitationLink);
-      // Optional: Show toast
+  };
+
+  const openMonitoring = async (member: TeamMember) => {
+    const memberUserId = member.user_id ?? member.id;
+    try {
+      const resp = await teamService.getMonitoring(memberUserId);
+      setMonitorMember(member);
+      setMonitorSettings(resp.data);
+    } catch (e) {
+      console.error('Failed to load monitoring settings', e);
+    }
+  };
+
+  const saveMonitoring = async () => {
+    if (!monitorMember || !monitorSettings) return;
+    setSavingMonitoring(true);
+    try {
+      const memberUserId = monitorMember.user_id ?? monitorMember.id;
+      await teamService.updateMonitoring(memberUserId, monitorSettings);
+      setMonitorMember(null);
+      setMonitorSettings(null);
+      fetchMembers();
+    } catch (e) {
+      console.error('Failed to save monitoring settings', e);
+    } finally {
+      setSavingMonitoring(false);
+    }
+  };
+
+  const monitoringStatus = (member: TeamMember) => {
+    const tracking = member.tracking_enabled !== false;
+    const screenshots = member.screenshots_enabled !== false;
+    if (!tracking) return { label: 'Tracker off', className: 'text-rose-400 bg-rose-500/10 border-rose-500/20' };
+    if (!screenshots) return { label: 'No screenshots', className: 'text-amber-400 bg-amber-500/10 border-amber-500/20' };
+    return { label: 'Active', className: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' };
   };
 
   const filteredMembers = members.filter(m => {
@@ -109,6 +146,12 @@ const TeamPage = () => {
         </Button>
       </div>
 
+      {!canManageTeam && (
+        <div className="glass-card border border-amber-500/20 text-amber-300 p-4 rounded-2xl text-sm">
+          You need administrator access to manage team monitoring settings.
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="lg:col-span-3 h-14 relative group">
           <div className="absolute inset-y-0 left-4 flex items-center text-slate-500 group-focus-within:text-primary-400">
@@ -144,6 +187,7 @@ const TeamPage = () => {
             <tr className="bg-white/5">
               <th className="px-6 py-4 text-sm font-bold text-slate-400 uppercase tracking-wider">Member</th>
               <th className="px-6 py-4 text-sm font-bold text-slate-400 uppercase tracking-wider">Role</th>
+              <th className="px-6 py-4 text-sm font-bold text-slate-400 uppercase tracking-wider">Monitoring</th>
               <th className="px-6 py-4 text-sm font-bold text-slate-400 uppercase tracking-wider">Joined</th>
               <th className="px-6 py-4 text-sm font-bold text-slate-400 uppercase tracking-wider text-right">Actions</th>
             </tr>
@@ -175,12 +219,33 @@ const TeamPage = () => {
                     {member.role}
                   </span>
                 </td>
+                <td className="px-6 py-4">
+                  {(() => {
+                    const status = monitoringStatus(member);
+                    return (
+                      <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border ${status.className}`}>
+                        {status.label}
+                      </span>
+                    );
+                  })()}
+                </td>
                 <td className="px-6 py-4 text-slate-400 text-sm font-medium">
                   {new Date(member.joined_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
                 </td>
                 <td className="px-6 py-4 text-right">
+                  <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                    {canManageTeam && (
+                      <button
+                        className="p-2 rounded-lg text-slate-500 hover:text-primary-400 hover:bg-primary-500/10 transition-all"
+                        title="Monitoring settings"
+                        onClick={() => openMonitoring(member)}
+                      >
+                        <SlidersHorizontal size={18} />
+                      </button>
+                    )}
+                    {canManageTeam && (
                   <button 
-                    className="p-2 rounded-lg text-slate-500 hover:text-accent hover:bg-accent/10 transition-all opacity-0 group-hover:opacity-100"
+                    className="p-2 rounded-lg text-slate-500 hover:text-accent hover:bg-accent/10 transition-all"
                     onClick={async () => {
                       if (!confirm(`Remove ${member.first_name} ${member.last_name} from the team?`)) return;
                       try {
@@ -193,6 +258,8 @@ const TeamPage = () => {
                   >
                     <Trash2 size={18} />
                   </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
@@ -211,19 +278,19 @@ const TeamPage = () => {
       {/* Invite Member Modal */}
       <AnimatePresence>
         {showInviteModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setShowInviteModal(false)}
-              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+              className="absolute inset-0 bg-black/80"
             />
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative w-full max-w-lg glass-card border border-white/10 p-8 shadow-2xl"
+              className="relative w-full max-w-lg modal-panel p-8 z-10"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between mb-8">
@@ -283,19 +350,19 @@ const TeamPage = () => {
       {/* Invitation Link Modal */}
       <AnimatePresence>
         {showInvitationModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
              <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setShowInvitationModal(false)}
-              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+              className="absolute inset-0 bg-black/80"
             />
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative w-full max-w-lg glass-card border border-white/10 p-8 shadow-2xl"
+              className="relative w-full max-w-lg modal-panel p-8 z-10"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between mb-8">
@@ -339,6 +406,116 @@ const TeamPage = () => {
                     Done
                   </Button>
                 </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Member Monitoring Modal */}
+      <AnimatePresence>
+        {monitorMember && monitorSettings && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => { setMonitorMember(null); setMonitorSettings(null); }}
+              className="absolute inset-0 bg-black/80"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative w-full max-w-xl modal-panel p-8 max-h-[90vh] overflow-y-auto z-10"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h2 className="text-2xl font-bold text-white">Monitoring Controls</h2>
+                  <p className="text-slate-400 text-sm mt-1">
+                    {monitorMember.first_name} {monitorMember.last_name}
+                  </p>
+                </div>
+                <button onClick={() => { setMonitorMember(null); setMonitorSettings(null); }} className="text-slate-500 hover:text-white">
+                  <X size={24} />
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                <label className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/10 cursor-pointer">
+                  <div>
+                    <div className="font-semibold text-white">Time tracker</div>
+                    <div className="text-xs text-slate-500">Allow this member to start/stop the timer</div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={monitorSettings.tracking_enabled}
+                    onChange={(e) => setMonitorSettings({ ...monitorSettings, tracking_enabled: e.target.checked })}
+                    className="w-5 h-5 accent-primary-500"
+                  />
+                </label>
+
+                <label className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/10 cursor-pointer">
+                  <div>
+                    <div className="font-semibold text-white">Screenshots enabled</div>
+                    <div className="text-xs text-slate-500">Master switch for screenshot capture</div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={monitorSettings.screenshots_enabled}
+                    onChange={(e) => setMonitorSettings({ ...monitorSettings, screenshots_enabled: e.target.checked })}
+                    className="w-5 h-5 accent-primary-500"
+                  />
+                </label>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-400 uppercase tracking-wider">Disable screenshots until</label>
+                  <Input
+                    type="datetime-local"
+                    value={monitorSettings.screenshot_disabled_until?.slice(0, 16) ?? ''}
+                    onChange={(e) => setMonitorSettings({
+                      ...monitorSettings,
+                      screenshot_disabled_until: e.target.value ? new Date(e.target.value).toISOString() : null,
+                    })}
+                  />
+                  <p className="text-xs text-slate-500">Screenshots stay off until this date/time passes.</p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-bold text-slate-400 uppercase tracking-wider">Pause from</label>
+                    <Input
+                      type="datetime-local"
+                      value={monitorSettings.screenshot_disabled_from?.slice(0, 16) ?? ''}
+                      onChange={(e) => setMonitorSettings({
+                        ...monitorSettings,
+                        screenshot_disabled_from: e.target.value ? new Date(e.target.value).toISOString() : null,
+                      })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-bold text-slate-400 uppercase tracking-wider">Pause until</label>
+                    <Input
+                      type="datetime-local"
+                      value={monitorSettings.screenshot_disabled_to?.slice(0, 16) ?? ''}
+                      onChange={(e) => setMonitorSettings({
+                        ...monitorSettings,
+                        screenshot_disabled_to: e.target.value ? new Date(e.target.value).toISOString() : null,
+                      })}
+                    />
+                  </div>
+                </div>
+                <p className="text-xs text-slate-500">Use the window above to disable screenshots during a specific period (e.g. client meeting).</p>
+              </div>
+
+              <div className="pt-6 flex gap-4">
+                <Button variant="secondary" type="button" className="flex-1" onClick={() => { setMonitorMember(null); setMonitorSettings(null); }}>
+                  Cancel
+                </Button>
+                <Button type="button" className="flex-1" isLoading={savingMonitoring} onClick={saveMonitoring}>
+                  Save Settings
+                </Button>
               </div>
             </motion.div>
           </div>

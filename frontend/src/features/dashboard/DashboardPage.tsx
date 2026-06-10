@@ -1,7 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Clock, TrendingUp, Users, Activity, Loader2 } from 'lucide-react';
+import { Clock, TrendingUp, Users, Activity, Loader2, Timer } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { dashboardService, type DashboardStats } from '../../api/dashboardService';
+import { useAuthStore } from '../../store/authStore';
+import { isOrgAdmin } from '../../utils/access';
 
 const StatCard = ({ icon: Icon, label, value, trend, delay }: any) => (
   <motion.div
@@ -26,6 +29,9 @@ const StatCard = ({ icon: Icon, label, value, trend, delay }: any) => (
 );
 
 const DashboardPage = () => {
+  const navigate = useNavigate();
+  const user = useAuthStore((state) => state.user);
+  const adminView = isOrgAdmin(user);
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -36,26 +42,13 @@ const DashboardPage = () => {
         setStats(resp.data);
       } catch (e) {
         console.error(e);
-        // Fallback dummy data if real API is not ready or fails
         setStats({
-          total_hours: 124.5,
-          productivity_score: 88,
-          team_count: 12,
-          active_timers: 5,
-          recent_activity: [
-            { id: 1, user: 'Agent Smith', action: 'started timer', target: 'FlowTrack UI', time: '2m ago', duration: '02:14:32' },
-            { id: 2, user: 'Muhammad Irfan', action: 'completed task', target: 'API Integration', time: '1h ago', duration: '05:22:10' },
-            { id: 3, user: 'Muhammad Irfan', action: 'created project', target: 'Mobile App', time: '3h ago', duration: '-' },
-          ],
-          weekly_stats: [
-            { day: 'Mon', hours: 6 },
-            { day: 'Tue', hours: 8 },
-            { day: 'Wed', hours: 7.5 },
-            { day: 'Thu', hours: 9 },
-            { day: 'Fri', hours: 6.5 },
-            { day: 'Sat', hours: 4 },
-            { day: 'Sun', hours: 2 },
-          ]
+          total_hours: 0,
+          productivity_score: 0,
+          team_count: 0,
+          active_timers: 0,
+          recent_activity: [],
+          weekly_stats: [],
         });
       } finally {
         setLoading(false);
@@ -63,6 +56,11 @@ const DashboardPage = () => {
     };
     fetchStats();
   }, []);
+
+  const maxWeeklyHours = useMemo(() => {
+    if (!stats?.weekly_stats?.length) return 1;
+    return Math.max(...stats.weekly_stats.map((d) => d.hours), 0.1);
+  }, [stats]);
 
   if (loading || !stats) {
     return (
@@ -72,65 +70,101 @@ const DashboardPage = () => {
     );
   }
 
+  const hasWeeklyData = stats.weekly_stats.some((d) => d.hours > 0);
+
+  const statCards = adminView
+    ? [
+        { icon: Clock, label: 'Total Hours', value: `${stats.total_hours}h`, trend: 12, delay: 0.1 },
+        { icon: TrendingUp, label: 'Productivity', value: `${stats.productivity_score}%`, trend: 4.2, delay: 0.2 },
+        { icon: Users, label: 'Team Members', value: stats.team_count, trend: 0, delay: 0.3 },
+        { icon: Activity, label: 'Active Timers', value: stats.active_timers, trend: 2, delay: 0.4 },
+      ]
+    : [
+        { icon: Clock, label: 'My Hours', value: `${stats.total_hours}h`, trend: 0, delay: 0.1 },
+        { icon: TrendingUp, label: 'Productivity', value: `${stats.productivity_score}%`, trend: 0, delay: 0.2 },
+        { icon: Timer, label: 'My Active Timer', value: stats.active_timers > 0 ? 'Running' : 'None', trend: 0, delay: 0.3 },
+      ];
+
   return (
     <div className="space-y-8">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard icon={Clock} label="Total Hours" value={`${stats.total_hours}h`} trend={12} delay={0.1} />
-        <StatCard icon={TrendingUp} label="Productivity" value={`${stats.productivity_score}%`} trend={4.2} delay={0.2} />
-        <StatCard icon={Users} label="Team Members" value={stats.team_count} trend={0} delay={0.3} />
-        <StatCard icon={Activity} label="Active Timers" value={stats.active_timers} trend={2} delay={0.4} />
+      <div className={`grid grid-cols-1 md:grid-cols-2 ${adminView ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} gap-6`}>
+        {statCards.map((card) => (
+          <StatCard key={card.label} {...card} />
+        ))}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Custom Bar Chart */}
+        {/* Weekly Activity Chart */}
         <div className="bg-white/5 border border-white/10 rounded-3xl p-8 flex flex-col">
           <div className="flex items-center justify-between mb-8">
-            <h3 className="text-xl font-bold">Weekly Activity</h3>
-            <select className="bg-white/5 border border-white/10 rounded-lg px-3 py-1 text-xs text-slate-400 outline-none">
-              <option>Last 7 Days</option>
-              <option>Last 30 Days</option>
-            </select>
+            <h3 className="text-xl font-bold">{adminView ? 'Weekly Activity' : 'My Weekly Activity'}</h3>
+            <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">Last 7 Days</span>
           </div>
-          <div className="flex-1 flex items-end justify-between gap-2 h-64">
-             {stats.weekly_stats.map((day, i) => (
-               <div key={i} className="flex-1 flex flex-col items-center gap-2 group">
-                 <div className="w-full relative flex items-end justify-center min-h-[4px]">
-                    <motion.div 
-                      initial={{ height: 0 }}
-                      animate={{ height: `${(day.hours / 10) * 100}%` }}
-                      transition={{ delay: i * 0.1, duration: 1 }}
-                      className="w-full bg-ai-gradient rounded-t-lg group-hover:brightness-125 transition-all relative overflow-hidden shadow-ai"
-                    >
-                      <div className="absolute top-0 left-0 w-full h-full bg-[linear-gradient(90deg,transparent_0%,rgba(255,255,255,0.1)_50%,transparent_100%)]"></div>
-                    </motion.div>
-                    <div className="absolute -top-8 bg-primary-500 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">
-                      {day.hours}h
+
+          {!hasWeeklyData ? (
+            <div className="flex-1 flex items-center justify-center h-64 text-slate-500 text-sm">
+              No tracked time in the last 7 days. Start a timer to see activity here.
+            </div>
+          ) : (
+            <div className="flex items-end justify-between gap-3 h-64">
+              {stats.weekly_stats.map((day, i) => {
+                const barHeight = Math.max((day.hours / maxWeeklyHours) * 100, day.hours > 0 ? 8 : 0);
+                return (
+                  <div key={`${day.day}-${i}`} className="flex-1 flex flex-col items-center gap-2 h-full">
+                    <div className="flex-1 w-full flex flex-col justify-end relative group min-h-0">
+                      <motion.div
+                        initial={{ height: 0 }}
+                        animate={{ height: `${barHeight}%` }}
+                        transition={{ delay: i * 0.08, duration: 0.6 }}
+                        className="w-full bg-ai-gradient rounded-t-lg group-hover:brightness-125 transition-all shadow-ai min-h-[4px]"
+                      />
+                      <div className="absolute -top-7 left-1/2 -translate-x-1/2 bg-primary-500 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
+                        {day.hours}h
+                      </div>
                     </div>
-                 </div>
-                 <span className="text-xs text-slate-500 font-bold uppercase">{day.day}</span>
-               </div>
-             ))}
-          </div>
+                    <span className="text-xs text-slate-500 font-bold uppercase shrink-0">{day.day}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Recent Activity */}
         <div className="bg-white/5 border border-white/10 rounded-3xl p-8">
-          <h3 className="text-xl font-bold mb-6">Recent Activity</h3>
+          <h3 className="text-xl font-bold mb-6">{adminView ? 'Recent Activity' : 'My Recent Activity'}</h3>
           <div className="space-y-6">
             {stats.recent_activity.map((activity) => (
               <div key={activity.id} className="flex items-center gap-4 group">
-                <div className="w-2 h-2 rounded-full bg-primary-500 group-hover:scale-150 transition-transform shadow-ai"></div>
+                <div className="w-2 h-2 rounded-full bg-primary-500 group-hover:scale-150 transition-transform shadow-ai" />
                 <div className="flex-1">
                   <p className="text-white font-medium">
-                    <span className="text-primary-400 font-bold">{activity.user}</span> {activity.action} for <span className="text-slate-300">{activity.target}</span>
+                    {adminView ? (
+                      <>
+                        <span className="text-primary-400 font-bold">{activity.user}</span> {activity.action} for{' '}
+                        <span className="text-slate-300">{activity.target}</span>
+                      </>
+                    ) : (
+                      <>
+                        You {activity.action}{' '}
+                        <span className="text-slate-300">{activity.target}</span>
+                      </>
+                    )}
                   </p>
                   <p className="text-xs text-slate-500">{activity.time}</p>
                 </div>
                 <span className="text-xs font-mono text-slate-400">{activity.duration}</span>
               </div>
             ))}
+            {stats.recent_activity.length === 0 && (
+              <p className="text-sm text-slate-500">No recent activity yet.</p>
+            )}
           </div>
-          <button className="w-full mt-8 py-3 text-sm text-primary-400 font-bold hover:text-primary-300 transition-colors border border-primary-500/20 rounded-xl hover:bg-primary-500/5">
+          <button
+            type="button"
+            onClick={() => navigate('/activity')}
+            className="w-full mt-8 py-3 text-sm text-primary-400 font-bold hover:text-primary-300 transition-colors border border-primary-500/20 rounded-xl hover:bg-primary-500/5"
+          >
             View All Activity
           </button>
         </div>

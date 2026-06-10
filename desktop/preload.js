@@ -7,11 +7,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     // Auth
     setAuthToken: (token) => ipcRenderer.invoke('set-auth-token', token),
+    logoutSession: () => ipcRenderer.invoke('logout-session'),
+
+    windowMinimize: () => ipcRenderer.invoke('window-minimize'),
+    windowMaximize: () => ipcRenderer.invoke('window-maximize'),
+    windowIsMaximized: () => ipcRenderer.invoke('window-is-maximized'),
+    windowClose: () => ipcRenderer.invoke('window-close'),
+    onWindowMaximizedChanged: (callback) => {
+        const handler = (_event, isMaximized) => callback(isMaximized);
+        ipcRenderer.on('window-maximized-changed', handler);
+        return () => ipcRenderer.removeListener('window-maximized-changed', handler);
+    },
 
     // Tracking lifecycle
     startTracking: (timeEntryId, token) =>
         ipcRenderer.invoke('start-tracking', { timeEntryId, token }),
     stopTracking: () => ipcRenderer.invoke('stop-tracking'),
+    pauseTracking: () => ipcRenderer.invoke('pause-tracking'),
+    resumeTracking: () => ipcRenderer.invoke('resume-tracking'),
 
     // Manual capture
     captureNow: () => ipcRenderer.invoke('capture-screenshot-now'),
@@ -22,7 +35,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Listen for screenshot-captured event from main
     onScreenshotCaptured: (callback) => {
         ipcRenderer.on('screenshot-captured', (_event, data) => callback(data));
-        // Return cleanup function
         return () => ipcRenderer.removeAllListeners('screenshot-captured');
-    }
+    },
+
+    onSystemLockChange: (callback) => {
+        const onLock = () => callback(true);
+        const onUnlock = () => callback(false);
+        ipcRenderer.on('system-locked', onLock);
+        ipcRenderer.on('system-unlocked', onUnlock);
+        return () => {
+            ipcRenderer.removeListener('system-locked', onLock);
+            ipcRenderer.removeListener('system-unlocked', onUnlock);
+        };
+    },
 });

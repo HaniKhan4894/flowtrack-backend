@@ -22,7 +22,7 @@ class RoleController extends ResourceController
     public function index()
     {
         try {
-            $organizationId = $this->request->getGet('organization_id');
+            $organizationId = $this->request->getServer('FLOWTRACK_ORGANIZATION_ID') ?? $this->request->getGet('organization_id');
 
             if (!$organizationId) {
                 return $this->fail('organization_id is required', 400);
@@ -47,7 +47,7 @@ class RoleController extends ResourceController
     public function create()
     {
         try {
-            $organizationId = $this->request->getGet('organization_id');
+            $organizationId = $this->request->getServer('FLOWTRACK_ORGANIZATION_ID') ?? $this->request->getGet('organization_id');
             $data = $this->request->getJSON(true);
 
             if (!$organizationId) {
@@ -131,7 +131,7 @@ class RoleController extends ResourceController
     public function userPermissions($userId = null)
     {
         try {
-            $organizationId = $this->request->getGet('organization_id');
+            $organizationId = $this->request->getServer('FLOWTRACK_ORGANIZATION_ID') ?? $this->request->getGet('organization_id');
 
             if (!$organizationId) {
                 return $this->fail('organization_id is required', 400);

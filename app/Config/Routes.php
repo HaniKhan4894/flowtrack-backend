@@ -18,6 +18,7 @@ $routes->get('/', 'Home::index');
  */
 
 $routes->group('api/v1', ['namespace' => 'App\Controllers\API\V1'], function ($routes) {
+    $routes->get('health', 'HealthController::index');
 
     // OPTIONS routes for CORS preflight (must be before other routes)
     $routes->options('(:any)', function () {
@@ -40,41 +41,45 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\API\V1'], function ($r
     // User Routes (Protected)
     $routes->get('users', 'UserController::index', ['filter' => 'auth']);
     $routes->get('users/(:num)', 'UserController::show/$1', ['filter' => 'auth']);
-    $routes->post('users', 'UserController::create', ['filter' => 'auth:admin']);
+    $routes->post('users', 'UserController::create', ['filter' => ['auth', 'admin']]);
     $routes->put('users/(:num)', 'UserController::update/$1', ['filter' => 'auth']);
-    $routes->delete('users/(:num)', 'UserController::delete/$1', ['filter' => 'auth:admin']);
+    $routes->delete('users/(:num)', 'UserController::delete/$1', ['filter' => ['auth', 'admin']]);
 
     // Organization Routes
-    $routes->get('organizations/(:num)', 'OrganizationController::show/$1');
-    $routes->post('organizations', 'OrganizationController::create');
-    $routes->put('organizations/(:num)', 'OrganizationController::update/$1');
-    $routes->get('organizations/(:num)/members', 'OrganizationController::members/$1');
-    $routes->post('organizations/(:num)/members', 'OrganizationController::addMember/$1');
-    $routes->delete('organizations/(:num)/members/(:num)', 'OrganizationController::removeMember/$1/$2');
+    $routes->get('organizations/(:num)', 'OrganizationController::show/$1', ['filter' => 'auth']);
+    $routes->post('organizations', 'OrganizationController::create', ['filter' => 'auth']);
+    $routes->put('organizations/(:num)', 'OrganizationController::update/$1', ['filter' => 'permission:settings.edit']);
+    $routes->get('organizations/(:num)/members', 'OrganizationController::members/$1', ['filter' => 'auth']);
+    $routes->post('organizations/(:num)/members', 'OrganizationController::addMember/$1', ['filter' => 'permission:users.create']);
+    $routes->delete('organizations/(:num)/members/(:num)', 'OrganizationController::removeMember/$1/$2', ['filter' => 'permission:users.delete']);
+    $routes->get('organizations/(:num)/members/(:num)/monitoring', 'OrganizationController::getMemberMonitoring/$1/$2', ['filter' => 'permission:users.edit']);
+    $routes->put('organizations/(:num)/members/(:num)/monitoring', 'OrganizationController::updateMemberMonitoring/$1/$2', ['filter' => 'permission:users.edit']);
+    $routes->get('monitoring/settings', 'MonitoringController::mySettings', ['filter' => 'auth']);
+    $routes->get('invitations/validate', 'OrganizationController::validateInvitation');
 
     // Project Routes
-    $routes->get('projects', 'ProjectController::index');
-    $routes->get('projects/(:num)', 'ProjectController::show/$1');
-    $routes->post('projects', 'ProjectController::create');
-    $routes->put('projects/(:num)', 'ProjectController::update/$1');
-    $routes->delete('projects/(:num)', 'ProjectController::delete/$1');
-    $routes->post('projects/(:num)/archive', 'ProjectController::archive/$1');
+    $routes->get('projects', 'ProjectController::index', ['filter' => 'permission:projects.view']);
+    $routes->get('projects/(:num)', 'ProjectController::show/$1', ['filter' => 'permission:projects.view']);
+    $routes->post('projects', 'ProjectController::create', ['filter' => 'permission:projects.create']);
+    $routes->put('projects/(:num)', 'ProjectController::update/$1', ['filter' => 'permission:projects.edit']);
+    $routes->delete('projects/(:num)', 'ProjectController::delete/$1', ['filter' => 'permission:projects.delete']);
+    $routes->post('projects/(:num)/archive', 'ProjectController::archive/$1', ['filter' => 'permission:projects.archive']);
 
     // Task Routes
-    $routes->get('tasks', 'TaskController::index');
-    $routes->get('tasks/(:num)', 'TaskController::show/$1');
-    $routes->post('tasks', 'TaskController::create');
-    $routes->put('tasks/(:num)', 'TaskController::update/$1');
-    $routes->delete('tasks/(:num)', 'TaskController::delete/$1');
+    $routes->get('tasks', 'TaskController::index', ['filter' => 'permission:projects.view']);
+    $routes->get('tasks/(:num)', 'TaskController::show/$1', ['filter' => 'permission:projects.view']);
+    $routes->post('tasks', 'TaskController::create', ['filter' => 'permission:projects.edit']);
+    $routes->put('tasks/(:num)', 'TaskController::update/$1', ['filter' => 'permission:projects.edit']);
+    $routes->delete('tasks/(:num)', 'TaskController::delete/$1', ['filter' => 'permission:projects.edit']);
 
     // Time Entry Routes
-    $routes->get('time-entries', 'TimeEntryController::index');
-    $routes->post('time-entries/start', 'TimeEntryController::start');
-    $routes->post('time-entries/(:num)/stop', 'TimeEntryController::stop/$1');
-    $routes->post('time-entries/(:num)/pause', 'TimeEntryController::pause/$1');
-    $routes->post('time-entries/(:num)/resume', 'TimeEntryController::resume/$1');
-    $routes->get('time-entries/active', 'TimeEntryController::active');
-    $routes->post('time-entries/manual', 'TimeEntryController::manual');
+    $routes->get('time-entries', 'TimeEntryController::index', ['filter' => 'permission:time.view_own']);
+    $routes->post('time-entries/start', 'TimeEntryController::start', ['filter' => 'permission:time.edit_own']);
+    $routes->post('time-entries/(:num)/stop', 'TimeEntryController::stop/$1', ['filter' => 'permission:time.edit_own']);
+    $routes->post('time-entries/(:num)/pause', 'TimeEntryController::pause/$1', ['filter' => 'permission:time.edit_own']);
+    $routes->post('time-entries/(:num)/resume', 'TimeEntryController::resume/$1', ['filter' => 'permission:time.edit_own']);
+    $routes->get('time-entries/active', 'TimeEntryController::active', ['filter' => 'permission:time.view_own']);
+    $routes->post('time-entries/manual', 'TimeEntryController::manual', ['filter' => 'permission:time.edit_own']);
 
     // Screenshot Routes
     $routes->group('screenshots', ['filter' => ['auth', 'planFeature:screenshots']], function ($routes) {
@@ -89,7 +94,8 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\API\V1'], function ($r
     $routes->group('activity-logs', ['filter' => ['auth', 'planFeature:activity_tracking']], function ($routes) {
         $routes->get('/', 'ActivityLogController::index', ['filter' => 'permission:activity.view_own']);
         $routes->post('sync', 'ActivityLogController::sync', ['filter' => 'permission:activity.create']);
-        $routes->get('stats', 'ActivityLogController::stats', ['filter' => 'permission:activity.view_team']);
+        $routes->get('stats', 'ActivityLogController::productivityStats', ['filter' => 'permission:activity.view_team']);
+        $routes->get('top-apps', 'ActivityLogController::topApps', ['filter' => 'permission:activity.view_own']);
     });
 
     // Invoice Routes
@@ -100,11 +106,11 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\API\V1'], function ($r
         $routes->put('(:num)/status', 'InvoiceController::updateStatus/$1', ['filter' => 'permission:invoices.edit']);
         $routes->post('(:num)/send', 'InvoiceController::send/$1', ['filter' => 'permission:invoices.send']);
     }); // Role & Permission Management Routes
-    $routes->get('roles', 'RoleController::index', ['filter' => 'auth']);
+    $routes->get('roles', 'RoleController::index', ['filter' => 'permission:settings.view']);
     $routes->post('roles', 'RoleController::create', ['filter' => 'permission:settings.edit']);
     $routes->put('roles/(:num)/permissions', 'RoleController::updatePermissions/$1', ['filter' => 'permission:settings.edit']);
-    $routes->get('permissions', 'RoleController::permissions', ['filter' => 'auth']);
-    $routes->get('users/(:num)/permissions', 'RoleController::userPermissions/$1', ['filter' => 'auth']);
+    $routes->get('permissions', 'RoleController::permissions', ['filter' => 'permission:settings.view']);
+    $routes->get('users/(:num)/permissions', 'RoleController::userPermissions/$1', ['filter' => 'permission:settings.view']);
 
     // Report Routes
     $routes->get('reports/summary', 'ReportController::summary', ['filter' => 'auth']);
@@ -127,6 +133,8 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\API\V1'], function ($r
 
     // Subscription Management (Auth required)
     $routes->post('subscriptions', 'SubscriptionController::subscribe', ['filter' => 'auth']);
+    $routes->post('subscriptions/checkout-session', 'SubscriptionController::checkoutSession', ['filter' => 'auth']);
+    $routes->post('subscriptions/confirm-checkout', 'SubscriptionController::confirmCheckout', ['filter' => 'auth']);
     $routes->get('subscriptions/current', 'SubscriptionController::current', ['filter' => 'auth']);
     $routes->put('subscriptions/upgrade', 'SubscriptionController::upgrade', ['filter' => 'auth']);
     $routes->put('subscriptions/downgrade', 'SubscriptionController::downgrade', ['filter' => 'auth']);

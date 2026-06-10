@@ -28,8 +28,20 @@ class ScreenshotService
             throw new \Exception('Invalid file upload');
         }
 
+        $allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp'];
+        $mimeType = $file->getMimeType();
+        if (!in_array($mimeType, $allowedMimeTypes, true)) {
+            throw new \Exception('Unsupported screenshot file type');
+        }
+
+        $maxBytes = 5 * 1024 * 1024;
+        if ($file->getSize() > $maxBytes) {
+            throw new \Exception('Screenshot exceeds 5MB limit');
+        }
+
         // Generate unique filename
-        $filename = uniqid() . '_' . time() . '.' . $file->getExtension();
+        $extension = $file->guessExtension() ?: 'jpg';
+        $filename = uniqid('', true) . '_' . time() . '.' . $extension;
         $datePath = date('Y/m/d/');
         $fullPath = $this->uploadPath . $datePath;
 

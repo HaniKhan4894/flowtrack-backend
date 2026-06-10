@@ -33,7 +33,17 @@ class PermissionService
             ->first();
 
         if (!$member || !$member['role_id']) {
-            return false;
+            if (!empty($member['role'])) {
+                $role = $this->roleModel->where('slug', $member['role'])->first();
+                if ($role) {
+                    $this->memberModel->update($member['id'], ['role_id' => $role['id']]);
+                    $member['role_id'] = $role['id'];
+                }
+            }
+
+            if (empty($member['role_id'])) {
+                return false;
+            }
         }
 
         // Get role permissions
@@ -60,7 +70,17 @@ class PermissionService
             ->first();
 
         if (!$member || !$member['role_id']) {
-            return [];
+            if (!empty($member['role'])) {
+                $role = $this->roleModel->where('slug', $member['role'])->first();
+                if ($role) {
+                    $this->memberModel->update($member['id'], ['role_id' => $role['id']]);
+                    $member['role_id'] = $role['id'];
+                }
+            }
+
+            if (empty($member['role_id'])) {
+                return [];
+            }
         }
 
         return $this->roleModel->getPermissions($member['role_id']);

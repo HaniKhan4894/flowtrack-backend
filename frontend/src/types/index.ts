@@ -1,9 +1,23 @@
+export interface MemberMonitoringSettings {
+    tracking_enabled: boolean;
+    screenshots_enabled: boolean;
+    screenshot_disabled_until?: string | null;
+    screenshot_disabled_from?: string | null;
+    screenshot_disabled_to?: string | null;
+    screenshots_active?: boolean;
+}
+
 export interface User {
-    id: string;
+    id: number;
     email: string;
     first_name: string;
     last_name: string;
-    role: 'admin' | 'owner' | 'member';
+    role: 'admin' | 'owner' | 'member' | 'manager';
+    organization_id?: number;
+    organization_role?: 'admin' | 'owner' | 'member' | 'manager';
+    is_org_admin?: boolean;
+    permissions?: string[];
+    monitoring?: MemberMonitoringSettings | null;
     profile_photo?: string;
 }
 
@@ -43,5 +57,8 @@ export interface TimeEntry {
     description: string;
     started_at: string;
     ended_at: string | null;
+    is_billable?: boolean;
+    paused_at?: string | null;
+    paused_duration_seconds?: number;
     duration_seconds: number;
 }

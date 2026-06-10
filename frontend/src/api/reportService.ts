@@ -39,5 +39,12 @@ export const reportService = {
     getTeamLeaderboard: async (params?: any): Promise<{ data: TeamLeaderboard[] }> => {
         const response = await client.get('/reports/team-leaderboard', { params });
         return response.data;
-    }
+    },
+    exportCsv: async (filename: string, reportData: any[]) => {
+        const response = await client.post('/reports/export', {
+            filename,
+            report_data: reportData,
+        });
+        return response.data;
+    },
 };

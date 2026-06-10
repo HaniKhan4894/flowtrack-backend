@@ -21,6 +21,27 @@ class ReportService
         $this->db = \Config\Database::connect();
     }
 
+    private function normalizeStartDate(string $date): string
+    {
+        return strlen($date) <= 10 ? $date . ' 00:00:00' : $date;
+    }
+
+    private function normalizeEndDate(string $date): string
+    {
+        return strlen($date) <= 10 ? $date . ' 23:59:59' : $date;
+    }
+
+    private function applyDateFilters($builder, array $filters, string $column = 'started_at'): void
+    {
+        if (isset($filters['start_date'])) {
+            $builder->where($column . ' >=', $this->normalizeStartDate($filters['start_date']));
+        }
+
+        if (isset($filters['end_date'])) {
+            $builder->where($column . ' <=', $this->normalizeEndDate($filters['end_date']));
+        }
+    }
+
     /**
      * Get time summary report
      */
@@ -28,7 +49,6 @@ class ReportService
     {
         $builder = $this->timeEntryModel->builder();
 
-        // Apply filters
         if (isset($filters['user_id'])) {
             $builder->where('user_id', $filters['user_id']);
         }
@@ -41,29 +61,22 @@ class ReportService
             $builder->where('project_id', $filters['project_id']);
         }
 
-        if (isset($filters['start_date'])) {
-            $builder->where('started_at >=', $filters['start_date']);
-        }
+        $this->applyDateFilters($builder, $filters);
 
-        if (isset($filters['end_date'])) {
-            $builder->where('started_at <=', $filters['end_date']);
-        }
-
-        // Get summary
         $result = $builder->select('
             COUNT(*) as total_entries,
-            SUM(duration_seconds) as total_seconds,
-            AVG(duration_seconds) as avg_seconds,
-            SUM(CASE WHEN is_billable = 1 THEN duration_seconds ELSE 0 END) as billable_seconds,
-            SUM(CASE WHEN is_billable = 0 THEN duration_seconds ELSE 0 END) as non_billable_seconds
-        ')->get()->getRowArray();
+            COALESCE(SUM(duration_seconds), 0) as total_seconds,
+            COALESCE(AVG(duration_seconds), 0) as avg_seconds,
+            COALESCE(SUM(CASE WHEN is_billable = 1 THEN duration_seconds ELSE 0 END), 0) as billable_seconds,
+            COALESCE(SUM(CASE WHEN is_billable = 0 THEN duration_seconds ELSE 0 END), 0) as non_billable_seconds
+        ', false)->get()->getRowArray();
 
         return [
-            'total_entries' => (int)$result['total_entries'],
-            'total_hours' => round($result['total_seconds'] / 3600, 2),
-            'avg_hours' => round($result['avg_seconds'] / 3600, 2),
-            'billable_hours' => round($result['billable_seconds'] / 3600, 2),
-            'non_billable_hours' => round($result['non_billable_seconds'] / 3600, 2),
+            'total_entries' => (int) ($result['total_entries'] ?? 0),
+            'total_hours' => round(((int) ($result['total_seconds'] ?? 0)) / 3600, 2),
+            'avg_hours' => round(((float) ($result['avg_seconds'] ?? 0)) / 3600, 2),
+            'billable_hours' => round(((int) ($result['billable_seconds'] ?? 0)) / 3600, 2),
+            'non_billable_hours' => round(((int) ($result['non_billable_seconds'] ?? 0)) / 3600, 2),
         ];
     }
 
@@ -82,13 +95,7 @@ class ReportService
             $builder->where('time_entries.organization_id', $filters['organization_id']);
         }
 
-        if (isset($filters['start_date'])) {
-            $builder->where('started_at >=', $filters['start_date']);
-        }
-
-        if (isset($filters['end_date'])) {
-            $builder->where('started_at <=', $filters['end_date']);
-        }
+        $this->applyDateFilters($builder, $filters, 'time_entries.started_at');
 
         $results = $builder->select('
             projects.id,
@@ -174,36 +181,55 @@ class ReportService
 
     /**
      * Get dashboard summary
+     *
+     * @param int $organizationId Organization scope
+     * @param int|null $userId When set, stats are limited to this user (team member view)
      */
-    public function getSummary(int $organizationId): array
+    public function getSummary(int $organizationId, ?int $userId = null): array
     {
-        $timeSummary = $this->getTimeSummary(['organization_id' => $organizationId]);
-        
-        $activeTimers = $this->timeEntryModel->where('organization_id', $organizationId)
-            ->where('ended_at', null)
-            ->countAllResults();
+        $timeFilters = ['organization_id' => $organizationId];
+        if ($userId !== null) {
+            $timeFilters['user_id'] = $userId;
+        }
+        $timeSummary = $this->getTimeSummary($timeFilters);
 
-        $teamCount = $this->db->table('organization_members')->where('organization_id', $organizationId)->countAllResults();
+        $activeTimerBuilder = $this->timeEntryModel->builder()
+            ->where('organization_id', $organizationId)
+            ->where('ended_at', null);
+        if ($userId !== null) {
+            $activeTimerBuilder->where('user_id', $userId);
+        }
+        $activeTimers = $activeTimerBuilder->countAllResults();
+
+        $teamCount = $userId !== null
+            ? 1
+            : $this->db->table('organization_members')->where('organization_id', $organizationId)->countAllResults();
 
         // Weekly breakdown (last 7 days)
         $weeklyStats = [];
         for ($i = 6; $i >= 0; $i--) {
             $date = date('Y-m-d', strtotime("-$i days"));
             $dayName = date('D', strtotime($date));
-            
-            $seconds = $this->timeEntryModel->selectSum('duration_seconds')
+
+            $weeklyBuilder = $this->db->table('time_entries')
+                ->select('COALESCE(SUM(duration_seconds), 0) as total_seconds', false)
                 ->where('organization_id', $organizationId)
-                ->where('DATE(started_at)', $date)
-                ->get()->getRow()->duration_seconds ?? 0;
-            
+                ->where('DATE(started_at)', $date);
+            if ($userId !== null) {
+                $weeklyBuilder->where('user_id', $userId);
+            }
+            $row = $weeklyBuilder->get()->getRowArray();
+
+            $seconds = (int) ($row['total_seconds'] ?? 0);
+
             $weeklyStats[] = [
                 'day' => $dayName,
-                'hours' => round($seconds / 3600, 2)
+                'hours' => round($seconds / 3600, 2),
             ];
         }
 
         // Recent Activity
-        $recentActivity = $this->timeEntryModel->builder()
+        $recentBuilder = $this->timeEntryModel->builder()
             ->select('
                 time_entries.id,
                 users.first_name,
@@ -215,7 +241,11 @@ class ReportService
             ')
             ->join('users', 'users.id = time_entries.user_id')
             ->join('projects', 'projects.id = time_entries.project_id', 'left')
-            ->where('time_entries.organization_id', $organizationId)
+            ->where('time_entries.organization_id', $organizationId);
+        if ($userId !== null) {
+            $recentBuilder->where('time_entries.user_id', $userId);
+        }
+        $recentActivity = $recentBuilder
             ->orderBy('time_entries.started_at', 'DESC')
             ->limit(5)
             ->get()
@@ -245,7 +275,8 @@ class ReportService
             'team_count' => $teamCount,
             'active_timers' => $activeTimers,
             'recent_activity' => $formattedActivity,
-            'weekly_stats' => $weeklyStats
+            'weekly_stats' => $weeklyStats,
+            'scope' => $userId !== null ? 'own' : 'organization',
         ];
     }
 
@@ -265,8 +296,8 @@ class ReportService
             ')
             ->join('users', 'users.id = time_entries.user_id')
             ->where('time_entries.organization_id', $organizationId)
-            ->where('time_entries.started_at >=', $startDate)
-            ->where('time_entries.started_at <=', $endDate)
+            ->where('time_entries.started_at >=', $this->normalizeStartDate($startDate))
+            ->where('time_entries.started_at <=', $this->normalizeEndDate($endDate))
             ->groupBy('users.id')
             ->orderBy('total_seconds', 'DESC')
             ->limit(10)

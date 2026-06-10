@@ -66,10 +66,12 @@ class OrganizationSeeder extends Seeder
             ->first();
 
         if (!$existingMember) {
+            $adminRole = $db->table('roles')->where('slug', 'admin')->get()->getRowArray();
             $memberModel->insert([
                 'organization_id' => $orgId,
                 'user_id' => $userId,
                 'role' => 'admin',
+                'role_id' => $adminRole['id'] ?? null,
             ]);
             echo "✓ Added user as admin member of organization\n";
         } else {
@@ -101,8 +103,10 @@ class OrganizationSeeder extends Seeder
                 'organization_id' => $orgId,
                 'name' => 'Sample Project',
                 'description' => 'A demo project for testing',
-                'status' => 'active',
-                'created_by' => $userId,
+                'is_active' => true,
+                'is_billable' => true,
+                'created_at' => date('Y-m-d H:i:s'),
+                'updated_at' => date('Y-m-d H:i:s'),
             ]);
             echo "✓ Created sample project\n";
         } else {
@@ -118,18 +122,17 @@ class OrganizationSeeder extends Seeder
 
             $existingTask = $taskModel
                 ->where('project_id', $projectId)
-                ->where('title', 'Sample Task')
+                ->where('name', 'Sample Task')
                 ->first();
 
             if (!$existingTask) {
                 $taskModel->insert([
                     'project_id' => $projectId,
-                    'title' => 'Sample Task',
+                    'name' => 'Sample Task',
                     'description' => 'Complete the testing workflow',
-                    'status' => 'in_progress',
-                    'priority' => 'medium',
-                    'assigned_to' => $userId,
-                    'created_by' => $userId,
+                    'is_active' => true,
+                    'created_at' => date('Y-m-d H:i:s'),
+                    'updated_at' => date('Y-m-d H:i:s'),
                 ]);
                 echo "✓ Created sample task\n";
             } else {
@@ -195,6 +198,68 @@ class OrganizationSeeder extends Seeder
             }
         }
 
+        // Ensure critical permission slugs used by routes exist
+        $criticalSlugs = ['activity.create', 'screenshots.create', 'reports.view_own', 'reports.view_team'];
+        foreach ($criticalSlugs as $slug) {
+            $exists = $db->table('permissions')->where('slug', $slug)->get()->getRowArray();
+            if (!$exists) {
+                $db->table('permissions')->insert([
+                    'name' => ucwords(str_replace('.', ' ', $slug)),
+                    'slug' => $slug,
+                    'category' => explode('.', $slug)[0],
+                    'description' => 'Auto-added by OrganizationSeeder',
+                ]);
+            }
+        }
+
+        $this->assignRolePermissions($db);
+
         echo "✓ Ensured all permissions exist\n";
+    }
+
+    private function assignRolePermissions($db)
+    {
+        $roleMap = [];
+        foreach ($db->table('roles')->get()->getResultArray() as $role) {
+            $roleMap[$role['slug']] = $role['id'];
+        }
+
+        $permMap = [];
+        foreach ($db->table('permissions')->get()->getResultArray() as $perm) {
+            $permMap[$perm['slug']] = $perm['id'];
+        }
+
+        $grant = function (string $roleSlug, array $permissionSlugs) use ($db, $roleMap, $permMap) {
+            if (!isset($roleMap[$roleSlug])) {
+                return;
+            }
+
+            foreach ($permissionSlugs as $slug) {
+                if (!isset($permMap[$slug])) {
+                    continue;
+                }
+                $exists = $db->table('role_permissions')
+                    ->where('role_id', $roleMap[$roleSlug])
+                    ->where('permission_id', $permMap[$slug])
+                    ->get()
+                    ->getRowArray();
+
+                if (!$exists) {
+                    $db->table('role_permissions')->insert([
+                        'role_id' => $roleMap[$roleSlug],
+                        'permission_id' => $permMap[$slug],
+                    ]);
+                }
+            }
+        };
+
+        $member = ['time.view_own', 'time.edit_own', 'projects.view', 'screenshots.view_own', 'screenshots.create', 'activity.view_own', 'activity.create', 'reports.view_own'];
+        $manager = array_merge($member, ['time.view_team', 'projects.create', 'projects.edit', 'screenshots.view_team', 'activity.view_team', 'reports.view_team', 'reports.export']);
+        $admin = array_keys($permMap);
+
+        $grant('member', $member);
+        $grant('manager', $manager);
+        $grant('admin', $admin);
+        $grant('owner', $admin);
     }
 }

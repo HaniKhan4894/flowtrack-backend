@@ -9,28 +9,25 @@ class AddMonitoringPermissions extends Migration
     public function up()
     {
         // 1. Add missing permissions
-        // $permissions = [
-        //     // Activity Logs
-        //     ['name' => 'View Own Activity', 'slug' => 'activity.view_own', 'category' => 'activity', 'description' => 'View own activity logs'],
-        //     ['name' => 'View Team Activity', 'slug' => 'activity.view_team', 'category' => 'activity', 'description' => 'View team activity logs'],
-        //     ['name' => 'Create Activity Log', 'slug' => 'activity.create', 'category' => 'activity', 'description' => 'Create/Sync activity logs'],
-            
-        //     // Screenshots (missing create)
-        //     ['name' => 'Create Screenshot', 'slug' => 'screenshots.create', 'category' => 'screenshots', 'description' => 'Upload screenshots'],
-        // ];
+        $permissions = [
+            ['name' => 'View Own Activity', 'slug' => 'activity.view_own', 'category' => 'activity', 'description' => 'View own activity logs'],
+            ['name' => 'View Team Activity', 'slug' => 'activity.view_team', 'category' => 'activity', 'description' => 'View team activity logs'],
+            ['name' => 'Create Activity Log', 'slug' => 'activity.create', 'category' => 'activity', 'description' => 'Create/Sync activity logs'],
+            ['name' => 'Create Screenshot', 'slug' => 'screenshots.create', 'category' => 'screenshots', 'description' => 'Upload screenshots'],
+        ];
 
-        // foreach ($permissions as $permission) {
-        //     $exists = $this->db->table('permissions')
-        //         ->where('slug', $permission['slug'])
-        //         ->countAllResults();
+        foreach ($permissions as $permission) {
+            $exists = $this->db->table('permissions')
+                ->where('slug', $permission['slug'])
+                ->countAllResults();
             
-        //     if ($exists === 0) {
-        //         $this->db->table('permissions')->insert($permission);
-        //     }
-        // }
+            if ($exists === 0) {
+                $this->db->table('permissions')->insert($permission);
+            }
+        }
 
-        // // 2. Assign permissions to roles
-        // $this->assignPermissionsToRoles();
+        // 2. Assign permissions to roles
+        $this->assignPermissionsToRoles();
     }
 
     private function assignPermissionsToRoles()
@@ -96,7 +93,7 @@ class AddMonitoringPermissions extends Migration
     public function down()
     {
         // Remove permissions
-        // $slugs = ['activity.view_own', 'activity.view_team', 'activity.create', 'screenshots.create'];
-        // $this->db->table('permissions')->whereIn('slug', $slugs)->delete();
+        $slugs = ['activity.view_own', 'activity.view_team', 'activity.create', 'screenshots.create'];
+        $this->db->table('permissions')->whereIn('slug', $slugs)->delete();
     }
 }

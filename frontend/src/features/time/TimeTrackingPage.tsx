@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Calendar, Filter, Download, MoreHorizontal, Clock, Tag, Briefcase, Loader2, ChevronDown, Search } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { Calendar, Filter, Download, MoreHorizontal, Clock, Tag, Briefcase, Loader2, Search } from 'lucide-react';
 import { timeService } from '../../api/timeService';
 import { projectService, type Project } from '../../api/projectService';
+import { reportService } from '../../api/reportService';
 import type { TimeEntry } from '../../types';
 
 const TimeTrackingPage = () => {
@@ -45,12 +46,7 @@ const TimeTrackingPage = () => {
       setEntries(resp.data);
     } catch (e) {
       console.error(e);
-      // Fallback dummy data
-      setEntries([
-        { id: 1, description: 'Initial Dashboard Layout', project_id: 1, start_time: '2026-02-01 10:00:00', end_time: '2026-02-01 12:30:00', duration_seconds: 9000 },
-        { id: 2, description: 'API Authentication Flow', project_id: 1, start_time: '2026-02-01 14:00:00', end_time: '2026-02-01 16:45:00', duration_seconds: 9900 },
-        { id: 3, description: 'Researching CORS issues', project_id: 2, start_time: '2026-01-31 09:15:00', end_time: '2026-01-31 11:20:00', duration_seconds: 7500 },
-      ]);
+      setEntries([]);
     } finally {
       setLoading(false);
     }
@@ -112,7 +108,17 @@ const TimeTrackingPage = () => {
               Last 7 Days
             </button>
           </div>
-          <button className="flex items-center gap-2 bg-primary-500 hover:bg-primary-600 text-white px-5 py-2.5 rounded-xl font-bold transition-all shadow-ai">
+          <button
+            onClick={() => reportService.exportCsv('time_logs.csv', filteredEntries.map((entry) => ({
+              id: entry.id,
+              description: entry.description,
+              project_id: entry.project_id,
+              started_at: entry.started_at,
+              ended_at: entry.ended_at,
+              duration_seconds: entry.duration_seconds,
+            })))}
+            className="flex items-center gap-2 bg-primary-500 hover:bg-primary-600 text-white px-5 py-2.5 rounded-xl font-bold transition-all shadow-ai"
+          >
             <Download size={18} />
             Export
           </button>
@@ -201,11 +207,11 @@ const TimeTrackingPage = () => {
                       </div>
                       <div className="flex items-center gap-1">
                         <Tag size={14} />
-                        {entry.is_billable ? 'Billable' : 'Non-billable'}
+                        {(entry as any).is_billable ? 'Billable' : 'Non-billable'}
                       </div>
                       <div className="flex items-center gap-1">
                         <Calendar size={14} />
-                        {entry.start_time ? formatDate(entry.start_time) : 'No Date'}
+                        {entry.started_at ? formatDate(entry.started_at) : 'No Date'}
                       </div>
                     </div>
                   </div>
@@ -215,8 +221,8 @@ const TimeTrackingPage = () => {
                   <div className="text-right">
                     <p className="text-sm font-bold text-white font-mono">{formatDuration(entry.duration_seconds || 0)}</p>
                     <p className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">
-                       {entry.start_time ? formatTime(entry.start_time) : ''} - 
-                       {entry.end_time ? formatTime(entry.end_time) : 'Now'}
+                       {entry.started_at ? formatTime(entry.started_at) : ''} - 
+                       {entry.ended_at ? formatTime(entry.ended_at) : 'Now'}
                     </p>
                   </div>
                   <button className="p-2 text-slate-600 hover:text-white hover:bg-white/5 rounded-lg transition-all opacity-0 group-hover:opacity-100">

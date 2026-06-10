@@ -1,68 +1,78 @@
-# CodeIgniter 4 Application Starter
+# FlowTrack Backend
 
-## What is CodeIgniter?
+FlowTrack is a multi-tenant time-tracking platform with:
+- CodeIgniter 4 backend API (`app/`, `public/`)
+- React frontend (`frontend/`)
+- Electron desktop tracker (`desktop/`)
 
-CodeIgniter is a PHP full-stack web framework that is light, fast, flexible and secure.
-More information can be found at the [official site](https://codeigniter.com).
+## Requirements
 
-This repository holds a composer-installable app starter.
-It has been built from the
-[development repository](https://github.com/codeigniter4/CodeIgniter4).
+- PHP 8.1+
+- Composer
+- Node.js 18+
+- MySQL 8+ (or MariaDB compatible)
 
-More information about the plans for version 4 can be found in [CodeIgniter 4](https://forum.codeigniter.com/forumdisplay.php?fid=28) on the forums.
+## Environment Setup
 
-You can read the [user guide](https://codeigniter.com/user_guide/)
-corresponding to the latest version of the framework.
+1. Copy `env` to `.env`.
+2. Set API/env values:
+   - `app.baseURL`
+   - `database.default.*`
+   - `JWT_SECRET_KEY` (required)
+   - `app.frontendURL`
+3. Frontend env:
+   - Create/update `frontend/.env`
+   - Set `VITE_API_URL=http://localhost/flowtrack-backend/public/api/v1`
+4. Desktop env (optional override):
+   - `FLOWTRACK_API_URL=http://localhost/flowtrack-backend/public/api/v1`
 
-## Installation & updates
+## Install
 
-`composer create-project codeigniter4/appstarter` then `composer update` whenever
-there is a new release of the framework.
+Backend:
+- `composer install`
 
-When updating, check the release notes to see if there are any changes you might need to apply
-to your `app` folder. The affected files can be copied or merged from
-`vendor/codeigniter4/framework/app`.
+Frontend:
+- `cd frontend && npm install`
 
-## Setup
+Desktop:
+- `cd desktop && npm install`
 
-Copy `env` to `.env` and tailor for your app, specifically the baseURL
-and any database settings.
+## Run
 
-## Important Change with index.php
+From repo root:
+- Backend: `php spark serve`
+- Frontend: `cd frontend && npm run dev`
+- Desktop: `cd desktop && npm run dev`
+- All (concurrently): `npm run dev:all`
 
-`index.php` is no longer in the root of the project! It has been moved inside the *public* folder,
-for better security and separation of components.
+## Database
 
-This means that you should configure your web server to "point" to your project's *public* folder, and
-not to the project root. A better practice would be to configure a virtual host to point there. A poor practice would be to point your web server to the project root and expect to enter *public/...*, as the rest of your logic and the
-framework are exposed.
+- Run migrations: `php spark migrate`
+- Seed if needed: `php spark db:seed OrganizationSeeder`
 
-**Please** read the user guide for a better explanation of how CI4 works!
+## API Health
 
-## Repository Management
+- `GET /api/v1/health`
 
-We use GitHub issues, in our main repository, to track **BUGS** and to track approved **DEVELOPMENT** work packages.
-We use our [forum](http://forum.codeigniter.com) to provide SUPPORT and to discuss
-FEATURE REQUESTS.
+Example:
+- [http://localhost/flowtrack-backend/public/api/v1/health](http://localhost/flowtrack-backend/public/api/v1/health)
 
-This repository is a "distribution" one, built by our release preparation script.
-Problems with it can be raised on our forum, or as issues in the main repository.
+## Testing
 
-## Server Requirements
+- Backend tests: `composer test`
+- Frontend lint/build:
+  - `cd frontend && npm run lint`
+  - `cd frontend && npm run build`
 
-PHP version 8.1 or higher is required, with the following extensions installed:
+## Project Layout
 
-- [intl](http://php.net/manual/en/intl.requirements.php)
-- [mbstring](http://php.net/manual/en/mbstring.installation.php)
+- `app/` CodeIgniter API (controllers, services, models, filters)
+- `frontend/` React app
+- `desktop/` Electron tracker/capture client
+- `tests/` PHPUnit tests
 
-> [!WARNING]
-> - The end of life date for PHP 7.4 was November 28, 2022.
-> - The end of life date for PHP 8.0 was November 26, 2023.
-> - If you are still using PHP 7.4 or 8.0, you should upgrade immediately.
-> - The end of life date for PHP 8.1 will be December 31, 2025.
+## Security Notes
 
-Additionally, make sure that the following extensions are enabled in your PHP:
-
-- json (enabled by default - don't turn it off)
-- [mysqlnd](http://php.net/manual/en/mysqlnd.install.php) if you plan to use MySQL
-- [libcurl](http://php.net/manual/en/curl.requirements.php) if you plan to use the HTTP\CURLRequest library
+- Never commit real secrets in `.env`.
+- `JWT_SECRET_KEY` must be set in all environments.
+- Use production-safe CORS origins and HTTPS in production.

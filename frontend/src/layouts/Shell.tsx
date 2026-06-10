@@ -1,38 +1,21 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  LayoutDashboard,
-  Clock,
-  Briefcase,
-  Users,
-  CreditCard,
-  Settings,
-  Bell,
   LogOut,
   ChevronLeft,
   ChevronRight,
   Sparkles,
-  Camera,
-  Activity,
-  FileText
+  Bell,
 } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { TimerWidget } from '../components/TimerWidget';
-import { monitoringService } from '../api/monitoringService';
-
-const navItems = [
-  { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
-  { icon: Clock, label: 'Time Tracking', path: '/time' },
-  { icon: Briefcase, label: 'Projects', path: '/projects' },
-  { icon: Camera, label: 'Screenshots', path: '/screenshots' },
-  { icon: Activity, label: 'Activity', path: '/activity' },
-  { icon: FileText, label: 'Invoices', path: '/invoices' },
-  { icon: Users, label: 'Team', path: '/team' },
-  { icon: Sparkles, label: 'Analytics', path: '/analytics' },
-  { icon: CreditCard, label: 'Billing', path: '/billing' },
-  { icon: Settings, label: 'Settings', path: '/settings' },
-];
+import { notificationService } from '../api/notificationService';
+import { useTimerStore } from '../store/timerStore';
+import { timeService } from '../api/timeService';
+import { getNavItemsForUser } from '../utils/access';
+import { hardRedirectToLogin, isDesktopApp } from '../utils/electronAuth';
+import { WindowControls } from '../components/WindowControls';
 
 const SidebarItem = ({ icon: Icon, label, path, isCollapsed }: any) => {
   const location = useLocation();
@@ -62,17 +45,36 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
   const location = useLocation();
+  const { resetLocal } = useTimerStore();
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const navItems = getNavItemsForUser(user);
 
   const handleLogout = () => {
+    if (isLoggingOut) return;
+    setIsLoggingOut(true);
+
+    const activeEntryId = useTimerStore.getState().activeEntry?.id;
+    resetLocal();
+
+    if (activeEntryId) {
+      void timeService.stopTimer(activeEntryId).catch(() => undefined);
+    }
+
     logout();
-    navigate('/login');
+
+    if (isDesktopApp()) {
+      hardRedirectToLogin();
+      return;
+    }
+
+    navigate('/login', { replace: true, state: { message: 'Signed out successfully.' } });
+    setIsLoggingOut(false);
   };
 
-  const notifications = [
-    { id: 1, title: 'Project Milestone', message: 'FlowTrack SaaS reached 100% completion.', time: 'Just now', read: false },
-    { id: 2, title: 'New Member', message: 'Sarah Chen joined the Engineering team.', time: '1h ago', read: false },
-    { id: 3, title: 'System Update', message: 'v1.4 deploy successful. New charts added.', time: '5h ago', read: true },
-  ];
+  useEffect(() => {
+    notificationService.list().then((res) => setNotifications(res.data ?? [])).catch(() => setNotifications([]));
+  }, []);
 
   return (
     <div className="flex min-h-screen bg-background p-4 gap-4 text-white">
@@ -81,7 +83,7 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
         animate={{ width: isCollapsed ? 80 : 260 }}
         className="glass rounded-3xl flex flex-col relative z-20 drag-region"
       >
-        <div className="p-6 flex items-center justify-between">
+        <div className="p-6 flex items-center justify-between no-drag">
           <AnimatePresence mode="wait">
             {!isCollapsed && (
               <motion.div
@@ -112,14 +114,16 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
           ))}
         </nav>
 
-        <div className="p-4 mt-auto border-t border-white/5 pt-6">
+        <div className="p-4 mt-auto border-t border-white/5 pt-6 no-drag">
           <motion.button
+            type="button"
             whileHover={{ x: 4 }}
             onClick={handleLogout}
-            className="flex items-center gap-3 w-full px-4 py-3 rounded-2xl text-slate-400 hover:text-accent hover:bg-accent/10 transition-all border border-transparent hover:border-accent/20"
+            disabled={isLoggingOut}
+            className="flex items-center gap-3 w-full px-4 py-3 rounded-2xl text-slate-400 hover:text-accent hover:bg-accent/10 transition-all border border-transparent hover:border-accent/20 disabled:opacity-50 cursor-pointer"
           >
             <LogOut className="w-5 h-5" />
-            {!isCollapsed && <span className="font-medium">Sign Out</span>}
+            {!isCollapsed && <span className="font-medium">{isLoggingOut ? 'Signing out…' : 'Sign Out'}</span>}
           </motion.button>
         </div>
       </motion.aside>
@@ -128,7 +132,7 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
       <main className="flex-1 flex flex-col gap-4 overflow-hidden">
         {/* Header */}
         <header 
-          className={`glass h-20 px-8 rounded-3xl flex items-center justify-between relative z-30 drag-region ${monitoringService.isDesktop ? 'pr-40' : ''}`}
+          className="glass h-20 px-8 rounded-3xl flex items-center justify-between relative z-30 drag-region"
         >
           <div className="flex items-center gap-4 text-slate-400">
             <h2 className="text-xl font-semibold text-white">
@@ -156,31 +160,41 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
                       initial={{ opacity: 0 }} 
                       animate={{ opacity: 1 }} 
                       exit={{ opacity: 0 }}
-                      className="fixed inset-0 z-40" 
+                      className="fixed inset-0 z-[90] bg-black/40" 
                       onClick={() => setShowNotifications(false)} 
                     />
                     <motion.div
                       initial={{ opacity: 0, y: 10, scale: 0.95 }}
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                      className="absolute top-14 right-0 w-80 glass-card border border-white/10 p-4 shadow-2xl z-50 overflow-hidden"
+                      className="fixed top-24 right-8 w-80 dropdown-panel p-4 z-[100] overflow-hidden"
                     >
                       <div className="flex items-center justify-between mb-4 px-2">
                         <h4 className="font-bold text-white">Notifications</h4>
-                        <button className="text-[10px] font-bold text-primary-400 uppercase tracking-widest hover:underline">Mark all as read</button>
+                        <button
+                          onClick={() => notificationService.markAllRead().then(() => notificationService.list().then((res) => setNotifications(res.data ?? [])))}
+                          className="text-[10px] font-bold text-primary-400 uppercase tracking-widest hover:underline"
+                        >
+                          Mark all as read
+                        </button>
                       </div>
                       <div className="space-y-2">
-                        {notifications.map(n => (
-                          <div key={n.id} className={`p-3 rounded-2xl transition-colors cursor-pointer ${n.read ? 'hover:bg-white/5' : 'bg-primary-500/5 hover:bg-primary-500/10 border border-primary-500/10'}`}>
+                        {notifications.map((n) => (
+                          <div key={n.id} className={`p-3 rounded-2xl transition-colors cursor-pointer ${n.is_read ? 'hover:bg-white/5' : 'bg-primary-500/5 hover:bg-primary-500/10 border border-primary-500/10'}`}>
                             <div className="flex justify-between items-start mb-1">
-                              <span className={`text-xs font-bold ${n.read ? 'text-slate-200' : 'text-primary-400'}`}>{n.title}</span>
-                              <span className="text-[10px] text-slate-500">{n.time}</span>
+                              <span className={`text-xs font-bold ${n.is_read ? 'text-slate-200' : 'text-primary-400'}`}>{n.title || 'Notification'}</span>
+                              <span className="text-[10px] text-slate-500">{n.created_at ? new Date(n.created_at).toLocaleString() : ''}</span>
                             </div>
-                            <p className="text-[11px] text-slate-400 leading-tight">{n.message}</p>
+                            <p className="text-[11px] text-slate-400 leading-tight">{n.message || n.title || 'No details'}</p>
                           </div>
                         ))}
+                        {notifications.length === 0 && (
+                          <p className="text-xs text-slate-500 px-2 py-4">No notifications.</p>
+                        )}
                       </div>
-                      <button className="w-full mt-4 py-3 text-center text-xs font-bold text-slate-500 hover:text-white bg-white/5 rounded-xl transition-all">
+                      <button className="w-full mt-4 py-3 text-center text-xs font-bold text-slate-500 hover:text-white bg-white/5 rounded-xl transition-all"
+                        onClick={() => { setShowNotifications(false); navigate('/activity'); }}
+                      >
                         View All Activity
                       </button>
                     </motion.div>
@@ -194,6 +208,13 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
               >
                 {user?.first_name?.[0]}{user?.last_name?.[0]}
               </div>
+
+              {isDesktopApp() && (
+                <>
+                  <div className="h-8 w-px bg-white/10 mx-1" />
+                  <WindowControls />
+                </>
+              )}
             </div>
           </div>
         </header>

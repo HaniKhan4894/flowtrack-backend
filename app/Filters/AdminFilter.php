@@ -25,8 +25,9 @@ class AdminFilter implements FilterInterface
      */
     public function before(RequestInterface $request, $arguments = null)
     {
-        // Get user_id from request (set by AuthFilter)
-        $userId = $request->user_id ?? null;
+        /** @var \CodeIgniter\HTTP\IncomingRequest $request */
+        // Get user_id from request context (set by AuthFilter)
+        $userId = $request->getServer('FLOWTRACK_USER_ID') ?? null;
         
         if (!$userId) {
             return service('response')
@@ -37,8 +38,8 @@ class AdminFilter implements FilterInterface
                 ->setStatusCode(401);
         }
 
-        // Get organization_id from query params
-        $organizationId = $request->getGet('organization_id');
+        // Get organization_id from request context or query params
+        $organizationId = $request->getServer('FLOWTRACK_ORGANIZATION_ID') ?? $request->getGet('organization_id');
 
         if (!$organizationId) {
             return service('response')
@@ -87,8 +88,11 @@ class AdminFilter implements FilterInterface
                 ->setStatusCode(403);
         }
 
-        // Attach organization_id to request for controllers
-        $request->organization_id = $organizationId;
+        $request->setGlobal('server', [
+            ...$_SERVER,
+            'FLOWTRACK_ORGANIZATION_ID' => (int)$organizationId,
+            'FLOWTRACK_USER_ID' => (int)$userId,
+        ]);
 
         return $request;
     }

@@ -1,0 +1,26 @@
+version: '3.9'
+
+services:
+  app:
+    image: php:8.2-apache
+    working_dir: /var/www/html
+    volumes:
+      - ./:/var/www/html
+    ports:
+      - '8080:80'
+    environment:
+      APACHE_DOCUMENT_ROOT: /var/www/html/public
+
+  db:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: flowtrack
+    ports:
+      - '3306:3306'
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+volumes:
+  mysql_data:

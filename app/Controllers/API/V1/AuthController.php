@@ -37,32 +37,6 @@ class AuthController extends ResourceController
 
             $result = $this->authService->register($data);
 
-            // If invitation token exists, add user to organization
-            if ($invitationToken && isset($result['id'])) {
-                $organizationService = new \App\Services\OrganizationService();
-                $invitationModel = new \App\Models\InvitationModel();
-
-                $invite = $invitationModel->where('token', $invitationToken)
-                    ->where('expires_at >=', date('Y-m-d H:i:s'))
-                    ->first();
-
-                if ($invite) {
-                    try {
-                        $organizationService->addMember(
-                            $invite['organization_id'],
-                            $result['id'],
-                            $invite['role'],
-                            null
-                        );
-                        // Delete invitation after use
-                        $invitationModel->delete($invite['id']);
-                    } catch (\Exception $ex) {
-                        // Log error but don't fail registration
-                        log_message('error', 'Failed to process invitation: ' . $ex->getMessage());
-                    }
-                }
-            }
-
             return $this->respondCreated([
                 'success' => true,
                 'message' => 'User registered successfully',
@@ -151,20 +125,17 @@ class AuthController extends ResourceController
             // User data attached by AuthFilter
             /** @var \CodeIgniter\HTTP\IncomingRequest $request */
             $request = $this->request;
-            $userId = $request->user_id ?? null;
+            $userId = (int)($request->getServer('FLOWTRACK_USER_ID') ?? 0);
 
             if (!$userId) {
                 return $this->fail('Unauthorized', 401);
             }
 
-            $user = (new \App\Services\UserService())->getUserById($userId);
+            $user = $this->authService->buildAuthProfile($userId);
 
             if (!$user) {
                 return $this->fail('User not found', 404);
             }
-
-            // Remove sensitive data
-            unset($user['password_hash']);
 
             return $this->respond([
                 'success' => true,

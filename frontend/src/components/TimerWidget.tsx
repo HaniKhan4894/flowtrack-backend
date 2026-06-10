@@ -1,22 +1,20 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Play, Square, ChevronDown, Pause } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTimerStore } from '../store/timerStore';
 import { projectService, type Project } from '../api/projectService';
+import { monitoringService } from '../api/monitoringService';
 
 export const TimerWidget = () => {
+  const isDesktop = monitoringService.isDesktop;
   const { activeEntry, isRunning, isPaused, elapsed, start, stop, pause, resume, loadActive } = useTimerStore();
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
   const [description, setDescription] = useState('');
   const [showProjectSelect, setShowProjectSelect] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadActive();
-    fetchProjects();
-  }, []);
-
-  const fetchProjects = async () => {
+  const fetchProjects = useCallback(async () => {
     try {
       const resp = await projectService.getAll();
       setProjects(resp.data);
@@ -24,7 +22,12 @@ export const TimerWidget = () => {
     } catch (e) {
       console.error(e);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    loadActive();
+    fetchProjects();
+  }, [fetchProjects, loadActive]);
 
   const formatTime = (seconds: number) => {
     const h = Math.floor(seconds / 3600);
@@ -34,17 +37,47 @@ export const TimerWidget = () => {
   };
 
   const handleToggle = async () => {
-    if (isRunning) {
-      await stop();
-    } else {
-      if (selectedProjectId) {
+    setError(null);
+    try {
+      if (isRunning) {
+        await stop();
+      } else {
+        if (!selectedProjectId) {
+          setError('Please select a project first');
+          return;
+        }
         await start(selectedProjectId, description);
       }
+    } catch (e: any) {
+      setError(e?.response?.data?.message || 'Timer action failed');
     }
   };
 
+  // Web: read-only — show running time only (controls live in desktop app)
+  if (!isDesktop) {
+    if (!isRunning) return null;
+
+    return (
+      <div className="flex items-center gap-4 bg-white/5 border border-white/10 rounded-2xl px-4 py-2 glass shadow-ai">
+        <div className="flex flex-col">
+          <span className={`text-[10px] uppercase font-bold tracking-tighter ${isPaused ? 'text-amber-500' : 'text-primary-400'}`}>
+            {isPaused ? 'Paused' : 'Recording...'}
+          </span>
+          <span className="text-sm font-medium text-white truncate max-w-[150px]">
+            {activeEntry?.description || 'Active Session'}
+          </span>
+        </div>
+        <div className="h-8 w-px bg-white/10" />
+        <div className="font-mono text-xl font-bold bg-ai-gradient bg-clip-text text-transparent min-w-[100px] text-center">
+          {formatTime(elapsed)}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex items-center gap-4 bg-white/5 border border-white/10 rounded-2xl px-4 py-2 glass shadow-ai">
+      {error && <span className="text-xs text-rose-400">{error}</span>}
       {!isRunning ? (
         <div className="flex items-center gap-3">
           <div className="relative">
@@ -124,6 +157,7 @@ export const TimerWidget = () => {
 
           <button
             onClick={handleToggle}
+            disabled={!isRunning && !selectedProjectId}
             className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300 ${
               isRunning 
                 ? 'bg-accent/20 text-accent hover:bg-accent/30 shadow-[0_0_15px_rgba(244,63,94,0.3)]' 

@@ -68,6 +68,27 @@
     background: rgba(255, 255, 255, 0.05);
   }
 
+  /* Solid panels for modals/dropdowns — prevents background bleed-through */
+  .modal-panel {
+    background: #12141C;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.65);
+    @apply rounded-2xl;
+  }
+
+  .dropdown-panel {
+    background: #12141C;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55);
+    @apply rounded-2xl;
+  }
+
+  .overlay-panel {
+    background: #161922;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    @apply rounded-2xl;
+  }
+
   .ai-button {
     @apply relative px-6 py-3 rounded-full font-semibold transition-all duration-300
     bg-[image:var(--background-image-ai-gradient)] text-white shadow-[var(--shadow-ai)] hover:opacity-90 active:scale-95 disabled:opacity-50;

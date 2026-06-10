@@ -15,14 +15,28 @@ class ProjectController extends ResourceController
         $this->projectService = new ProjectService();
     }
 
+    private function requireOrganizationId()
+    {
+        $organizationId = (int)($this->request->getServer('FLOWTRACK_ORGANIZATION_ID') ?? 0);
+        if ($organizationId <= 0) {
+            return $this->fail('Organization context is required', 400);
+        }
+        return $organizationId;
+    }
+
     /**
      * GET /api/v1/projects?organization_id=1&is_active=1&search=api&page=1
      */
     public function index()
     {
         try {
+            $organizationId = $this->requireOrganizationId();
+            if (!is_int($organizationId)) {
+                return $organizationId;
+            }
+
             $filters = [
-                'organization_id' => $this->request->getGet('organization_id') ?? $this->request->organization_id ?? null,
+                'organization_id' => $organizationId,
                 'is_active' => $this->request->getGet('is_active'),
                 'is_billable' => $this->request->getGet('is_billable'),
                 'search' => $this->request->getGet('search'),
@@ -73,7 +87,10 @@ class ProjectController extends ResourceController
     public function create()
     {
         try {
-            $organizationId = $this->request->getGet('organization_id') ?? $this->request->organization_id ?? 1;
+            $organizationId = $this->requireOrganizationId();
+            if (!is_int($organizationId)) {
+                return $organizationId;
+            }
             
             $data = $this->request->getJSON(true);
 

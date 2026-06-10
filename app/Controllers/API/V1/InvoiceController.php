@@ -22,7 +22,7 @@ class InvoiceController extends ResourceController
     {
         try {
             $filters = [
-                'organization_id' => $this->request->getGet('organization_id'),
+                'organization_id' => (int)($this->request->getServer('FLOWTRACK_ORGANIZATION_ID') ?? 0),
                 'status' => $this->request->getGet('status'),
                 'project_id' => $this->request->getGet('project_id'),
                 'page' => $this->request->getGet('page') ?? 1,
@@ -72,9 +72,11 @@ class InvoiceController extends ResourceController
     public function create()
     {
         try {
-            // TODO: Get from JWT
-            $organizationId = $this->request->getGet('organization_id') ?? 1;
-            $createdBy = $this->request->getGet('user_id') ?? 1;
+            $organizationId = (int)($this->request->getServer('FLOWTRACK_ORGANIZATION_ID') ?? 0);
+            $createdBy = (int)($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
+            if (!$organizationId || !$createdBy) {
+                return $this->fail('Unauthorized', 401);
+            }
             
             $data = $this->request->getJSON(true);
 

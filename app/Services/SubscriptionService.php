@@ -6,6 +6,8 @@ use App\Models\PlanModel;
 use App\Models\SubscriptionModel;
 use App\Models\OrganizationModel;
 use App\Services\EmailService;
+use Stripe\Checkout\Session;
+use Stripe\StripeClient;
 
 class SubscriptionService
 {
@@ -14,6 +16,7 @@ class SubscriptionService
     protected $organizationModel;
     protected $emailService;
     protected $db;
+    protected ?StripeClient $stripeClient = null;
 
     public function __construct()
     {
@@ -86,6 +89,10 @@ class SubscriptionService
                 'current_period_end' => $periodEnd,
             ]);
 
+            if (!$subscriptionId) {
+                throw new \RuntimeException('Failed to create subscription: ' . json_encode($this->subscriptionModel->errors()));
+            }
+
             // Log history
             $this->logHistory($organizationId, null, $planId, 'subscribe', 0, $billingCycle);
 
@@ -93,6 +100,127 @@ class SubscriptionService
 
             return $this->subscriptionModel->find($subscriptionId);
 
+        } catch (\Exception $e) {
+            $this->db->transRollback();
+            throw $e;
+        }
+    }
+
+    public function createCheckoutSession(int $organizationId, int $planId, string $billingCycle = 'monthly', int $userCount = 1): array
+    {
+        $plan = $this->planModel->find($planId);
+        if (!$plan) {
+            throw new \Exception('Plan not found');
+        }
+
+        $amount = $this->calculatePrice($planId, $userCount, $billingCycle);
+        $currency = 'usd';
+        $frontendUrl = rtrim((string)(env('app.frontendURL') ?? 'http://localhost:5173'), '/');
+
+        $session = $this->getStripeClient()->checkout->sessions->create([
+            'mode' => 'payment',
+            'success_url' => $frontendUrl . '/billing?checkout=success&session_id={CHECKOUT_SESSION_ID}',
+            'cancel_url' => $frontendUrl . '/billing?checkout=cancelled',
+            'payment_method_types' => ['card'],
+            'line_items' => [[
+                'quantity' => 1,
+                'price_data' => [
+                    'currency' => $currency,
+                    'unit_amount' => (int) round($amount * 100),
+                    'product_data' => [
+                        'name' => sprintf('FlowTrack %s (%s)', $plan['name'], ucfirst($billingCycle)),
+                        'description' => (string) ($plan['description'] ?? 'FlowTrack subscription'),
+                    ],
+                ],
+            ]],
+            'metadata' => [
+                'organization_id' => (string)$organizationId,
+                'plan_id' => (string)$planId,
+                'billing_cycle' => $billingCycle,
+                'user_count' => (string)$userCount,
+                'amount' => (string)$amount,
+            ],
+        ]);
+
+        return [
+            'id' => $session->id,
+            'url' => $session->url,
+        ];
+    }
+
+    public function confirmCheckoutSession(string $sessionId): array
+    {
+        $session = $this->getStripeClient()->checkout->sessions->retrieve($sessionId, []);
+
+        if (($session->status ?? '') !== 'complete' || ($session->payment_status ?? '') !== 'paid') {
+            throw new \Exception('Payment not completed');
+        }
+
+        $metadata = $session->metadata ?? null;
+        if (!$metadata) {
+            throw new \Exception('Missing checkout metadata');
+        }
+
+        $organizationId = (int)($metadata['organization_id'] ?? 0);
+        $planId = (int)($metadata['plan_id'] ?? 0);
+        $billingCycle = (string)($metadata['billing_cycle'] ?? 'monthly');
+        $userCount = (int)($metadata['user_count'] ?? 1);
+
+        if (!$organizationId || !$planId) {
+            throw new \Exception('Invalid checkout metadata');
+        }
+
+        $plan = $this->planModel->find($planId);
+        if (!$plan) {
+            throw new \Exception('Plan not found');
+        }
+
+        $amount = $this->calculatePrice($planId, $userCount, $billingCycle);
+        $periodEnd = $billingCycle === 'yearly'
+            ? date('Y-m-d H:i:s', strtotime('+1 year'))
+            : date('Y-m-d H:i:s', strtotime('+1 month'));
+
+        $this->db->transStart();
+        try {
+            $current = $this->subscriptionModel->getActiveSubscription($organizationId);
+            if ($current) {
+                $this->subscriptionModel->update($current['id'], [
+                    'plan_id' => $planId,
+                    'user_count' => $userCount,
+                    'amount' => $amount,
+                    'billing_cycle' => $billingCycle,
+                    'status' => 'active',
+                    'trial_ends_at' => null,
+                    'current_period_start' => date('Y-m-d H:i:s'),
+                    'current_period_end' => $periodEnd,
+                    'cancel_at_period_end' => false,
+                    'stripe_customer_id' => $session->customer ?: null,
+                    'stripe_subscription_id' => $session->payment_intent ?: $session->id,
+                ]);
+                $subscriptionId = $current['id'];
+            } else {
+                $subscriptionId = $this->subscriptionModel->insert([
+                    'organization_id' => $organizationId,
+                    'plan_id' => $planId,
+                    'user_count' => $userCount,
+                    'amount' => $amount,
+                    'billing_cycle' => $billingCycle,
+                    'status' => 'active',
+                    'trial_ends_at' => null,
+                    'current_period_start' => date('Y-m-d H:i:s'),
+                    'current_period_end' => $periodEnd,
+                    'stripe_customer_id' => $session->customer ?: null,
+                    'stripe_subscription_id' => $session->payment_intent ?: $session->id,
+                ]);
+                if (!$subscriptionId) {
+                    throw new \RuntimeException('Failed to create subscription: ' . json_encode($this->subscriptionModel->errors()));
+                }
+            }
+
+            $this->logHistory($organizationId, null, $planId, 'stripe_checkout', $amount, $billingCycle);
+            $this->db->transComplete();
+
+            return $this->subscriptionModel->find($subscriptionId);
         } catch (\Exception $e) {
             $this->db->transRollback();
             throw $e;
@@ -357,5 +485,26 @@ class SubscriptionService
             'billing_cycle' => $billingCycle,
             'created_at' => date('Y-m-d H:i:s'),
         ]);
+    }
+
+    private function getStripeClient(): StripeClient
+    {
+        if ($this->stripeClient) {
+            return $this->stripeClient;
+        }
+
+        $secretKey = trim((string) (
+            env('STRIPE_SECRET_KEY')
+            ?? getenv('STRIPE_SECRET_KEY')
+            ?? ($_ENV['STRIPE_SECRET_KEY'] ?? '')
+            ?? ($_SERVER['STRIPE_SECRET_KEY'] ?? '')
+        ));
+
+        if ($secretKey === '') {
+            throw new \RuntimeException('STRIPE_SECRET_KEY is not configured');
+        }
+
+        $this->stripeClient = new StripeClient($secretKey);
+        return $this->stripeClient;
     }
 }

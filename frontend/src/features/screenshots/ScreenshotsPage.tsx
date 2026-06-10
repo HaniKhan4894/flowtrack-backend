@@ -1,14 +1,19 @@
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Camera, Calendar, ZoomIn, Trash2, Download, RefreshCw, X, Zap, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '../../components/ui';
 import { screenshotService } from '../../api/screenshotService';
 import { monitoringService } from '../../api/monitoringService';
+import { TeamMemberFilter } from '../../components/TeamMemberFilter';
 import { useAuthStore } from '../../store/authStore';
-import { useState, useEffect } from 'react';
+import { isOrgAdmin } from '../../utils/access';
 
 const ScreenshotsPage = () => {
-  const { accessToken } = useAuthStore();
+  const { user } = useAuthStore();
+  const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
+  const [viewingMemberName, setViewingMemberName] = useState('');
   const [screenshots, setScreenshots] = useState<any[]>([]);
+  const [imageUrls, setImageUrls] = useState<Record<number, string>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [selectedScreenshot, setSelectedScreenshot] = useState<any | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
@@ -24,13 +29,31 @@ const ScreenshotsPage = () => {
       setIsLoading(true);
       const filters: any = {};
       if (selectedDate) {
-        // Backend compares with captured_at, so include full day range
         filters.start_date = `${selectedDate} 00:00:00`;
         filters.end_date = `${selectedDate} 23:59:59`;
       }
+      if (isOrgAdmin(user) && selectedUserId) {
+        filters.user_id = selectedUserId;
+      }
       
       const response = await screenshotService.getAll(filters);
-      setScreenshots(response.data);
+      const nextScreenshots = response.data ?? [];
+      setScreenshots(nextScreenshots);
+
+      // Revoke previous object URLs before creating new ones
+      Object.values(imageUrls).forEach((url) => URL.revokeObjectURL(url));
+
+      const entries = await Promise.all(
+        nextScreenshots.map(async (item: any) => {
+          try {
+            const blobUrl = await screenshotService.getImageBlobUrl(item.id);
+            return [item.id, blobUrl] as const;
+          } catch {
+            return [item.id, ''] as const;
+          }
+        })
+      );
+      setImageUrls(Object.fromEntries(entries));
     } catch (error) {
       console.error('Failed to fetch screenshots', error);
     } finally {
@@ -40,7 +63,13 @@ const ScreenshotsPage = () => {
 
   useEffect(() => {
     fetchScreenshots();
-  }, [selectedDate]);
+  }, [selectedDate, selectedUserId]);
+
+  useEffect(() => {
+    return () => {
+      Object.values(imageUrls).forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [imageUrls]);
 
   const handleDelete = async (id: number) => {
     try {
@@ -56,7 +85,8 @@ const ScreenshotsPage = () => {
     try {
       const result = await monitoringService.captureNow();
       if (result.success) {
-        setCaptureToast('✅ Screenshot captured!');
+        const count = result.capturedScreens ?? 1;
+        setCaptureToast(`✅ Screenshot captured from ${count} screen${count > 1 ? 's' : ''}!`);
         // Small delay to ensure DB is updated before fetch
         setTimeout(() => fetchScreenshots(), 2000); 
       } else {
@@ -91,10 +121,21 @@ const ScreenshotsPage = () => {
             <Camera className="text-primary-400" />
             Screenshots
           </h1>
-          <p className="text-slate-400">Monitor work progress with periodic desktop captures.</p>
+          <p className="text-slate-400">
+            {viewingMemberName && isOrgAdmin(user)
+              ? `Screenshots for ${viewingMemberName}.`
+              : 'Monitor work progress with periodic desktop captures.'}
+          </p>
         </div>
         
         <div className="flex flex-wrap items-center gap-3">
+          <TeamMemberFilter
+            selectedUserId={selectedUserId}
+            onChange={(id, member) => {
+              setSelectedUserId(id);
+              setViewingMemberName(member ? `${member.first_name} ${member.last_name}` : '');
+            }}
+          />
           {isDesktop && (
             <Button variant="primary" size="sm" onClick={handleCaptureNow} isLoading={isCapturing}>
               <Zap className="w-4 h-4 mr-2" />
@@ -153,8 +194,7 @@ const ScreenshotsPage = () => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {screenshots.map((item, index) => {
-          const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1';
-          const imageUrl = `${baseUrl}/screenshots/view/${item.id}?token=${accessToken}`;
+          const imageUrl = imageUrls[item.id] || '';
           const isBlurred = item.is_blurred === "1" || item.is_blurred === true;
           
           return (
@@ -169,11 +209,17 @@ const ScreenshotsPage = () => {
                 className={`aspect-video w-full overflow-hidden cursor-pointer ${isBlurred ? 'blur-md grayscale' : ''}`}
                 onClick={() => setSelectedScreenshot(item)}
               >
-                <img 
-                  src={imageUrl} 
-                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" 
-                  alt="Workspace capture" 
-                />
+                {imageUrl ? (
+                  <img
+                    src={imageUrl}
+                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                    alt="Workspace capture"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-slate-500 text-xs">
+                    Screenshot unavailable
+                  </div>
+                )}
               </div>
               
               <div className="p-4 bg-surface-800/80 backdrop-blur-sm border-t border-white/5">
@@ -233,14 +279,13 @@ const ScreenshotsPage = () => {
                 whileHover={{ opacity: 1 }}
                 className="absolute top-4 right-4"
               >
-                <a 
-                  href={imageUrl} 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="p-2 rounded-xl glass text-white hover:bg-primary-500 transition-colors shadow-2xl inline-block"
+                <button
+                  onClick={() => imageUrl && window.open(imageUrl, '_blank')}
+                  disabled={!imageUrl}
+                  className="p-2 rounded-xl glass text-white hover:bg-primary-500 transition-colors shadow-2xl inline-block disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Download size={16} />
-                </a>
+                </button>
               </motion.div>
             </motion.div>
           );
@@ -267,7 +312,7 @@ const ScreenshotsPage = () => {
               {/* Image — shrinks to fit, no extra space */}
               <div className="bg-slate-950 overflow-hidden">
                 <img 
-                  src={`${import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1'}/screenshots/view/${selectedScreenshot.id}?token=${accessToken}`}
+                  src={imageUrls[selectedScreenshot.id] || ''}
                   className="w-full max-h-[70vh] object-contain block"
                   alt="Full size capture"
                 />
@@ -293,8 +338,10 @@ const ScreenshotsPage = () => {
                     size="sm"
                     className="flex-1 sm:flex-none"
                     onClick={() => {
-                        const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1';
-                        window.open(`${baseUrl}/screenshots/view/${selectedScreenshot.id}?token=${accessToken}`, '_blank');
+                        const url = imageUrls[selectedScreenshot.id];
+                        if (url) {
+                          window.open(url, '_blank');
+                        }
                     }}
                   >
                     <Download className="w-4 h-4 mr-2" />

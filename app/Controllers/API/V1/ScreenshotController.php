@@ -21,16 +21,20 @@ class ScreenshotController extends ResourceController
     public function index()
     {
         try {
-            $userId = (int)($this->request->user_id ?? 1);
-            $organizationId = (int)$this->request->organization_id;
+            $userId = (int)($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
+            $organizationId = (int)($this->request->getServer('FLOWTRACK_ORGANIZATION_ID') ?? 0);
+            if (!$userId || !$organizationId) {
+                return $this->fail('Unauthorized', 401);
+            }
             
             $permissionService = new \App\Services\PermissionService();
             $canViewTeam = $permissionService->userHasPermission($userId, $organizationId, 'screenshots.view_team');
 
             $requestedUserId = $this->request->getGet('user_id');
+            $targetUserId = $canViewTeam && $requestedUserId ? (int) $requestedUserId : $userId;
 
             $filters = [
-                'user_id' => $canViewTeam ? $requestedUserId : $userId,
+                'user_id' => $targetUserId,
                 'time_entry_id' => $this->request->getGet('time_entry_id'),
                 'start_date' => $this->request->getGet('start_date'),
                 'end_date' => $this->request->getGet('end_date'),
@@ -59,7 +63,17 @@ class ScreenshotController extends ResourceController
     public function upload()
     {
         try {
-            $userId = (int)($this->request->user_id ?? 1);
+            $userId = (int)($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
+            if (!$userId) {
+                return $this->fail('Unauthorized', 401);
+            }
+            $organizationId = (int)($this->request->getServer('FLOWTRACK_ORGANIZATION_ID') ?? 0);
+
+            $monitoring = new \App\Services\MemberMonitoringService();
+            if ($organizationId && !$monitoring->canCaptureScreenshots($organizationId, $userId)) {
+                return $this->fail('Screenshot capture is disabled for your account.', 403);
+            }
+
             $timeEntryId = $this->request->getPost('time_entry_id');
 
             if (!$timeEntryId) {
@@ -93,6 +107,34 @@ class ScreenshotController extends ResourceController
     /**
      * GET /api/v1/screenshots/time-entry/{timeEntryId}
      */
+    public function show($id = null)
+    {
+        try {
+            $userId = (int)($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
+            if (!$userId) {
+                return $this->fail('Unauthorized', 401);
+            }
+
+            $screenshot = $this->screenshotService->getScreenshot((int)$id);
+            if (!$screenshot) {
+                return $this->failNotFound('Screenshot not found');
+            }
+            if ((int)$screenshot['user_id'] !== $userId) {
+                return $this->fail('Forbidden', 403);
+            }
+
+            return $this->respond([
+                'success' => true,
+                'data' => $screenshot,
+            ]);
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+
+    /**
+     * GET /api/v1/screenshots/time-entry/{timeEntryId}
+     */
     public function byTimeEntry($timeEntryId = null)
     {
         try {
@@ -115,9 +157,16 @@ class ScreenshotController extends ResourceController
     public function view($id = null)
     {
         try {
+            $userId = (int)($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
+            if (!$userId) {
+                return $this->fail('Unauthorized', 401);
+            }
             $screenshot = $this->screenshotService->getScreenshot($id);
             if (!$screenshot) {
                 return $this->fail('Screenshot not found', 404);
+            }
+            if ((int)$screenshot['user_id'] !== $userId) {
+                return $this->fail('Forbidden', 403);
             }
 
             // Path to file in writable
@@ -144,7 +193,10 @@ class ScreenshotController extends ResourceController
     public function delete($id = null)
     {
         try {
-            $userId = (int)($this->request->user_id ?? 1);
+            $userId = (int)($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
+            if (!$userId) {
+                return $this->fail('Unauthorized', 401);
+            }
 
             $deleted = $this->screenshotService->deleteScreenshot($id, $userId);
 

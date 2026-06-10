@@ -43,8 +43,10 @@ class OrganizationController extends ResourceController
     public function create()
     {
         try {
-            // TODO: Get from JWT
-            $ownerId = $this->request->getGet('user_id') ?? 1;
+            $ownerId = (int)($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
+            if (!$ownerId) {
+                return $this->fail('Unauthorized', 401);
+            }
 
             $data = $this->request->getJSON(true);
 
@@ -172,7 +174,7 @@ class OrganizationController extends ResourceController
                         'email' => $email,
                         'token' => $member['token'],
                         'expires_at' => $member['expires_at'],
-                        'link' => getenv('app.baseURL') . '/register?invitation_token=' . $member['token'] // Example link
+                        'link' => rtrim((string)getenv('app.frontendURL'), '/') . '/register?invitation_token=' . $member['token']
                     ]
                 ]);
             }
@@ -194,7 +196,7 @@ class OrganizationController extends ResourceController
     public function removeMember($id = null, $userId = null)
     {
         try {
-            $removed = $this->organizationService->removeMember($id, $userId);
+            $removed = $this->organizationService->removeMember((int) $id, (int) $userId);
 
             if (!$removed) {
                 return $this->fail('Failed to remove member', 400);
@@ -205,6 +207,76 @@ class OrganizationController extends ResourceController
                 'message' => 'Member removed successfully'
             ]);
 
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+
+    /**
+     * GET /api/v1/organizations/{id}/members/{userId}/monitoring
+     */
+    public function getMemberMonitoring($id = null, $userId = null)
+    {
+        try {
+            $settings = (new \App\Services\MemberMonitoringService())->getSettings((int) $id, (int) $userId);
+
+            return $this->respond([
+                'success' => true,
+                'data' => $settings,
+            ]);
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+
+    /**
+     * PUT /api/v1/organizations/{id}/members/{userId}/monitoring
+     */
+    public function updateMemberMonitoring($id = null, $userId = null)
+    {
+        try {
+            $data = $this->request->getJSON(true) ?? [];
+            $settings = (new \App\Services\MemberMonitoringService())->updateSettings((int) $id, (int) $userId, $data);
+
+            return $this->respond([
+                'success' => true,
+                'message' => 'Monitoring settings updated',
+                'data' => $settings,
+            ]);
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+
+    /**
+     * GET /api/v1/invitations/validate?token=...
+     */
+    public function validateInvitation()
+    {
+        try {
+            $token = $this->request->getGet('token');
+            if (!$token) {
+                return $this->fail('Token is required', 400);
+            }
+
+            $invite = (new \App\Models\InvitationModel())
+                ->where('token', $token)
+                ->where('expires_at >=', date('Y-m-d H:i:s'))
+                ->first();
+
+            if (!$invite) {
+                return $this->failNotFound('Invitation is invalid or expired');
+            }
+
+            return $this->respond([
+                'success' => true,
+                'data' => [
+                    'organization_id' => $invite['organization_id'],
+                    'email' => $invite['email'],
+                    'role' => $invite['role'],
+                    'expires_at' => $invite['expires_at'],
+                ],
+            ]);
         } catch (\Exception $e) {
             return $this->fail($e->getMessage(), 400);
         }

@@ -5,6 +5,7 @@ import { UserPlus, Github, Mail, Sparkles, ArrowRight } from 'lucide-react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { authService } from '../../api/authService';
 import { useAuthStore } from '../../store/authStore';
+import { DesktopTitleBar } from '../../components/WindowControls';
 
 const RegisterPage = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -33,9 +34,14 @@ const RegisterPage = () => {
       
       // Auto-login the user with the returned tokens
       setAuth(response.data.user, response.data.tokens.access_token);
+      localStorage.setItem('refresh_token', response.data.tokens.refresh_token);
+      const orgId = (response.data.tokens as any)?.organization_id ?? (response.data.user as any)?.organization_id;
+      if (orgId) {
+        localStorage.setItem('organization_id', String(orgId));
+      }
       
       // Navigate directly to dashboard
-      navigate('/');
+      navigate('/app');
     } catch (err: any) {
       setError(err.response?.data?.message || 'Registration failed. Please try again.');
     } finally {
@@ -45,6 +51,7 @@ const RegisterPage = () => {
 
   return (
     <div className="relative min-h-screen flex items-center justify-center p-6 overflow-hidden bg-background">
+      <DesktopTitleBar />
       {/* Background Animated Blobs */}
       <motion.div
         animate={{

@@ -21,5 +21,12 @@ export const screenshotService = {
     delete: async (id: number) => {
         const response = await client.delete(`/screenshots/${id}`);
         return response.data;
+    },
+
+    getImageBlobUrl: async (id: number): Promise<string> => {
+        const response = await client.get(`/screenshots/view/${id}`, {
+            responseType: 'blob',
+        });
+        return URL.createObjectURL(response.data);
     }
 };

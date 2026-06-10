@@ -18,6 +18,14 @@ export const billingService = {
         const response = await client.post('/subscriptions', { plan_id: planId, billing_cycle: cycle });
         return response.data;
     },
+    createCheckoutSession: async (planId: number, cycle: 'monthly' | 'yearly'): Promise<{ data: { id: string; url: string } }> => {
+        const response = await client.post('/subscriptions/checkout-session', { plan_id: planId, billing_cycle: cycle });
+        return response.data;
+    },
+    confirmCheckout: async (sessionId: string): Promise<any> => {
+        const response = await client.post('/subscriptions/confirm-checkout', { session_id: sessionId });
+        return response.data;
+    },
     cancel: async (): Promise<any> => {
         const response = await client.delete('/subscriptions/current');
         return response.data;
