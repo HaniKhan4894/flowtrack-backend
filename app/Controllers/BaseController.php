@@ -17,7 +17,7 @@ class BaseController extends ResourceController
         // Set CORS headers for all responses
         $this->response->setHeader('Access-Control-Allow-Origin', '*');
         $this->response->setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
-        $this->response->setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+        $this->response->setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, ngrok-skip-browser-warning');
         $this->response->setHeader('Access-Control-Expose-Headers', 'Authorization');
 
         // Handle preflight OPTIONS request

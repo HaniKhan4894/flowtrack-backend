@@ -1,6 +1,6 @@
 import { Link, Navigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowRight, CheckCircle2, Sparkles, Monitor, Clock3, BarChart3 } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Sparkles, Monitor, Clock3, BarChart3, Download } from 'lucide-react';
 import { Button } from '../../components/ui';
 import { useAuthStore } from '../../store/authStore';
 import MeshBackground from './MeshBackground';
@@ -58,6 +58,9 @@ const aiRoadmap = [
   'Smart productivity coach with task-focus suggestions',
   'Predictive delivery risk alerts and team capacity forecasting',
 ];
+
+const desktopWinUrl = import.meta.env.VITE_DESKTOP_WIN_URL;
+const desktopMacUrl = import.meta.env.VITE_DESKTOP_MAC_URL;
 
 const LandingPage = () => {
   const { isAuthenticated } = useAuthStore();
@@ -130,6 +133,37 @@ const LandingPage = () => {
           </div>
         </motion.div>
       </section>
+
+      {(desktopWinUrl || desktopMacUrl) && (
+        <section className="max-w-7xl mx-auto px-6 py-6 relative z-10">
+          <div className="glass-card p-8 md:p-10 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+            <div>
+              <h2 className="text-2xl md:text-3xl font-bold mb-2">Download FlowTrack Desktop</h2>
+              <p className="text-slate-400 max-w-2xl">
+                Install the desktop app for screenshot capture, activity tracking, and timer controls while you work.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              {desktopWinUrl && (
+                <a href={desktopWinUrl} download>
+                  <Button size="lg">
+                    <Download className="w-4 h-4 mr-2" />
+                    Windows
+                  </Button>
+                </a>
+              )}
+              {desktopMacUrl && (
+                <a href={desktopMacUrl} download>
+                  <Button variant="secondary" size="lg">
+                    <Download className="w-4 h-4 mr-2" />
+                    macOS
+                  </Button>
+                </a>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
 
       <section className="max-w-7xl mx-auto px-6 py-10 relative z-10">
         <h2 className="text-3xl font-bold mb-3 text-center">Packages Built For Every Stage</h2>

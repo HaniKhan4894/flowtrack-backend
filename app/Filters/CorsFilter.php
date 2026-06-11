@@ -18,7 +18,7 @@ class CorsFilter implements FilterInterface
             return service('response')
                 ->setHeader('Access-Control-Allow-Origin', '*')
                 ->setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH')
-                ->setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With')
+                ->setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, ngrok-skip-browser-warning')
                 ->setHeader('Access-Control-Max-Age', '3600')
                 ->setStatusCode(200);
         }
@@ -33,7 +33,7 @@ class CorsFilter implements FilterInterface
     {
         $response->setHeader('Access-Control-Allow-Origin', '*')
             ->setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH')
-            ->setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With')
+            ->setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, ngrok-skip-browser-warning')
             ->setHeader('Access-Control-Expose-Headers', 'Authorization');
 
         return $response;

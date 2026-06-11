@@ -1,21 +1,92 @@
 {
     "name": "flowtrack-desktop",
     "version": "1.0.0",
-    "description": "Desktop application for FlowTrack",
+    "description": "FlowTrack desktop time tracker",
     "main": "main.js",
+    "author": "FlowTrack",
+    "license": "ISC",
     "scripts": {
         "start": "electron . --disable-gpu-sandbox",
-        "dev": "electron . --disable-gpu-sandbox"
+        "dev": "electron . --disable-gpu-sandbox",
+        "sync-env": "node ../scripts/sync-deploy-env.js",
+        "build:frontend": "npm run sync-env && cd ../frontend && npm run build",
+        "pack:win": "npm run build:frontend && electron-builder --win && node ../scripts/publish-installers.js",
+        "pack:mac": "npm run build:frontend && electron-builder --mac && node ../scripts/publish-installers.js",
+        "pack": "npm run build:frontend && electron-builder --win --mac && node ../scripts/publish-installers.js",
+        "dist:win": "npm run pack:win",
+        "dist:mac": "npm run pack:mac",
+        "dist": "npm run pack"
     },
-    "keywords": [],
-    "author": "",
-    "license": "ISC",
     "dependencies": {
         "active-win": "^8.2.1",
         "axios": "^1.6.0",
         "form-data": "^4.0.0"
     },
     "devDependencies": {
-        "electron": "^31.0.0"
+        "electron": "^31.0.0",
+        "electron-builder": "^25.1.8"
+    },
+    "build": {
+        "npmRebuild": false,
+        "buildDependenciesFromSource": false,
+        "appId": "com.flowtrack.desktop",
+        "productName": "FlowTrack",
+        "directories": {
+            "output": "dist",
+            "buildResources": "build"
+        },
+        "files": [
+            "main.js",
+            "preload.js",
+            "config.js",
+            "package.json",
+            "node_modules/active-win/**/*",
+            "node_modules/@mapbox/**/*",
+            "node_modules/node-gyp-build/**/*"
+        ],
+        "asarUnpack": [
+            "**/node_modules/active-win/**"
+        ],
+        "extraResources": [
+            {
+                "from": "../frontend/dist",
+                "to": "frontend/dist",
+                "filter": [
+                    "**/*"
+                ]
+            },
+            {
+                "from": "../config/deploy.json",
+                "to": "config/deploy.json"
+            }
+        ],
+        "win": {
+            "target": [
+                {
+                    "target": "nsis",
+                    "arch": [
+                        "x64"
+                    ]
+                }
+            ],
+            "artifactName": "FlowTrack-Setup.${ext}",
+            "signAndEditExecutable": false
+        },
+        "mac": {
+            "target": [
+                "dmg"
+            ],
+            "category": "public.app-category.productivity",
+            "artifactName": "FlowTrack.${ext}"
+        },
+        "nsis": {
+            "oneClick": false,
+            "allowToChangeInstallationDirectory": true,
+            "createDesktopShortcut": true,
+            "createStartMenuShortcut": true
+        },
+        "dmg": {
+            "title": "FlowTrack"
+        }
     }
 }

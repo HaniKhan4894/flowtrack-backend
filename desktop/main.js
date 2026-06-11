@@ -4,11 +4,11 @@ const fs = require('fs');
 const https = require('https');
 const http = require('http');
 const FormData = require('form-data');
+const { API_BASE_URL, FRONTEND_URL, getApiHeaders } = require('./config');
 
 // ──────────────────────────────────────────────
 //  Config
 // ──────────────────────────────────────────────
-const API_BASE_URL = process.env.FLOWTRACK_API_URL || 'http://localhost/flowtrack-backend/public/api/v1';
 const SCREENSHOT_MIN_MS = 1 * 60 * 1000; // 1 minute minimum
 const SCREENSHOT_MAX_MS = 4 * 60 * 1000; // 4 minutes maximum
 const ACTIVITY_SYNC_INTERVAL_MS = 60 * 1000;  // 1 minute
@@ -100,7 +100,7 @@ async function refreshTokenViaRenderer() {
                 try {
                     const res = await fetch('${API_BASE_URL}/auth/refresh', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: ${JSON.stringify(getApiHeaders({ 'Content-Type': 'application/json' }))},
                         body: JSON.stringify({ refresh_token: refresh })
                     });
                     const json = await res.json();
@@ -139,6 +139,13 @@ async function resolveAuthToken(forceRefresh = false) {
     return currentSession.token;
 }
 
+function resolveFrontendIndexPath() {
+    if (app.isPackaged) {
+        return path.join(process.resourcesPath, 'frontend', 'dist', 'index.html');
+    }
+    return path.join(__dirname, '..', 'frontend', 'dist', 'index.html');
+}
+
 // ──────────────────────────────────────────────
 //  Window
 // ──────────────────────────────────────────────
@@ -159,10 +166,21 @@ function createWindow() {
     });
 
     const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
-    if (isDev) {
-        mainWindow.loadURL('http://localhost:5173');
+    const devUrl = process.env.FLOWTRACK_FRONTEND_URL || 'http://localhost:5173';
+    const loadTarget = isDev ? devUrl : (FRONTEND_URL || null);
+
+    if (loadTarget) {
+        console.log(`[Window] Loading URL: ${loadTarget}`);
+        mainWindow.loadURL(loadTarget).catch((err) => {
+            console.error('[Window] Failed to load remote UI:', err.message);
+            if (!isDev && fs.existsSync(resolveFrontendIndexPath())) {
+                console.log('[Window] Falling back to bundled UI.');
+                mainWindow.loadFile(resolveFrontendIndexPath());
+            }
+        });
     } else {
-        mainWindow.loadFile(path.join(__dirname, '../frontend/dist/index.html'));
+        console.log('[Window] Loading bundled UI.');
+        mainWindow.loadFile(resolveFrontendIndexPath());
     }
 
     mainWindow.once('ready-to-show', () => {
@@ -302,6 +320,7 @@ async function uploadScreenshot(jpegBuffer, activityLevel, screenIndex = 0, retr
             method: 'POST',
             headers: {
                 ...form.getHeaders(),
+                ...getApiHeaders(),
                 'Authorization': `Bearer ${token}`
             }
         };
@@ -510,8 +529,10 @@ async function syncActivityToBackend(retried = false) {
             path: urlParts.pathname,
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
-                'Content-Length': Buffer.byteLength(body),
+                ...getApiHeaders({
+                    'Content-Type': 'application/json',
+                    'Content-Length': Buffer.byteLength(body),
+                }),
                 'Authorization': `Bearer ${token}`
             }
         };
@@ -712,6 +733,8 @@ ipcMain.handle('window-close', () => {
 //  App Lifecycle
 // ──────────────────────────────────────────────
 app.whenReady().then(() => {
+    console.log(`[Config] API base URL: ${API_BASE_URL}`);
+    console.log(`[Config] Frontend URL: ${FRONTEND_URL}`);
     createWindow();
     setupTray();
 

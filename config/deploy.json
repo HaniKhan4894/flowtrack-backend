@@ -1,0 +1,5 @@
+{
+  "apiBaseUrl": "https://8b8a-124-109-46-74.ngrok-free.app/flowtrack-backend/public/api/v1",
+  "publicBaseUrl": "https://8b8a-124-109-46-74.ngrok-free.app/flowtrack-backend/public",
+  "frontendUrl": "https://flowtrackhani.vercel.app"
+}

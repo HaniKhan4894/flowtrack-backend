@@ -6,7 +6,11 @@
         "dev:frontend": "cd frontend && npm run dev",
         "dev:backend": "php spark serve",
         "dev:desktop": "cd desktop && npm run dev",
-        "dev:all": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\" \"npm run dev:desktop\""
+        "dev:all": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\" \"npm run dev:desktop\"",
+        "sync:deploy": "node scripts/sync-deploy-env.js",
+        "build:desktop:win": "cd desktop && npm run pack:win",
+        "build:desktop:mac": "cd desktop && npm run pack:mac",
+        "build:desktop": "cd desktop && npm run pack"
     },
     "devDependencies": {
         "concurrently": "^8.2.2"

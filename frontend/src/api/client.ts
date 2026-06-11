@@ -2,10 +2,15 @@ import axios from 'axios';
 import { authService } from './authService';
 import { syncElectronAuthToken } from '../utils/electronAuth';
 
+const apiBaseUrl =
+    import.meta.env.VITE_API_URL ||
+    'https://8b8a-124-109-46-74.ngrok-free.app/flowtrack-backend/public/api/v1';
+
 const client = axios.create({
-    baseURL: import.meta.env.VITE_API_URL || 'http://localhost/flowtrack-backend/public/api/v1',
+    baseURL: apiBaseUrl,
     headers: {
         'Content-Type': 'application/json',
+        ...(apiBaseUrl.includes('ngrok') ? { 'ngrok-skip-browser-warning': 'true' } : {}),
     },
 });
 
@@ -14,6 +19,9 @@ client.interceptors.request.use((config) => {
     const token = localStorage.getItem('access_token');
     if (token) {
         config.headers.Authorization = `Bearer ${token}`;
+    }
+    if (apiBaseUrl.includes('ngrok')) {
+        config.headers['ngrok-skip-browser-warning'] = 'true';
     }
     return config;
 });

@@ -23,8 +23,11 @@ FlowTrack is a multi-tenant time-tracking platform with:
 3. Frontend env:
    - Create/update `frontend/.env`
    - Set `VITE_API_URL=http://localhost/flowtrack-backend/public/api/v1`
-4. Desktop env (optional override):
-   - `FLOWTRACK_API_URL=http://localhost/flowtrack-backend/public/api/v1`
+4. Deploy URL (staging/production):
+   - Edit `config/deploy.json` (`apiBaseUrl`, `publicBaseUrl`)
+   - Run `npm run sync:deploy` to refresh frontend/desktop build env files
+5. Desktop env (optional override):
+   - `FLOWTRACK_API_URL` overrides `config/deploy.json` at runtime
 
 ## Install
 
@@ -44,6 +47,20 @@ From repo root:
 - Frontend: `cd frontend && npm run dev`
 - Desktop: `cd desktop && npm run dev`
 - All (concurrently): `npm run dev:all`
+
+## Desktop Installers
+
+1. Set backend `app.baseURL` in `.env` to your public URL (same host as `config/deploy.json`).
+2. Update `config/deploy.json` with `apiBaseUrl`, `publicBaseUrl`, and `frontendUrl` (e.g. Vercel app URL).
+3. Build Windows installer: `npm run build:desktop:win`
+4. Build macOS installer (must run on macOS): `npm run build:desktop:mac`
+5. Installers are copied to `public/downloads/` and linked from the landing page.
+
+When going live, only change `config/deploy.json`, run `npm run sync:deploy`, and rebuild installers.
+
+Windows build notes:
+- Unsigned builds are enabled by default (`signAndEditExecutable: false`).
+- For full `active-win` native support in packaged builds, install Visual Studio Build Tools (C++) and remove `npmRebuild: false` from `desktop/package.json`.
 
 ## Database
 

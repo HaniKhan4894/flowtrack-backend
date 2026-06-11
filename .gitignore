@@ -91,6 +91,12 @@ vendor/
 #-------------------------
 node_modules/
 
+# Desktop build artifacts
+desktop/dist/
+desktop/.env.build
+public/downloads/*.exe
+public/downloads/*.dmg
+
 #-------------------------
 # IDE / Development Files
 #-------------------------
