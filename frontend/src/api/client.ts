@@ -2,25 +2,21 @@ import axios from 'axios';
 import { authService } from './authService';
 import { syncElectronAuthToken } from '../utils/electronAuth';
 
-const apiBaseUrl = import.meta.env.VITE_API_URL || '/api/v1';
-const usesDirectNgrok = apiBaseUrl.includes('ngrok');
+const apiBaseUrl =
+    import.meta.env.VITE_API_URL ||
+    'https://8b8a-124-109-46-74.ngrok-free.app/flowtrack-backend/public/api/v1';
 
 const client = axios.create({
     baseURL: apiBaseUrl,
     headers: {
         'Content-Type': 'application/json',
-        ...(usesDirectNgrok ? { 'ngrok-skip-browser-warning': 'true' } : {}),
     },
 });
 
-// Interceptor for Auth
 client.interceptors.request.use((config) => {
     const token = localStorage.getItem('access_token');
     if (token) {
         config.headers.Authorization = `Bearer ${token}`;
-    }
-    if (usesDirectNgrok) {
-        config.headers['ngrok-skip-browser-warning'] = 'true';
     }
     return config;
 });
@@ -33,7 +29,6 @@ const flushPendingRequests = (token: string | null) => {
     pendingRequests = [];
 };
 
-// Interceptor for response errors (e.g. 401 Unauthorized or Plan Limits)
 client.interceptors.response.use(
     (response) => response,
     async (error) => {
@@ -88,9 +83,8 @@ client.interceptors.response.use(
             }
         }
 
-        // Handle 403 - Plan Limits
         if (error.response?.status === 403 && error.response.data?.error_code === 'PLAN_LIMIT_REACHED') {
-            // We can trigger a global "Upgrade Required" modal here via Store
+            // Plan limit handling hook
         }
 
         return Promise.reject(error);

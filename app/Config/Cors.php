@@ -11,19 +11,6 @@ use CodeIgniter\Config\BaseConfig;
  */
 class Cors extends BaseConfig
 {
-    /**
-     * The default CORS configuration.
-     *
-     * @var array{
-     *      allowedOrigins: list<string>,
-     *      allowedOriginsPatterns: list<string>,
-     *      supportsCredentials: bool,
-     *      allowedHeaders: list<string>,
-     *      exposedHeaders: list<string>,
-     *      allowedMethods: list<string>,
-     *      maxAge: int,
-     *  }
-     */
     public array $default = [
         'allowedOrigins' => [],
         'allowedOriginsPatterns' => [],
@@ -34,7 +21,6 @@ class Cors extends BaseConfig
             'X-Requested-With',
             'Accept',
             'Origin',
-            'ngrok-skip-browser-warning',
         ],
         'exposedHeaders' => ['Authorization'],
         'allowedMethods' => ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
@@ -49,6 +35,7 @@ class Cors extends BaseConfig
             'http://localhost:5173',
             'http://localhost:3000',
             'http://127.0.0.1:5173',
+            'https://flowtrackhani.vercel.app',
         ];
 
         $frontendUrl = env('app.frontendURL');
@@ -67,8 +54,6 @@ class Cors extends BaseConfig
         $this->default['allowedOrigins'] = array_values(array_unique($origins));
         $this->default['allowedOriginsPatterns'] = [
             'https://.*\.vercel\.app',
-            'https://.*\.ngrok-free\.app',
-            'https://.*\.ngrok\.io',
         ];
     }
 }

@@ -22,7 +22,8 @@ FlowTrack is a multi-tenant time-tracking platform with:
    - `app.frontendURL`
 3. Frontend env:
    - Create/update `frontend/.env`
-   - Use `VITE_API_URL=/api/v1` (Vite dev proxy + Vercel rewrite forward to backend)
+   - Set `VITE_API_URL` to your backend API base (ngrok or production `/api/v1`)
+   - On Vercel, set the same `VITE_API_URL` in project environment variables
 4. Deploy URL (staging/production):
    - Edit `config/deploy.json` (`apiBaseUrl`, `publicBaseUrl`)
    - Run `npm run sync:deploy` to refresh frontend/desktop build env files
@@ -58,14 +59,12 @@ From repo root:
 
 When going live, only change `config/deploy.json`, run `npm run sync:deploy`, and rebuild installers.
 
-### Vercel deploy (fixes browser CORS + ngrok HTML warning)
+### Vercel + backend CORS
 
-1. Run `npm run sync:deploy` (generates `frontend/.env.production` + `.env.vercel.example`)
-2. Set Vercel environment variables:
-   - `VITE_API_URL=/api/v1`
-   - `BACKEND_API_URL=https://your-backend-host/.../api/v1` (ngrok or production API base)
-3. Push and redeploy frontend — `frontend/api/v1/[...path].ts` proxies API calls server-side with `ngrok-skip-browser-warning`
-4. Web requests stay same-origin (`flowtrackhani.vercel.app/api/v1/...`)
+1. Set `app.frontendURL = 'https://flowtrackhani.vercel.app'` in backend `.env`
+2. Set Vercel env `VITE_API_URL` to your backend API URL (from `config/deploy.json`)
+3. Restart WAMP/Apache after `.env` changes
+4. Redeploy Vercel frontend
 
 Windows build notes:
 - Unsigned builds are enabled by default (`signAndEditExecutable: false`).
