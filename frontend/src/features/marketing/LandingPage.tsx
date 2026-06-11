@@ -1,9 +1,21 @@
 import { Link, Navigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowRight, CheckCircle2, Sparkles, Monitor, Clock3, BarChart3, Download } from 'lucide-react';
+import {
+  ArrowRight,
+  CheckCircle2,
+  Sparkles,
+  Monitor,
+  Clock3,
+  BarChart3,
+  Download,
+  Users,
+  Shield,
+  Zap,
+} from 'lucide-react';
 import { Button } from '../../components/ui';
 import { useAuthStore } from '../../store/authStore';
 import MeshBackground from './MeshBackground';
+import LandingFooter from './LandingFooter';
 
 const packageCards = [
   {
@@ -62,6 +74,89 @@ const aiRoadmap = [
 const desktopWinUrl = import.meta.env.VITE_DESKTOP_WIN_URL;
 const desktopMacUrl = import.meta.env.VITE_DESKTOP_MAC_URL;
 
+const desktopFeatures = [
+  'Screenshot capture & activity sync',
+  'Timer controls in the system tray',
+  'Works with your FlowTrack account',
+];
+
+const heroStats = [
+  { value: 'Real-time', label: 'Activity sync' },
+  { value: 'Desktop + Web', label: 'One platform' },
+  { value: 'Secure', label: 'Team visibility' },
+];
+
+const coreFeatures = [
+  {
+    icon: Clock3,
+    title: 'Smart Time Tracking',
+    description: 'Start, pause, and resume timers with automatic activity logging across projects and tasks.',
+    accent: 'text-primary-400',
+    glow: 'from-primary-500/20 to-transparent',
+  },
+  {
+    icon: Monitor,
+    title: 'Screenshot Evidence',
+    description: 'Capture work context with configurable screenshot intervals and a clean timeline view.',
+    accent: 'text-secondary-400',
+    glow: 'from-secondary-500/20 to-transparent',
+  },
+  {
+    icon: BarChart3,
+    title: 'Team Analytics',
+    description: 'Understand productivity patterns, project health, and delivery trends at a glance.',
+    accent: 'text-cyan-400',
+    glow: 'from-cyan-500/20 to-transparent',
+  },
+  {
+    icon: Users,
+    title: 'Billing & Invoices',
+    description: 'Turn tracked hours into professional invoices and subscription-ready billing workflows.',
+    accent: 'text-emerald-400',
+    glow: 'from-emerald-500/20 to-transparent',
+  },
+];
+
+function SectionHeading({
+  badge,
+  title,
+  description,
+  align = 'center',
+}: {
+  badge: string;
+  title: string;
+  description: string;
+  align?: 'center' | 'left';
+}) {
+  const alignClass = align === 'center' ? 'text-center mx-auto' : 'text-left';
+
+  return (
+    <div className={`max-w-3xl mb-10 ${alignClass}`}>
+      <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400 mb-4">
+        {badge}
+      </span>
+      <h2 className="text-3xl md:text-4xl font-bold mb-3">{title}</h2>
+      <p className="text-slate-400 leading-relaxed">{description}</p>
+    </div>
+  );
+}
+
+function WindowsIcon({ className = 'w-6 h-6' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="currentColor" aria-hidden="true">
+      <path d="M3 5.5 10.5 4.5V11.5H3V5.5Zm0 7H10.5v7L3 18.5v-6Zm8.5-8.25L21 2.75V11.5H11.5V4.25Zm0 8.25H21v8.75l-9.5-1.5V12.5Z" />
+    </svg>
+  );
+}
+
+function AppleIcon({ className = 'w-6 h-6' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="currentColor" aria-hidden="true">
+      <path d="M16.365 1.43c0 1.14-.493 2.27-1.177 3.08-.79.96-2.04 1.71-3.27 1.6-.12-1.09.48-2.26 1.15-3.04.84-1.01 2.32-1.74 3.3-1.84.02.4.03.8.01 1.2Zm1.12 3.44c1.77-.09 3.3.95 4.14.95.84 0 2.14-1.17 3.53-1.01.6.03 2.28.24 3.36 1.8-0.09.06-2.01 1.17-1.99 3.48.03 2.79 2.44 3.72 2.45 3.73-.02.07-.38 1.31-1.26 2.6-0.76 1.1-1.54 2.19-2.78 2.21-1.16.02-1.54-.67-2.88-.67-1.33 0-1.75.65-2.85.69-1.15.04-2.02-1.16-2.79-2.25-1.51-2.18-2.66-6.15-1.12-8.84.77-1.33 2.14-2.17 3.64-2.19Z" />
+    </svg>
+  );
+}
+
 const LandingPage = () => {
   const { isAuthenticated } = useAuthStore();
   if (isAuthenticated) {
@@ -88,86 +183,209 @@ const LandingPage = () => {
 
       <div className="absolute inset-0 bg-gradient-to-b from-background/35 via-background/80 to-background pointer-events-none" />
 
-      <header className="max-w-7xl mx-auto px-6 py-6 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-ai-gradient flex items-center justify-center shadow-ai">
-            <Sparkles className="w-5 h-5 text-white" />
+      <header className="sticky top-0 z-50 border-b border-white/5 bg-background/70 backdrop-blur-xl">
+        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between gap-6">
+          <Link to="/" className="flex items-center gap-3 shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-ai-gradient flex items-center justify-center shadow-ai">
+              <Sparkles className="w-5 h-5 text-white" />
+            </div>
+            <span className="text-2xl font-bold gradient-text">FlowTrack</span>
+          </Link>
+
+          <nav className="hidden md:flex items-center gap-8 text-sm text-slate-400">
+            <a href="#features" className="hover:text-white transition-colors">Features</a>
+            <a href="#pricing" className="hover:text-white transition-colors">Pricing</a>
+            {(desktopWinUrl || desktopMacUrl) && (
+              <a href="#download" className="hover:text-white transition-colors">Desktop</a>
+            )}
+            <a href="#roadmap" className="hover:text-white transition-colors">Roadmap</a>
+          </nav>
+
+          <div className="flex items-center gap-3">
+            <Link to="/login"><Button variant="secondary" size="sm">Login</Button></Link>
+            <Link to="/register"><Button size="sm">Get Started</Button></Link>
           </div>
-          <span className="text-2xl font-bold gradient-text">FlowTrack</span>
-        </div>
-        <div className="flex items-center gap-3">
-          <Link to="/login"><Button variant="secondary" size="sm">Login</Button></Link>
-          <Link to="/register"><Button size="sm">Register</Button></Link>
         </div>
       </header>
 
-      <section className="max-w-7xl mx-auto px-6 pt-8 pb-14 grid lg:grid-cols-2 gap-10 items-center relative z-10">
-        <div className="absolute inset-0 -z-10 rounded-3xl overflow-hidden">
+      <section className="max-w-7xl mx-auto px-6 pt-12 pb-10 relative z-10">
+        <div className="absolute inset-x-6 top-8 bottom-0 -z-10 rounded-[2rem] overflow-hidden opacity-80">
           <MeshBackground />
         </div>
-        <div>
-          <p className="text-primary-400 text-sm font-semibold uppercase tracking-[0.2em] mb-4">Built for serious teams</p>
-          <h1 className="text-5xl md:text-6xl font-extrabold leading-tight mb-5">
-            Run your team with clarity, speed, and accountability.
-          </h1>
-          <p className="text-slate-300 text-lg mb-8 max-w-xl">
-            FlowTrack gives you time tracking, screen evidence, analytics, team visibility, and billing workflows in one clean platform.
-          </p>
-          <div className="flex flex-wrap gap-3">
-            <Link to="/register"><Button size="lg">Start Free Trial <ArrowRight className="w-4 h-4 ml-2" /></Button></Link>
-            <Link to="/login"><Button variant="secondary" size="lg">I already have an account</Button></Link>
-          </div>
-        </div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="glass-card p-8"
-        >
-          <h3 className="text-xl font-bold mb-4">Why teams choose FlowTrack</h3>
-          <div className="space-y-4 text-slate-200">
-            <div className="flex gap-3"><Clock3 className="w-5 h-5 text-primary-400 mt-0.5" /><p>Real-time timer with pause/resume and reliable activity timeline.</p></div>
-            <div className="flex gap-3"><Monitor className="w-5 h-5 text-secondary-400 mt-0.5" /><p>Smart screenshot capture for transparent remote work visibility.</p></div>
-            <div className="flex gap-3"><BarChart3 className="w-5 h-5 text-primary-400 mt-0.5" /><p>Powerful team and project analytics for better decisions.</p></div>
-            <div className="flex gap-3"><CheckCircle2 className="w-5 h-5 text-emerald-400 mt-0.5" /><p>Professional invoices and subscription billing in one flow.</p></div>
-          </div>
-        </motion.div>
+        <div className="grid lg:grid-cols-2 gap-10 items-center">
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+          >
+            <div className="inline-flex items-center gap-2 rounded-full border border-primary-500/25 bg-primary-500/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-primary-300 mb-6">
+              <Zap className="w-3.5 h-3.5" />
+              Built for serious teams
+            </div>
+            <h1 className="text-5xl md:text-6xl lg:text-[3.4rem] font-extrabold leading-[1.08] mb-5">
+              Run your team with{' '}
+              <span className="gradient-text">clarity</span>, speed, and accountability.
+            </h1>
+            <p className="text-slate-300 text-lg mb-8 max-w-xl leading-relaxed">
+              FlowTrack gives you time tracking, screen evidence, analytics, team visibility, and billing workflows in one clean platform.
+            </p>
+            <div className="flex flex-wrap gap-3 mb-10">
+              <Link to="/register"><Button size="lg">Start Free Trial <ArrowRight className="w-4 h-4 ml-2" /></Button></Link>
+              <Link to="/login"><Button variant="secondary" size="lg">I already have an account</Button></Link>
+            </div>
+
+            <div className="grid grid-cols-3 gap-4 max-w-xl">
+              {heroStats.map((stat) => (
+                <div key={stat.label} className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3">
+                  <p className="text-sm font-bold text-white">{stat.value}</p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">{stat.label}</p>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.55, delay: 0.1 }}
+            className="glass-card p-8 relative overflow-hidden"
+          >
+            <div className="pointer-events-none absolute -top-16 -right-16 h-40 w-40 rounded-full bg-primary-500/15 blur-3xl" />
+            <div className="flex items-center gap-2 mb-5">
+              <Shield className="w-5 h-5 text-emerald-400" />
+              <h3 className="text-xl font-bold">Why teams choose FlowTrack</h3>
+            </div>
+            <div className="space-y-4 text-slate-200">
+              <div className="flex gap-3 rounded-xl border border-white/5 bg-white/[0.02] p-3">
+                <Clock3 className="w-5 h-5 text-primary-400 mt-0.5 shrink-0" />
+                <p className="text-sm">Real-time timer with pause/resume and reliable activity timeline.</p>
+              </div>
+              <div className="flex gap-3 rounded-xl border border-white/5 bg-white/[0.02] p-3">
+                <Monitor className="w-5 h-5 text-secondary-400 mt-0.5 shrink-0" />
+                <p className="text-sm">Smart screenshot capture for transparent remote work visibility.</p>
+              </div>
+              <div className="flex gap-3 rounded-xl border border-white/5 bg-white/[0.02] p-3">
+                <BarChart3 className="w-5 h-5 text-primary-400 mt-0.5 shrink-0" />
+                <p className="text-sm">Powerful team and project analytics for better decisions.</p>
+              </div>
+              <div className="flex gap-3 rounded-xl border border-white/5 bg-white/[0.02] p-3">
+                <CheckCircle2 className="w-5 h-5 text-emerald-400 mt-0.5 shrink-0" />
+                <p className="text-sm">Professional invoices and subscription billing in one flow.</p>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      </section>
+
+      <section id="features" className="max-w-7xl mx-auto px-6 py-14 relative z-10 scroll-mt-24">
+        <SectionHeading
+          badge="Core Features"
+          title="Everything your team needs in one place"
+          description="From individual focus to team-wide visibility — FlowTrack keeps work transparent without slowing anyone down."
+        />
+        <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-5">
+          {coreFeatures.map((feature, index) => (
+            <motion.div
+              key={feature.title}
+              initial={{ opacity: 0, y: 14 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, amount: 0.3 }}
+              transition={{ duration: 0.4, delay: index * 0.06 }}
+              className="group glass-card relative overflow-hidden"
+            >
+              <div className={`pointer-events-none absolute inset-0 bg-gradient-to-b ${feature.glow} opacity-0 transition group-hover:opacity-100`} />
+              <div className={`mb-4 inline-flex h-11 w-11 items-center justify-center rounded-xl bg-white/5 ring-1 ring-white/10 ${feature.accent}`}>
+                <feature.icon className="w-5 h-5" />
+              </div>
+              <h3 className="text-lg font-bold mb-2">{feature.title}</h3>
+              <p className="text-sm text-slate-400 leading-relaxed">{feature.description}</p>
+            </motion.div>
+          ))}
+        </div>
       </section>
 
       {(desktopWinUrl || desktopMacUrl) && (
-        <section className="max-w-7xl mx-auto px-6 py-6 relative z-10">
-          <div className="glass-card p-8 md:p-10 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
-            <div>
-              <h2 className="text-2xl md:text-3xl font-bold mb-2">Download FlowTrack Desktop</h2>
-              <p className="text-slate-400 max-w-2xl">
-                Install the desktop app for screenshot capture, activity tracking, and timer controls while you work.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-3">
-              {desktopWinUrl && (
-                <a href={desktopWinUrl} download>
-                  <Button size="lg">
-                    <Download className="w-4 h-4 mr-2" />
-                    Windows
-                  </Button>
-                </a>
-              )}
-              {desktopMacUrl && (
-                <a href={desktopMacUrl} download>
-                  <Button variant="secondary" size="lg">
-                    <Download className="w-4 h-4 mr-2" />
-                    macOS
-                  </Button>
-                </a>
-              )}
+        <section id="download" className="max-w-7xl mx-auto px-6 py-6 relative z-10 scroll-mt-24">
+          <div className="glass-card overflow-hidden p-8 md:p-10">
+            <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-8">
+              <div className="max-w-xl">
+                <div className="inline-flex items-center gap-2 rounded-full border border-primary-500/30 bg-primary-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-primary-300 mb-4">
+                  <Monitor className="w-3.5 h-3.5" />
+                  Desktop App
+                </div>
+                <h2 className="text-2xl md:text-3xl font-bold mb-3">Download FlowTrack Desktop</h2>
+                <p className="text-slate-400 leading-relaxed">
+                  Install the native app for screenshot capture, activity tracking, and timer controls while you work — synced with your web account.
+                </p>
+                <ul className="mt-5 space-y-2">
+                  {desktopFeatures.map((feature) => (
+                    <li key={feature} className="flex items-center gap-2 text-sm text-slate-300">
+                      <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+                      {feature}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div className="grid sm:grid-cols-2 gap-4 w-full lg:max-w-xl">
+                {desktopWinUrl && (
+                  <a
+                    href={desktopWinUrl}
+                    download
+                    className="group rounded-2xl border border-white/10 bg-white/[0.03] p-5 transition-all hover:border-sky-500/40 hover:bg-sky-500/5 hover:shadow-[0_0_30px_rgba(56,189,248,0.12)]"
+                  >
+                    <div className="flex items-start justify-between gap-3 mb-4">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-sky-500/15 text-sky-300 ring-1 ring-sky-400/20">
+                        <WindowsIcon className="w-7 h-7" />
+                      </div>
+                      <span className="rounded-full bg-white/5 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        .exe
+                      </span>
+                    </div>
+                    <h3 className="text-lg font-bold text-white mb-1">Windows</h3>
+                    <p className="text-xs text-slate-500 mb-4">Windows 10 / 11 · 64-bit</p>
+                    <span className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-sky-500 to-cyan-500 px-4 py-2.5 text-sm font-semibold text-white transition group-hover:brightness-110">
+                      <Download className="w-4 h-4" />
+                      Download for Windows
+                    </span>
+                  </a>
+                )}
+
+                {desktopMacUrl && (
+                  <a
+                    href={desktopMacUrl}
+                    download
+                    className="group rounded-2xl border border-white/10 bg-white/[0.03] p-5 transition-all hover:border-violet-500/40 hover:bg-violet-500/5 hover:shadow-[0_0_30px_rgba(139,92,246,0.12)]"
+                  >
+                    <div className="flex items-start justify-between gap-3 mb-4">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-violet-500/15 text-violet-200 ring-1 ring-violet-400/20">
+                        <AppleIcon className="w-7 h-7" />
+                      </div>
+                      <span className="rounded-full bg-white/5 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        .dmg
+                      </span>
+                    </div>
+                    <h3 className="text-lg font-bold text-white mb-1">macOS</h3>
+                    <p className="text-xs text-slate-500 mb-4">macOS 12 Monterey or later</p>
+                    <span className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-semibold text-white transition group-hover:bg-white/10">
+                      <Download className="w-4 h-4" />
+                      Download for Mac
+                    </span>
+                  </a>
+                )}
+              </div>
             </div>
           </div>
         </section>
       )}
 
-      <section className="max-w-7xl mx-auto px-6 py-10 relative z-10">
-        <h2 className="text-3xl font-bold mb-3 text-center">Packages Built For Every Stage</h2>
-        <p className="text-slate-400 text-center mb-10">Simple pricing, transparent features, and upgrade flexibility.</p>
+      <section id="pricing" className="max-w-7xl mx-auto px-6 py-14 relative z-10 scroll-mt-24">
+        <SectionHeading
+          badge="Pricing"
+          title="Packages built for every stage"
+          description="Simple pricing, transparent features, and upgrade flexibility as your team grows."
+        />
         <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-6">
           {packageCards.map((pkg) => (
             <div key={pkg.name} className={`glass-card h-full flex flex-col ${pkg.popular ? 'border-primary-500/40 bg-primary-500/5' : ''} ${pkg.name === selectedPackageName ? 'ring-2 ring-emerald-500/40' : ''}`}>
@@ -201,14 +419,13 @@ const LandingPage = () => {
         </div>
       </section>
 
-      <section className="max-w-7xl mx-auto px-6 pb-14 relative z-10">
+      <section id="roadmap" className="max-w-7xl mx-auto px-6 pb-10 relative z-10 scroll-mt-24">
         <div className="glass-card p-8 md:p-10 space-y-10">
-          <div className="text-center">
-            <h2 className="text-3xl font-bold">FlowTrack Product Momentum</h2>
-            <p className="text-slate-400 mt-2">
-              What is live today, what is coming next, and where AI will take FlowTrack.
-            </p>
-          </div>
+          <SectionHeading
+            badge="Roadmap"
+            title="FlowTrack product momentum"
+            description="What is live today, what is coming next, and where AI will take FlowTrack."
+          />
 
           <div className="grid md:grid-cols-3 gap-6">
             <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-5">
@@ -273,13 +490,21 @@ const LandingPage = () => {
         </div>
       </section>
 
-      <footer className="max-w-7xl mx-auto px-6 py-10 text-slate-500 text-sm flex flex-col md:flex-row gap-2 md:items-center md:justify-between">
-        <span>© {new Date().getFullYear()} FlowTrack. Built for high-performance teams.</span>
-        <div className="flex items-center gap-5">
-          <Link to="/login" className="hover:text-white transition-colors">Login</Link>
-          <Link to="/register" className="hover:text-white transition-colors">Register</Link>
+      <section className="max-w-7xl mx-auto px-6 py-10 relative z-10">
+        <div className="relative overflow-hidden rounded-3xl border border-primary-500/25 bg-gradient-to-br from-primary-600/20 via-background to-secondary-600/10 p-10 md:p-14 text-center">
+          <div className="pointer-events-none absolute -top-20 left-1/2 h-48 w-96 -translate-x-1/2 rounded-full bg-primary-500/20 blur-3xl" />
+          <h2 className="text-3xl md:text-4xl font-bold mb-4 relative">Ready to bring clarity to your team?</h2>
+          <p className="text-slate-400 max-w-2xl mx-auto mb-8 relative">
+            Start your free trial today — set up projects, invite your team, and download the desktop app in minutes.
+          </p>
+          <div className="flex flex-wrap items-center justify-center gap-3 relative">
+            <Link to="/register"><Button size="lg">Start Free Trial <ArrowRight className="w-4 h-4 ml-2" /></Button></Link>
+            <Link to="/login"><Button variant="secondary" size="lg">Sign in</Button></Link>
+          </div>
         </div>
-      </footer>
+      </section>
+
+      <LandingFooter />
     </div>
   );
 };
