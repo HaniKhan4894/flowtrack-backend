@@ -170,8 +170,9 @@ function createWindow() {
     const loadTarget = isDev ? devUrl : (FRONTEND_URL || null);
 
     if (loadTarget) {
-        console.log(`[Window] Loading URL: ${loadTarget}`);
-        mainWindow.loadURL(loadTarget).catch((err) => {
+        const entryUrl = `${loadTarget.replace(/\/$/, '')}/login`;
+        console.log(`[Window] Loading URL: ${entryUrl}`);
+        mainWindow.loadURL(entryUrl).catch((err) => {
             console.error('[Window] Failed to load remote UI:', err.message);
             if (!isDev && fs.existsSync(resolveFrontendIndexPath())) {
                 console.log('[Window] Falling back to bundled UI.');
@@ -196,11 +197,6 @@ function createWindow() {
         }
     });
 
-    mainWindow.on('minimize', (event) => {
-        event.preventDefault();
-        mainWindow.hide();
-    });
-
     mainWindow.on('maximize', () => {
         if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.webContents.send('window-maximized-changed', true);
@@ -214,6 +210,16 @@ function createWindow() {
     });
 }
 
+function showMainWindow() {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    if (mainWindow.isMinimized()) {
+        mainWindow.restore();
+    }
+    mainWindow.setSkipTaskbar(false);
+    mainWindow.show();
+    mainWindow.focus();
+}
+
 function setupTray() {
     if (tray) return;
     const iconPath = path.join(__dirname, 'icon.png');
@@ -224,10 +230,11 @@ function setupTray() {
     tray = new Tray(icon);
     tray.setToolTip('FlowTrack');
     tray.setContextMenu(Menu.buildFromTemplate([
-        { label: 'Show FlowTrack', click: () => mainWindow && mainWindow.show() },
+        { label: 'Show FlowTrack', click: () => showMainWindow() },
         { label: 'Quit', click: () => { appIsQuitting = true; app.quit(); } },
     ]));
-    tray.on('double-click', () => mainWindow && mainWindow.show());
+    tray.on('double-click', () => showMainWindow());
+    tray.on('click', () => showMainWindow());
 }
 
 // ──────────────────────────────────────────────
@@ -701,7 +708,7 @@ ipcMain.handle('is-desktop', () => true);
 
 ipcMain.handle('window-minimize', () => {
     if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.hide();
+        mainWindow.minimize();
     }
     return { success: true };
 });
@@ -764,8 +771,17 @@ app.whenReady().then(() => {
 
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) createWindow();
-        else if (mainWindow) mainWindow.show();
+        else showMainWindow();
     });
+
+    if (mainWindow) {
+        mainWindow.on('show', () => {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.setSkipTaskbar(false);
+            }
+        });
+        mainWindow.on('restore', () => showMainWindow());
+    }
 });
 
 app.on('before-quit', () => {
@@ -774,5 +790,5 @@ app.on('before-quit', () => {
 
 app.on('window-all-closed', () => {
     stopMonitoringLoop();
-    if (process.platform !== 'darwin') app.quit();
+    // Keep running in tray on Windows — only quit via tray/menu.
 });

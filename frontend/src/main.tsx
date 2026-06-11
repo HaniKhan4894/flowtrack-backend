@@ -20,6 +20,8 @@ import InvoicesPage from './features/invoices/InvoicesPage'
 import { Shell } from './layouts/Shell'
 import { useAuthStore } from './store/authStore'
 import { canAccessPath } from './utils/access'
+import { isDesktopApp } from './utils/electronAuth'
+import { DesktopTitleBar } from './components/WindowControls'
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { isAuthenticated } = useAuthStore();
@@ -33,14 +35,34 @@ const RoleRoute = ({ path, children }: { path: string; children: React.ReactNode
   return <Shell>{children}</Shell>;
 };
 
+const RootPage = () => {
+  if (isDesktopApp()) {
+    const { isAuthenticated } = useAuthStore();
+    return <Navigate to={isAuthenticated ? '/app' : '/login'} replace />;
+  }
+  return <LandingPage />;
+};
+
+const RegisterRoute = () => {
+  if (isDesktopApp()) {
+    return <Navigate to="/login" replace />;
+  }
+  return <RegisterPage />;
+};
+
+const FallbackRedirect = () => (
+  <Navigate to={isDesktopApp() ? '/login' : '/app'} replace />
+);
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <Router>
+      <DesktopTitleBar />
       <Routes>
         <Route path="/login" element={<LoginPage />} />
-        <Route path="/register" element={<RegisterPage />} />
-        <Route path="/" element={<LandingPage />} />
-        
+        <Route path="/register" element={<RegisterRoute />} />
+        <Route path="/" element={<RootPage />} />
+
         {/* Tracker routes — all authenticated users */}
         <Route path="/app" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
         <Route path="/time" element={<ProtectedRoute><TimeTrackingPage /></ProtectedRoute>} />
@@ -56,7 +78,7 @@ createRoot(document.getElementById('root')!).render(
         <Route path="/invoices" element={<RoleRoute path="/invoices"><InvoicesPage /></RoleRoute>} />
 
         {/* Fallback */}
-        <Route path="*" element={<Navigate to="/app" />} />
+        <Route path="*" element={<FallbackRedirect />} />
       </Routes>
     </Router>
   </StrictMode>,

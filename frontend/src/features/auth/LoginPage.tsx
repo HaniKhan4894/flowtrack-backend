@@ -6,7 +6,7 @@ import { LogIn, Github, Mail, Sparkles } from 'lucide-react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { authService } from '../../api/authService';
 import { useAuthStore } from '../../store/authStore';
-import { DesktopTitleBar } from '../../components/WindowControls';
+import { isDesktopApp } from '../../utils/electronAuth';
 
 const LoginPage = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -53,9 +53,10 @@ const LoginPage = () => {
     }
   };
 
+  const desktop = isDesktopApp();
+
   return (
-    <div className="relative min-h-screen flex items-center justify-center p-6 overflow-hidden bg-background">
-      <DesktopTitleBar />
+    <div className={`relative min-h-screen flex items-center justify-center overflow-hidden bg-background p-6 ${desktop ? 'pt-10' : ''}`}>
       {/* Background Animated Blobs */}
       <motion.div
         animate={{
@@ -139,33 +140,39 @@ const LoginPage = () => {
               Sign In to FlowTrack
             </Button>
 
-            <div className="relative my-8">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-white/10"></div>
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-[#12141C] px-2 text-slate-500">Or continue with</span>
-              </div>
-            </div>
+            {!desktop && (
+              <>
+                <div className="relative my-8">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-white/10"></div>
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-[#12141C] px-2 text-slate-500">Or continue with</span>
+                  </div>
+                </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <Button variant="secondary" type="button" className="w-full px-0">
-                <Github className="w-4 h-4 mr-2" />
-                GitHub
-              </Button>
-              <Button variant="secondary" type="button" className="w-full px-0">
-                <Mail className="w-4 h-4 mr-2" />
-                Google
-              </Button>
-            </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <Button variant="secondary" type="button" className="w-full px-0">
+                    <Github className="w-4 h-4 mr-2" />
+                    GitHub
+                  </Button>
+                  <Button variant="secondary" type="button" className="w-full px-0">
+                    <Mail className="w-4 h-4 mr-2" />
+                    Google
+                  </Button>
+                </div>
+              </>
+            )}
           </form>
 
-          <p className="text-center text-sm text-slate-400 mt-8">
-            Don't have an account?{' '}
-            <Link to="/register" className="text-primary-400 font-semibold hover:text-primary-300 transition-colors">
-              Start Free Trial
-            </Link>
-          </p>
+          {!desktop && (
+            <p className="text-center text-sm text-slate-400 mt-8">
+              Don't have an account?{' '}
+              <Link to="/register" className="text-primary-400 font-semibold hover:text-primary-300 transition-colors">
+                Start Free Trial
+              </Link>
+            </p>
+          )}
         </div>
         
         <div className="mt-8 text-center text-xs text-slate-500">

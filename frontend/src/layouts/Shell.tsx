@@ -15,7 +15,6 @@ import { useTimerStore } from '../store/timerStore';
 import { timeService } from '../api/timeService';
 import { getNavItemsForUser } from '../utils/access';
 import { hardRedirectToLogin, isDesktopApp } from '../utils/electronAuth';
-import { WindowControls } from '../components/WindowControls';
 
 const SidebarItem = ({ icon: Icon, label, path, isCollapsed }: any) => {
   const location = useLocation();
@@ -77,7 +76,7 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
   }, []);
 
   return (
-    <div className="flex min-h-screen bg-background p-4 gap-4 text-white">
+    <div className={`flex min-h-screen bg-background gap-4 text-white p-4 ${isDesktopApp() ? 'pt-10' : ''}`}>
       {/* Sidebar */}
       <motion.aside
         animate={{ width: isCollapsed ? 80 : 260 }}
@@ -209,12 +208,6 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
                 {user?.first_name?.[0]}{user?.last_name?.[0]}
               </div>
 
-              {isDesktopApp() && (
-                <>
-                  <div className="h-8 w-px bg-white/10 mx-1" />
-                  <WindowControls />
-                </>
-              )}
             </div>
           </div>
         </header>
