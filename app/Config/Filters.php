@@ -78,10 +78,10 @@ class Filters extends BaseFilters
      */
     public array $globals = [
         'before' => [
-            'cors', // Enable built-in CORS for all requests
+            'corsCustom',
         ],
         'after' => [
-            'cors', // Add CORS headers to all responses
+            'corsCustom',
         ],
     ];
 

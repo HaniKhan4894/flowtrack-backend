@@ -22,7 +22,7 @@ FlowTrack is a multi-tenant time-tracking platform with:
    - `app.frontendURL`
 3. Frontend env:
    - Create/update `frontend/.env`
-   - Set `VITE_API_URL=http://localhost/flowtrack-backend/public/api/v1`
+   - Use `VITE_API_URL=/api/v1` (Vite dev proxy + Vercel rewrite forward to backend)
 4. Deploy URL (staging/production):
    - Edit `config/deploy.json` (`apiBaseUrl`, `publicBaseUrl`)
    - Run `npm run sync:deploy` to refresh frontend/desktop build env files
@@ -57,6 +57,13 @@ From repo root:
 5. Installers are copied to `public/downloads/` and linked from the landing page.
 
 When going live, only change `config/deploy.json`, run `npm run sync:deploy`, and rebuild installers.
+
+### Vercel deploy (fixes browser CORS)
+
+1. Run `npm run sync:deploy` (generates `frontend/vercel.json` + `.env.production`)
+2. Set Vercel env: `VITE_API_URL=/api/v1`
+3. Push and redeploy frontend — `vercel.json` proxies `/api/*` to your backend (ngrok/production)
+4. Web requests stay same-origin (`flowtrackhani.vercel.app/api/v1/...`), no browser CORS
 
 Windows build notes:
 - Unsigned builds are enabled by default (`signAndEditExecutable: false`).

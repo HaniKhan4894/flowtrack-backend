@@ -1,6 +1,14 @@
 # Disable directory browsing
 Options -Indexes
 
+# CORS for API clients (Vercel, Electron, local dev)
+<IfModule mod_headers.c>
+	Header always set Access-Control-Allow-Origin "*"
+	Header always set Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+	Header always set Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With, Accept, Origin, ngrok-skip-browser-warning"
+	Header always set Access-Control-Expose-Headers "Authorization"
+</IfModule>
+
 # ----------------------------------------------------------------------
 # Rewrite engine
 # ----------------------------------------------------------------------
