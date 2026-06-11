@@ -7,6 +7,7 @@ import { authService } from '../../api/authService';
 import { useAuthStore } from '../../store/authStore';
 import { DesktopTitleBar } from '../../components/WindowControls';
 import SeoHead from '../../seo/SeoHead';
+import { getApiErrorMessage } from '../../utils/apiError';
 
 const RegisterPage = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -49,8 +50,8 @@ const RegisterPage = () => {
           message: 'Account created! Please check your email and verify your account before signing in.',
         },
       });
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Registration failed. Please try again.');
+    } catch (err: unknown) {
+      setError(getApiErrorMessage(err, 'Registration failed. Please try again.'));
     } finally {
       setIsLoading(false);
     }

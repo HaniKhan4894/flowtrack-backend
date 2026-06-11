@@ -5,6 +5,7 @@ import { KeyRound, Sparkles } from 'lucide-react';
 import { Button, Input } from '../../components/ui';
 import { authService } from '../../api/authService';
 import SeoHead from '../../seo/SeoHead';
+import { getApiErrorMessage } from '../../utils/apiError';
 
 const ResetPasswordPage = () => {
   const [searchParams] = useSearchParams();
@@ -33,8 +34,8 @@ const ResetPasswordPage = () => {
     try {
       const response = await authService.resetPassword(token, password);
       setSuccess(response.message || 'Password has been reset successfully.');
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Unable to reset password. The link may have expired.');
+    } catch (err: unknown) {
+      setError(getApiErrorMessage(err, 'Unable to reset password. The link may have expired.'));
     } finally {
       setIsLoading(false);
     }

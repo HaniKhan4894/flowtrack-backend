@@ -5,6 +5,7 @@ import { Mail, Sparkles, ArrowLeft } from 'lucide-react';
 import { Button, Input } from '../../components/ui';
 import { authService } from '../../api/authService';
 import SeoHead from '../../seo/SeoHead';
+import { getApiErrorMessage } from '../../utils/apiError';
 
 const ForgotPasswordPage = () => {
   const [email, setEmail] = useState('');
@@ -21,8 +22,8 @@ const ForgotPasswordPage = () => {
     try {
       const response = await authService.forgotPassword(email);
       setSuccess(response.message || 'If the email exists, a password reset link has been sent.');
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Unable to send reset email. Please try again.');
+    } catch (err: unknown) {
+      setError(getApiErrorMessage(err, 'Unable to send reset email. Please try again.'));
     } finally {
       setIsLoading(false);
     }

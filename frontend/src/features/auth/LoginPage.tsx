@@ -8,6 +8,7 @@ import { authService } from '../../api/authService';
 import { useAuthStore } from '../../store/authStore';
 import { isDesktopApp } from '../../utils/electronAuth';
 import SeoHead from '../../seo/SeoHead';
+import { getApiErrorMessage } from '../../utils/apiError';
 
 const LoginPage = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -47,8 +48,8 @@ const LoginPage = () => {
       
       // Navigate to dashboard
       navigate('/app');
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Unauthorized: Invalid email or password.');
+    } catch (err: unknown) {
+      setError(getApiErrorMessage(err, 'Invalid email or password.'));
     } finally {
       setIsLoading(false);
     }
@@ -108,7 +109,7 @@ const LoginPage = () => {
 
         <div className="glass-card">
           <form onSubmit={handleSubmit} className="space-y-5">
-            {successMessage && (
+            {successMessage && !error && (
               <div className="p-3 rounded-xl bg-green-500/10 border border-green-500/20 text-green-400 text-sm text-center">
                 {successMessage}
               </div>

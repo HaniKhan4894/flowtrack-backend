@@ -5,6 +5,7 @@ import { CheckCircle2, Sparkles, XCircle } from 'lucide-react';
 import { Button } from '../../components/ui';
 import { authService } from '../../api/authService';
 import SeoHead from '../../seo/SeoHead';
+import { getApiErrorMessage } from '../../utils/apiError';
 
 const VerifyEmailPage = () => {
   const [searchParams] = useSearchParams();
@@ -24,9 +25,9 @@ const VerifyEmailPage = () => {
         const response = await authService.verifyEmail(token);
         setStatus('success');
         setMessage(response.message || 'Email verified successfully.');
-      } catch (err: any) {
+      } catch (err: unknown) {
         setStatus('error');
-        setMessage(err.response?.data?.message || 'Verification failed. The link may have expired.');
+        setMessage(getApiErrorMessage(err, 'Verification failed. The link may have expired.'));
       }
     };
 
