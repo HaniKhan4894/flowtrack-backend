@@ -66,6 +66,11 @@ When going live, only change `config/deploy.json`, run `npm run sync:deploy`, an
 3. Restart WAMP/Apache after `.env` changes
 4. Redeploy Vercel frontend
 
+Desktop icon:
+- Source PNG: `desktop/build/icon.png` (512x512)
+- Regenerate ICO: `cd desktop && npm run icons`
+- Icons run automatically before `npm run build:desktop:win`
+
 Windows build notes:
 - Unsigned builds are enabled by default (`signAndEditExecutable: false`).
 - For full `active-win` native support in packaged builds, install Visual Studio Build Tools (C++) and remove `npmRebuild: false` from `desktop/package.json`.

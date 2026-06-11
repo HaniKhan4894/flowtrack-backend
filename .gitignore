@@ -94,6 +94,8 @@ node_modules/
 # Desktop build artifacts
 desktop/dist/
 desktop/.env.build
+desktop/build/icon.ico
+desktop/build/icon-512.png
 public/downloads/*.exe
 public/downloads/*.dmg
 

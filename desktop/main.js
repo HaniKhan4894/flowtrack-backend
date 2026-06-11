@@ -139,6 +139,19 @@ async function resolveAuthToken(forceRefresh = false) {
     return currentSession.token;
 }
 
+function resolveAppIcon() {
+    const candidates = [
+        path.join(__dirname, 'build', 'icon.png'),
+        path.join(__dirname, 'icon.png'),
+    ];
+    for (const candidate of candidates) {
+        if (fs.existsSync(candidate)) {
+            return nativeImage.createFromPath(candidate);
+        }
+    }
+    return null;
+}
+
 function resolveFrontendIndexPath() {
     if (app.isPackaged) {
         return path.join(process.resourcesPath, 'frontend', 'dist', 'index.html');
@@ -150,12 +163,15 @@ function resolveFrontendIndexPath() {
 //  Window
 // ──────────────────────────────────────────────
 function createWindow() {
+    const appIcon = resolveAppIcon();
+
     mainWindow = new BrowserWindow({
         width: 1280,
         height: 860,
         minWidth: 900,
         minHeight: 600,
         frame: false,
+        icon: appIcon || undefined,
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             nodeIntegration: false,
@@ -222,11 +238,11 @@ function showMainWindow() {
 
 function setupTray() {
     if (tray) return;
-    const iconPath = path.join(__dirname, 'icon.png');
-    if (!fs.existsSync(iconPath)) {
+    const appIcon = resolveAppIcon();
+    if (!appIcon || appIcon.isEmpty()) {
         return;
     }
-    const icon = nativeImage.createFromPath(iconPath);
+    const icon = appIcon.resize({ width: 16, height: 16 });
     tray = new Tray(icon);
     tray.setToolTip('FlowTrack');
     tray.setContextMenu(Menu.buildFromTemplate([
@@ -740,6 +756,13 @@ ipcMain.handle('window-close', () => {
 //  App Lifecycle
 // ──────────────────────────────────────────────
 app.whenReady().then(() => {
+    if (process.platform === 'win32') {
+        app.setAppUserModelId('com.flowtrack.desktop');
+    }
+    const appIcon = resolveAppIcon();
+    if (appIcon && !appIcon.isEmpty()) {
+        app.dock?.setIcon?.(appIcon);
+    }
     console.log(`[Config] API base URL: ${API_BASE_URL}`);
     console.log(`[Config] Frontend URL: ${FRONTEND_URL}`);
     createWindow();
