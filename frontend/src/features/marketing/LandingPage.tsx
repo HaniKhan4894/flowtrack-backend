@@ -193,7 +193,7 @@ function WindowsIcon({ className = 'w-6 h-6' }: { className?: string }) {
 function AppleIcon({ className = 'w-6 h-6' }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" className={className} fill="currentColor" aria-hidden="true">
-      <path d="M16.365 1.43c0 1.14-.493 2.27-1.177 3.08-.79.96-2.04 1.71-3.27 1.6-.12-1.09.48-2.26 1.15-3.04.84-1.01 2.32-1.74 3.3-1.84.02.4.03.8.01 1.2Zm1.12 3.44c1.77-.09 3.3.95 4.14.95.84 0 2.14-1.17 3.53-1.01.6.03 2.28.24 3.36 1.8-0.09.06-2.01 1.17-1.99 3.48.03 2.79 2.44 3.72 2.45 3.73-.02.07-.38 1.31-1.26 2.6-0.76 1.1-1.54 2.19-2.78 2.21-1.16.02-1.54-.67-2.88-.67-1.33 0-1.75.65-2.85.69-1.15.04-2.02-1.16-2.79-2.25-1.51-2.18-2.66-6.15-1.12-8.84.77-1.33 2.14-2.17 3.64-2.19Z" />
+      <path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.793 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.48c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.527 1.816-.78.896-1.446 2.345-1.266 3.73 1.338.104 2.715-.688 3.548-1.716z" />
     </svg>
   );
 }
@@ -393,13 +393,10 @@ const LandingPage = () => {
                     download
                     className="group rounded-2xl border border-white/10 bg-white/[0.03] p-5 transition-all hover:border-sky-500/40 hover:bg-sky-500/5 hover:shadow-[0_0_30px_rgba(56,189,248,0.12)]"
                   >
-                    <div className="flex items-start justify-between gap-3 mb-4">
+                    <div className="mb-4">
                       <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-sky-500/15 text-sky-300 ring-1 ring-sky-400/20">
                         <WindowsIcon className="w-7 h-7" />
                       </div>
-                      <span className="rounded-full bg-white/5 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                        .exe
-                      </span>
                     </div>
                     <h3 className="text-lg font-bold text-white mb-1">Windows</h3>
                     <p className="text-xs text-slate-500 mb-4">Windows 10 / 11 · 64-bit</p>
@@ -416,13 +413,10 @@ const LandingPage = () => {
                     download
                     className="group rounded-2xl border border-white/10 bg-white/[0.03] p-5 transition-all hover:border-violet-500/40 hover:bg-violet-500/5 hover:shadow-[0_0_30px_rgba(139,92,246,0.12)]"
                   >
-                    <div className="flex items-start justify-between gap-3 mb-4">
-                      <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-violet-500/15 text-violet-200 ring-1 ring-violet-400/20">
-                        <AppleIcon className="w-7 h-7" />
+                    <div className="mb-4">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-violet-500/15 text-violet-200 ring-1 ring-violet-400/20 p-2">
+                        <AppleIcon className="w-full h-full" />
                       </div>
-                      <span className="rounded-full bg-white/5 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                        .dmg
-                      </span>
                     </div>
                     <h3 className="text-lg font-bold text-white mb-1">macOS</h3>
                     <p className="text-xs text-slate-500 mb-4">macOS 12 Monterey or later</p>
