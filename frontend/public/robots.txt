@@ -1,0 +1,16 @@
+# https://www.robotstxt.org/robotstxt.html
+User-agent: *
+Allow: /
+Disallow: /app
+Disallow: /time
+Disallow: /activity
+Disallow: /screenshots
+Disallow: /projects
+Disallow: /billing
+Disallow: /team
+Disallow: /settings
+Disallow: /analytics
+Disallow: /invoices
+Disallow: /login
+
+Sitemap: https://flowtrackhani.vercel.app/sitemap.xml

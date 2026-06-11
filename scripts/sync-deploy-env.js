@@ -21,12 +21,62 @@ const frontendUrl = (deploy.frontendUrl || '').replace(/\/$/, '');
 const frontendEnv = [
     `VITE_API_URL=${apiBaseUrl}`,
     `VITE_PUBLIC_URL=${publicBaseUrl}`,
+    `VITE_SITE_URL=${frontendUrl || 'https://flowtrackhani.vercel.app'}`,
     `VITE_DESKTOP_WIN_URL=${publicBaseUrl}/downloads/FlowTrack-Setup.exe`,
     `VITE_DESKTOP_MAC_URL=${publicBaseUrl}/downloads/FlowTrack.dmg`,
     '',
 ].join('\n');
 
 fs.writeFileSync(path.join(root, 'frontend', '.env.production'), frontendEnv);
+
+const siteUrl = frontendUrl || 'https://flowtrackhani.vercel.app';
+const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>${siteUrl}/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>${siteUrl}/register</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>${siteUrl}/privacy</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>${siteUrl}/terms</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.5</priority>
+  </url>
+</urlset>
+`;
+
+const robots = `# https://www.robotstxt.org/robotstxt.html
+User-agent: *
+Allow: /
+Disallow: /app
+Disallow: /time
+Disallow: /activity
+Disallow: /screenshots
+Disallow: /projects
+Disallow: /billing
+Disallow: /team
+Disallow: /settings
+Disallow: /analytics
+Disallow: /invoices
+Disallow: /login
+
+Sitemap: ${siteUrl}/sitemap.xml
+`;
+
+const publicDir = path.join(root, 'frontend', 'public');
+fs.mkdirSync(publicDir, { recursive: true });
+fs.writeFileSync(path.join(publicDir, 'sitemap.xml'), sitemap);
+fs.writeFileSync(path.join(publicDir, 'robots.txt'), robots);
 
 const desktopBuildEnv = [`FLOWTRACK_API_URL=${apiBaseUrl}`];
 if (frontendUrl) {

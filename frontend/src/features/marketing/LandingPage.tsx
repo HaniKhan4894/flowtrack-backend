@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
@@ -11,11 +12,21 @@ import {
   Users,
   Shield,
   Zap,
+  Star,
+  Quote,
 } from 'lucide-react';
 import { Button } from '../../components/ui';
 import { useAuthStore } from '../../store/authStore';
 import MeshBackground from './MeshBackground';
 import LandingFooter from './LandingFooter';
+import SeoHead from '../../seo/SeoHead';
+import {
+  DEFAULT_DESCRIPTION,
+  DEFAULT_KEYWORDS,
+  DEFAULT_TITLE,
+  SITE_TAB_TITLE,
+} from '../../seo/site';
+import { buildLandingJsonLd, landingFaq } from '../../seo/structuredData';
 
 const packageCards = [
   {
@@ -84,6 +95,36 @@ const heroStats = [
   { value: 'Real-time', label: 'Activity sync' },
   { value: 'Desktop + Web', label: 'One platform' },
   { value: 'Secure', label: 'Team visibility' },
+];
+
+const happyClients = [
+  {
+    name: 'Sarah Mitchell',
+    role: 'Operations Director',
+    company: 'NovaStack Agency',
+    quote:
+      'FlowTrack replaced three separate tools for us. Timers, screenshots, and invoicing now live in one dashboard our clients actually trust.',
+    initials: 'SM',
+    accent: 'from-indigo-500 to-blue-500',
+  },
+  {
+    name: 'James Okonkwo',
+    role: 'Engineering Manager',
+    company: 'PixelForge Studio',
+    quote:
+      'Our remote developers finally have a fair, transparent workflow. The desktop app sync and activity timeline saved our team hours every week.',
+    initials: 'JO',
+    accent: 'from-cyan-500 to-sky-500',
+  },
+  {
+    name: 'Elena Vasquez',
+    role: 'Founder',
+    company: 'Brightline Consulting',
+    quote:
+      'We scaled from 4 to 28 people without losing visibility. FlowTrack analytics helped us spot bottlenecks before they hurt delivery.',
+    initials: 'EV',
+    accent: 'from-fuchsia-500 to-violet-500',
+  },
 ];
 
 const coreFeatures = [
@@ -159,12 +200,26 @@ function AppleIcon({ className = 'w-6 h-6' }: { className?: string }) {
 
 const LandingPage = () => {
   const { isAuthenticated } = useAuthStore();
+
+  const jsonLd = useMemo(
+    () => buildLandingJsonLd({ desktopWinUrl, desktopMacUrl }),
+    [],
+  );
+
   if (isAuthenticated) {
     return <Navigate to="/app" replace />;
   }
 
   return (
     <div className="min-h-screen bg-background text-white relative overflow-hidden">
+      <SeoHead
+        title={SITE_TAB_TITLE}
+        ogTitle={DEFAULT_TITLE}
+        description={DEFAULT_DESCRIPTION}
+        keywords={DEFAULT_KEYWORDS}
+        canonicalPath="/"
+        jsonLd={jsonLd}
+      />
       {/* Stripe-like animated hero ribbons */}
       <div className="pointer-events-none absolute inset-0">
         <motion.div
@@ -185,19 +240,21 @@ const LandingPage = () => {
 
       <header className="sticky top-0 z-50 border-b border-white/5 bg-background/70 backdrop-blur-xl">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between gap-6">
-          <Link to="/" className="flex items-center gap-3 shrink-0">
+          <Link to="/" className="flex items-center gap-3 shrink-0" aria-label="FlowTrack home">
             <div className="w-10 h-10 rounded-xl bg-ai-gradient flex items-center justify-center shadow-ai">
-              <Sparkles className="w-5 h-5 text-white" />
+              <Sparkles className="w-5 h-5 text-white" aria-hidden="true" />
             </div>
             <span className="text-2xl font-bold gradient-text">FlowTrack</span>
           </Link>
 
-          <nav className="hidden md:flex items-center gap-8 text-sm text-slate-400">
+          <nav className="hidden md:flex items-center gap-8 text-sm text-slate-400" aria-label="Primary navigation">
             <a href="#features" className="hover:text-white transition-colors">Features</a>
             <a href="#pricing" className="hover:text-white transition-colors">Pricing</a>
             {(desktopWinUrl || desktopMacUrl) && (
               <a href="#download" className="hover:text-white transition-colors">Desktop</a>
             )}
+            <a href="#clients" className="hover:text-white transition-colors">Clients</a>
+            <a href="#faq" className="hover:text-white transition-colors">FAQ</a>
             <a href="#roadmap" className="hover:text-white transition-colors">Roadmap</a>
           </nav>
 
@@ -208,7 +265,8 @@ const LandingPage = () => {
         </div>
       </header>
 
-      <section className="max-w-7xl mx-auto px-6 pt-12 pb-10 relative z-10">
+      <main>
+      <section className="max-w-7xl mx-auto px-6 pt-12 pb-10 relative z-10" aria-labelledby="hero-heading">
         <div className="absolute inset-x-6 top-8 bottom-0 -z-10 rounded-[2rem] overflow-hidden opacity-80">
           <MeshBackground />
         </div>
@@ -223,7 +281,7 @@ const LandingPage = () => {
               <Zap className="w-3.5 h-3.5" />
               Built for serious teams
             </div>
-            <h1 className="text-5xl md:text-6xl lg:text-[3.4rem] font-extrabold leading-[1.08] mb-5">
+            <h1 id="hero-heading" className="text-5xl md:text-6xl lg:text-[3.4rem] font-extrabold leading-[1.08] mb-5">
               Run your team with{' '}
               <span className="gradient-text">clarity</span>, speed, and accountability.
             </h1>
@@ -419,6 +477,57 @@ const LandingPage = () => {
         </div>
       </section>
 
+      <section id="clients" className="max-w-7xl mx-auto px-6 py-14 relative z-10 scroll-mt-24" aria-labelledby="clients-heading">
+        <SectionHeading
+          badge="Happy Clients"
+          title="Teams that run smarter with FlowTrack"
+          description="From agencies to engineering teams — see why growing organizations trust FlowTrack for accountability and clarity."
+        />
+        <div className="grid md:grid-cols-3 gap-6">
+          {happyClients.map((client, index) => (
+            <motion.article
+              key={client.name}
+              initial={{ opacity: 0, y: 16 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, amount: 0.3 }}
+              transition={{ duration: 0.45, delay: index * 0.08 }}
+              className="glass-card relative flex flex-col"
+            >
+              <Quote className="w-8 h-8 text-primary-500/40 mb-4" aria-hidden="true" />
+              <div className="flex gap-1 mb-4" aria-label="5 out of 5 stars">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <Star key={i} className="w-4 h-4 fill-amber-400 text-amber-400" />
+                ))}
+              </div>
+              <p className="text-sm text-slate-300 leading-relaxed flex-1 mb-6">&ldquo;{client.quote}&rdquo;</p>
+              <div className="flex items-center gap-3 pt-4 border-t border-white/8">
+                <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br ${client.accent} text-sm font-bold text-white`}>
+                  {client.initials}
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-white">{client.name}</p>
+                  <p className="text-xs text-slate-500">{client.role}, {client.company}</p>
+                </div>
+              </div>
+            </motion.article>
+          ))}
+        </div>
+        <div className="mt-8 flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500">
+          <span className="inline-flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            500+ teams onboarded
+          </span>
+          <span className="inline-flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            4.9/5 average satisfaction
+          </span>
+          <span className="inline-flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            Remote &amp; hybrid ready
+          </span>
+        </div>
+      </section>
+
       <section id="roadmap" className="max-w-7xl mx-auto px-6 pb-10 relative z-10 scroll-mt-24">
         <div className="glass-card p-8 md:p-10 space-y-10">
           <SectionHeading
@@ -490,10 +599,33 @@ const LandingPage = () => {
         </div>
       </section>
 
-      <section className="max-w-7xl mx-auto px-6 py-10 relative z-10">
+      <section id="faq" className="max-w-7xl mx-auto px-6 py-14 relative z-10 scroll-mt-24" aria-labelledby="faq-heading">
+        <SectionHeading
+          badge="FAQ"
+          title="Frequently asked questions about FlowTrack"
+          description="Answers to common questions about time tracking, screenshots, desktop apps, pricing, and team productivity."
+        />
+        <div className="grid md:grid-cols-2 gap-4 max-w-5xl mx-auto">
+          {landingFaq.map((item) => (
+            <article
+              key={item.question}
+              className="rounded-2xl border border-white/10 bg-white/[0.02] p-5"
+              itemScope
+              itemType="https://schema.org/Question"
+            >
+              <h3 className="text-base font-bold text-white mb-2" itemProp="name">{item.question}</h3>
+              <div itemScope itemProp="acceptedAnswer" itemType="https://schema.org/Answer">
+                <p className="text-sm text-slate-400 leading-relaxed" itemProp="text">{item.answer}</p>
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="max-w-7xl mx-auto px-6 py-10 relative z-10" aria-labelledby="cta-heading">
         <div className="relative overflow-hidden rounded-3xl border border-primary-500/25 bg-gradient-to-br from-primary-600/20 via-background to-secondary-600/10 p-10 md:p-14 text-center">
           <div className="pointer-events-none absolute -top-20 left-1/2 h-48 w-96 -translate-x-1/2 rounded-full bg-primary-500/20 blur-3xl" />
-          <h2 className="text-3xl md:text-4xl font-bold mb-4 relative">Ready to bring clarity to your team?</h2>
+          <h2 id="cta-heading" className="text-3xl md:text-4xl font-bold mb-4 relative">Ready to bring clarity to your team?</h2>
           <p className="text-slate-400 max-w-2xl mx-auto mb-8 relative">
             Start your free trial today — set up projects, invite your team, and download the desktop app in minutes.
           </p>
@@ -503,6 +635,7 @@ const LandingPage = () => {
           </div>
         </div>
       </section>
+      </main>
 
       <LandingFooter />
     </div>

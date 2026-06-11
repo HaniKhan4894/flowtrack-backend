@@ -6,6 +6,8 @@ import './index.css'
 import LoginPage from './features/auth/LoginPage'
 import RegisterPage from './features/auth/RegisterPage'
 import LandingPage from './features/marketing/LandingPage'
+import PrivacyPolicyPage from './features/marketing/PrivacyPolicyPage'
+import TermsOfServicePage from './features/marketing/TermsOfServicePage'
 import DashboardPage from './features/dashboard/DashboardPage'
 import ProjectsPage from './features/projects/ProjectsPage'
 import BillingPage from './features/billing/BillingPage'
@@ -62,6 +64,8 @@ createRoot(document.getElementById('root')!).render(
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterRoute />} />
         <Route path="/" element={<RootPage />} />
+        <Route path="/privacy" element={<PrivacyPolicyPage />} />
+        <Route path="/terms" element={<TermsOfServicePage />} />
 
         {/* Tracker routes — all authenticated users */}
         <Route path="/app" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />

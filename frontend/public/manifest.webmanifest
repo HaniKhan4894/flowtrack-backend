@@ -1,0 +1,23 @@
+{
+  "name": "FlowTrack — Team Time Tracking & Productivity",
+  "short_name": "FlowTrack",
+  "description": "Time tracking, screenshot monitoring, team analytics, and billing for remote teams.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0A0C12",
+  "theme_color": "#6366F1",
+  "lang": "en",
+  "icons": [
+    {
+      "src": "/favicon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

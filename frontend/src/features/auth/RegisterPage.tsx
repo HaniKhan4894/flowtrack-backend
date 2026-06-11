@@ -6,6 +6,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { authService } from '../../api/authService';
 import { useAuthStore } from '../../store/authStore';
 import { DesktopTitleBar } from '../../components/WindowControls';
+import SeoHead from '../../seo/SeoHead';
 
 const RegisterPage = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -51,6 +52,12 @@ const RegisterPage = () => {
 
   return (
     <div className="relative min-h-screen flex items-center justify-center p-6 overflow-hidden bg-background">
+      <SeoHead
+        title="Create Free Account — FlowTrack Time Tracking"
+        description="Start your free FlowTrack trial. Team time tracking, screenshot monitoring, productivity analytics, and desktop apps for Windows and macOS."
+        keywords="FlowTrack sign up, free time tracking trial, team productivity registration"
+        canonicalPath="/register"
+      />
       <DesktopTitleBar />
       {/* Background Animated Blobs */}
       <motion.div

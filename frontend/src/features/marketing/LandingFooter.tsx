@@ -5,6 +5,8 @@ const productLinks = [
   { label: 'Features', href: '#features' },
   { label: 'Pricing', href: '#pricing' },
   { label: 'Desktop App', href: '#download' },
+  { label: 'Happy Clients', href: '#clients' },
+  { label: 'FAQ', href: '#faq' },
   { label: 'Roadmap', href: '#roadmap' },
 ];
 
@@ -14,8 +16,10 @@ const accountLinks = [
   { label: 'Start Free Trial', to: '/register' },
 ];
 
-const resourceLinks = [
+const resourceLinks: Array<{ label: string; href: string } | { label: string; to: string }> = [
   { label: 'Product Updates', href: '#roadmap' },
+  { label: 'Privacy Policy', to: '/privacy' },
+  { label: 'Terms of Service', to: '/terms' },
   { label: 'Support', href: 'mailto:support@flowtrack.app' },
 ];
 
@@ -87,9 +91,15 @@ const LandingFooter = () => {
             <ul className="space-y-3">
               {resourceLinks.map((link) => (
                 <li key={link.label}>
-                  <a href={link.href} className="text-sm text-slate-400 transition hover:text-white">
-                    {link.label}
-                  </a>
+                  {'to' in link ? (
+                    <Link to={link.to} className="text-sm text-slate-400 transition hover:text-white">
+                      {link.label}
+                    </Link>
+                  ) : (
+                    <a href={link.href} className="text-sm text-slate-400 transition hover:text-white">
+                      {link.label}
+                    </a>
+                  )}
                 </li>
               ))}
             </ul>
@@ -109,8 +119,8 @@ const LandingFooter = () => {
             © {year} FlowTrack. All rights reserved.
           </p>
           <div className="flex flex-wrap items-center gap-5 text-xs text-slate-500">
-            <span className="hover:text-slate-300 transition cursor-default">Privacy Policy</span>
-            <span className="hover:text-slate-300 transition cursor-default">Terms of Service</span>
+            <Link to="/privacy" className="hover:text-slate-300 transition">Privacy Policy</Link>
+            <Link to="/terms" className="hover:text-slate-300 transition">Terms of Service</Link>
             <span className="text-slate-600">Made for high-performance teams</span>
           </div>
         </div>

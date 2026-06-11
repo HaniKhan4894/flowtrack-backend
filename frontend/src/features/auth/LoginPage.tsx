@@ -7,6 +7,7 @@ import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { authService } from '../../api/authService';
 import { useAuthStore } from '../../store/authStore';
 import { isDesktopApp } from '../../utils/electronAuth';
+import SeoHead from '../../seo/SeoHead';
 
 const LoginPage = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -57,6 +58,12 @@ const LoginPage = () => {
 
   return (
     <div className={`relative min-h-screen flex items-center justify-center overflow-hidden bg-background p-6 ${desktop ? 'pt-10' : ''}`}>
+      <SeoHead
+        title="Sign In — FlowTrack"
+        description="Sign in to your FlowTrack account to access time tracking, screenshots, team analytics, and billing."
+        canonicalPath="/login"
+        noindex
+      />
       {/* Background Animated Blobs */}
       <motion.div
         animate={{
