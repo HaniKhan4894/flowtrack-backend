@@ -14,6 +14,6 @@ class BaseController extends ResourceController
         $requestId = bin2hex(random_bytes(8));
         $this->response->setHeader('X-Request-Id', $requestId);
 
-        // CORS is handled globally by CorsFilter.
+        // CORS is handled globally by the cors filter + CorsController preflight routes.
     }
 }

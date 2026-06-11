@@ -78,10 +78,10 @@ class Filters extends BaseFilters
      */
     public array $globals = [
         'before' => [
-            'corsCustom',
+            'cors',
         ],
         'after' => [
-            'corsCustom',
+            'cors',
         ],
     ];
 

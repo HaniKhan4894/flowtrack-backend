@@ -1,28 +1,39 @@
 # Disable directory browsing
 Options -Indexes
 
-# CORS for API clients (Vercel, Electron, local dev)
+# ----------------------------------------------------------------------
+# CORS preflight (OPTIONS only — POST/GET headers come from CodeIgniter cors filter)
+# ----------------------------------------------------------------------
 <IfModule mod_headers.c>
-	Header always set Access-Control-Allow-Origin "*"
-	Header always set Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, OPTIONS"
-	Header always set Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With, Accept, Origin, ngrok-skip-browser-warning"
-	Header always set Access-Control-Expose-Headers "Authorization"
+	SetEnvIf Request_Method ^OPTIONS$ IS_OPTIONS=1
+	SetEnvIf Origin "^https://([\w-]+\.)?vercel\.app$" CORS_ALLOW_ORIGIN=$0
+	SetEnvIf Origin "^http://localhost:5173$" CORS_ALLOW_ORIGIN=$0
+	SetEnvIf Origin "^http://127\.0\.0\.1:5173$" CORS_ALLOW_ORIGIN=$0
+	SetEnvIf Origin "^http://localhost:3000$" CORS_ALLOW_ORIGIN=$0
+
+	Header always set Access-Control-Allow-Origin "%{CORS_ALLOW_ORIGIN}e" env=IS_OPTIONS
+	Header always set Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, OPTIONS" env=IS_OPTIONS
+	Header always set Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With, Accept, Origin, ngrok-skip-browser-warning" env=IS_OPTIONS
+	Header always set Access-Control-Expose-Headers "Authorization" env=IS_OPTIONS
+	Header always set Access-Control-Max-Age "3600" env=IS_OPTIONS
 </IfModule>
 
 # ----------------------------------------------------------------------
 # Rewrite engine
 # ----------------------------------------------------------------------
 
-# Turning on the rewrite engine is necessary for the following rules and features.
-# FollowSymLinks must be enabled for this to work.
 <IfModule mod_rewrite.c>
 	Options +FollowSymlinks
 	RewriteEngine On
+	RewriteBase /flowtrack-backend/public/
 
-	# If you installed CodeIgniter in a subfolder, you will need to
-	# change the following line to match the subfolder you need.
-	# http://httpd.apache.org/docs/current/mod/mod_rewrite.html#rewritebase
-	# RewriteBase /
+	# CORS preflight: 204 for allowed origins (paired with mod_headers above)
+	RewriteCond %{REQUEST_METHOD} OPTIONS
+	RewriteCond %{HTTP:Origin} ^https://([\w-]+\.)?vercel\.app$ [NC,OR]
+	RewriteCond %{HTTP:Origin} ^http://localhost:5173$ [NC,OR]
+	RewriteCond %{HTTP:Origin} ^http://127\.0\.0\.1:5173$ [NC,OR]
+	RewriteCond %{HTTP:Origin} ^http://localhost:3000$ [NC]
+	RewriteRule ^ - [R=204,L]
 
 	# Redirect Trailing Slashes...
 	RewriteCond %{REQUEST_FILENAME} !-d
@@ -34,9 +45,7 @@ Options -Indexes
 	RewriteCond %{HTTP_HOST} ^www\.(.+)$ [NC]
 	RewriteRule ^ http://%1%{REQUEST_URI} [R=301,L]
 
-	# Checks to see if the user is attempting to access a valid file,
-	# such as an image or css document, if this isn't true it sends the
-	# request to the front controller, index.php
+	# Front controller
 	RewriteCond %{REQUEST_FILENAME} !-f
 	RewriteCond %{REQUEST_FILENAME} !-d
 	RewriteRule ^([\s\S]*)$ index.php/$1 [L,NC,QSA]
@@ -47,11 +56,7 @@ Options -Indexes
 </IfModule>
 
 <IfModule !mod_rewrite.c>
-	# If we don't have mod_rewrite installed, all 404's
-	# can be sent to index.php, and everything works as normal.
 	ErrorDocument 404 index.php
 </IfModule>
 
-# Disable server signature start
 ServerSignature Off
-# Disable server signature end

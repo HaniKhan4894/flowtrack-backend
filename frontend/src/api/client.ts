@@ -6,10 +6,13 @@ const apiBaseUrl =
     import.meta.env.VITE_API_URL ||
     'https://8b8a-124-109-46-74.ngrok-free.app/flowtrack-backend/public/api/v1';
 
+const usesNgrok = apiBaseUrl.includes('ngrok');
+
 const client = axios.create({
     baseURL: apiBaseUrl,
     headers: {
         'Content-Type': 'application/json',
+        ...(usesNgrok ? { 'ngrok-skip-browser-warning': 'true' } : {}),
     },
 });
 
@@ -17,6 +20,9 @@ client.interceptors.request.use((config) => {
     const token = localStorage.getItem('access_token');
     if (token) {
         config.headers.Authorization = `Bearer ${token}`;
+    }
+    if (usesNgrok) {
+        config.headers['ngrok-skip-browser-warning'] = 'true';
     }
     return config;
 });

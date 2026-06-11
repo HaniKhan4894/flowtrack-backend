@@ -9,6 +9,13 @@ use CodeIgniter\Router\RouteCollection;
 // Default route
 $routes->get('/', 'Home::index');
 
+// CORS preflight: return 204 for OPTIONS requests (including nested API paths)
+$routes->options('api/v1/(:any)', 'App\Controllers\API\V1\CorsController::preflight');
+$routes->options('api/v1/(:any)/(:any)', 'App\Controllers\API\V1\CorsController::preflight');
+$routes->options('api/v1/(:any)/(:any)/(:any)', 'App\Controllers\API\V1\CorsController::preflight');
+$routes->options('api/v1/(:any)/(:any)/(:any)/(:any)', 'App\Controllers\API\V1\CorsController::preflight');
+$routes->options('api/v1/(:any)/(:any)/(:any)/(:any)/(:any)', 'App\Controllers\API\V1\CorsController::preflight');
+
 /*
  * --------------------------------------------------------------------
  * API Routes - Version 1
@@ -19,13 +26,6 @@ $routes->get('/', 'Home::index');
 
 $routes->group('api/v1', ['namespace' => 'App\Controllers\API\V1'], function ($routes) {
     $routes->get('health', 'HealthController::index');
-
-    // OPTIONS routes for CORS preflight (must be before other routes)
-    $routes->options('(:any)', function () {
-        $response = service('response');
-        $response->setStatusCode(200);
-        return $response;
-    });
 
     // Public Authentication Routes (No Auth Required)
     $routes->post('auth/register', 'AuthController::register');
