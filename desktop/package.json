@@ -80,11 +80,20 @@
         },
         "mac": {
             "target": [
-                "dmg"
+                {
+                    "target": "dmg",
+                    "arch": [
+                        "universal"
+                    ]
+                }
             ],
             "category": "public.app-category.productivity",
             "artifactName": "FlowTrack.${ext}",
-            "icon": "build/icon.png"
+            "icon": "build/icon.png",
+            "hardenedRuntime": true,
+            "gatekeeperAssess": false,
+            "entitlements": "build/entitlements.mac.plist",
+            "entitlementsInherit": "build/entitlements.mac.plist"
         },
         "nsis": {
             "oneClick": false,
