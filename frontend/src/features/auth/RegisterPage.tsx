@@ -32,17 +32,23 @@ const RegisterPage = () => {
 
     try {
       const response = await authService.register(data);
-      
-      // Auto-login the user with the returned tokens
-      setAuth(response.data.user, response.data.tokens.access_token);
-      localStorage.setItem('refresh_token', response.data.tokens.refresh_token);
-      const orgId = (response.data.tokens as any)?.organization_id ?? (response.data.user as any)?.organization_id;
-      if (orgId) {
-        localStorage.setItem('organization_id', String(orgId));
+
+      if (invitationToken) {
+        setAuth(response.data.user, response.data.tokens.access_token);
+        localStorage.setItem('refresh_token', response.data.tokens.refresh_token);
+        const orgId = (response.data.tokens as any)?.organization_id ?? (response.data.user as any)?.organization_id;
+        if (orgId) {
+          localStorage.setItem('organization_id', String(orgId));
+        }
+        navigate('/app');
+        return;
       }
-      
-      // Navigate directly to dashboard
-      navigate('/app');
+
+      navigate('/login', {
+        state: {
+          message: 'Account created! Please check your email and verify your account before signing in.',
+        },
+      });
     } catch (err: any) {
       setError(err.response?.data?.message || 'Registration failed. Please try again.');
     } finally {

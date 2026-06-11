@@ -12,6 +12,7 @@ class OrganizationService
     protected $memberModel;
     protected $invitationModel;
     protected $userModel;
+    protected $emailService;
     protected $db;
 
     public function __construct()
@@ -20,7 +21,35 @@ class OrganizationService
         $this->memberModel = new OrganizationMemberModel();
         $this->invitationModel = new \App\Models\InvitationModel();
         $this->userModel = new UserModel();
+        $this->emailService = new EmailService();
         $this->db = \Config\Database::connect();
+    }
+
+    private function notifyInvitation(
+        int $organizationId,
+        string $email,
+        string $role,
+        string $token,
+        ?int $inviterUserId = null
+    ): void {
+        $organization = $this->organizationModel->find($organizationId);
+        $organizationName = $organization['name'] ?? 'your team';
+
+        $inviterName = null;
+        if ($inviterUserId) {
+            $inviter = $this->userModel->find($inviterUserId);
+            if ($inviter) {
+                $inviterName = trim(($inviter['first_name'] ?? '') . ' ' . ($inviter['last_name'] ?? ''));
+            }
+        }
+
+        $this->emailService->sendTeamInvitationEmail(
+            $email,
+            $organizationName,
+            $role,
+            $token,
+            $inviterName ?: null
+        );
     }
 
     private function getRoleIdBySlug(string $slug): ?int
@@ -72,7 +101,14 @@ class OrganizationService
         return $this->organizationModel->update($id, $data);
     }
 
-    public function addMember(int $organizationId, ?int $userId, string $role = 'member', ?float $hourlyRate = null, ?string $email = null): array
+    public function addMember(
+        int $organizationId,
+        ?int $userId,
+        string $role = 'member',
+        ?float $hourlyRate = null,
+        ?string $email = null,
+        ?int $inviterUserId = null
+    ): array
     {
         // Case 1: Add existing user by ID or Email
         if (!$userId && $email) {
@@ -121,6 +157,9 @@ class OrganizationService
                     'role' => $role,
                     'expires_at' => date('Y-m-d H:i:s', strtotime('+7 days'))
                 ]);
+
+                $this->notifyInvitation($organizationId, $email, $role, $token, $inviterUserId);
+
                 return array_merge($existingInvite, ['token' => $token, 'status' => 're-invited']);
             }
 
@@ -135,7 +174,10 @@ class OrganizationService
                 'created_at' => date('Y-m-d H:i:s')
             ]);
 
-            return $this->invitationModel->find($invitationId);
+            $invitation = $this->invitationModel->find($invitationId);
+            $this->notifyInvitation($organizationId, $email, $role, $token, $inviterUserId);
+
+            return $invitation;
         }
 
         throw new \Exception('User ID or Email is required');

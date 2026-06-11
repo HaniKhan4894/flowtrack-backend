@@ -6,9 +6,25 @@ use CodeIgniter\Config\BaseConfig;
 
 class Email extends BaseConfig
 {
-    public string $fromEmail  = '';
-    public string $fromName   = '';
+    public string $fromEmail  = 'noreply@oncologypanel.com';
+    public string $fromName   = 'FlowTrack';
     public string $recipients = '';
+
+    public function __construct()
+    {
+        parent::__construct();
+
+        $this->fromEmail = (string) env('email.fromEmail', $this->fromEmail);
+        $this->fromName = (string) env('email.fromName', $this->fromName);
+        $this->protocol = (string) env('email.protocol', 'smtp');
+        $this->SMTPHost = (string) env('email.SMTPHost', 'oncologypanel.com');
+        $this->SMTPUser = (string) env('email.SMTPUser', $this->fromEmail);
+        $this->SMTPPass = (string) env('email.SMTPPass', '');
+        $this->SMTPPort = (int) env('email.SMTPPort', 465);
+        $this->SMTPCrypto = (string) env('email.SMTPCrypto', 'ssl');
+        $this->mailType = (string) env('email.mailType', 'html');
+        $this->SMTPTimeout = (int) env('email.SMTPTimeout', 15);
+    }
 
     /**
      * The "user agent"
@@ -18,7 +34,7 @@ class Email extends BaseConfig
     /**
      * The mail sending protocol: mail, sendmail, smtp
      */
-    public string $protocol = 'mail';
+    public string $protocol = 'smtp';
 
     /**
      * The server path to Sendmail.
@@ -43,7 +59,7 @@ class Email extends BaseConfig
     /**
      * SMTP Port
      */
-    public int $SMTPPort = 25;
+    public int $SMTPPort = 465;
 
     /**
      * SMTP Timeout (in seconds)
@@ -62,7 +78,7 @@ class Email extends BaseConfig
      *             to the server. 'ssl' means implicit SSL. Connection on port
      *             465 should set this to ''.
      */
-    public string $SMTPCrypto = 'tls';
+    public string $SMTPCrypto = 'ssl';
 
     /**
      * Enable word-wrap
@@ -77,7 +93,7 @@ class Email extends BaseConfig
     /**
      * Type of mail, either 'text' or 'html'
      */
-    public string $mailType = 'text';
+    public string $mailType = 'html';
 
     /**
      * Character set (utf-8, iso-8859-1, etc.)

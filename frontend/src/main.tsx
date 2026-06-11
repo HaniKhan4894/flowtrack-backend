@@ -5,6 +5,9 @@ import './index.css'
 
 import LoginPage from './features/auth/LoginPage'
 import RegisterPage from './features/auth/RegisterPage'
+import ForgotPasswordPage from './features/auth/ForgotPasswordPage'
+import ResetPasswordPage from './features/auth/ResetPasswordPage'
+import VerifyEmailPage from './features/auth/VerifyEmailPage'
 import LandingPage from './features/marketing/LandingPage'
 import PrivacyPolicyPage from './features/marketing/PrivacyPolicyPage'
 import TermsOfServicePage from './features/marketing/TermsOfServicePage'
@@ -63,6 +66,9 @@ createRoot(document.getElementById('root')!).render(
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterRoute />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
+        <Route path="/verify-email" element={<VerifyEmailPage />} />
         <Route path="/" element={<RootPage />} />
         <Route path="/privacy" element={<PrivacyPolicyPage />} />
         <Route path="/terms" element={<TermsOfServicePage />} />

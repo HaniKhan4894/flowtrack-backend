@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\UserModel;
 use App\Libraries\JWTHandler;
+use App\Services\EmailVerificationService;
 
 class AuthService
 {
@@ -67,13 +68,23 @@ class AuthService
 
             $this->db->transComplete();
 
-            // Refresh user data (if needed, though createUser returns it)
+            $freshUser = $this->userModel->find($user['id']) ?? $user;
+
+            if ($invitationToken) {
+                $this->userModel->update($user['id'], [
+                    'email_verified_at' => date('Y-m-d H:i:s'),
+                ]);
+                $freshUser = $this->userModel->find($user['id']) ?? $freshUser;
+            } else {
+                $verificationService = new EmailVerificationService();
+                $verificationService->sendVerificationEmail($freshUser);
+            }
 
             // Generate tokens
-            $tokens = $this->generateTokens($user);
+            $tokens = $this->generateTokens($freshUser);
 
             return [
-                'user' => $this->buildAuthProfile((int) $user['id']) ?? $this->sanitizeUser($user),
+                'user' => $this->buildAuthProfile((int) $freshUser['id']) ?? $this->sanitizeUser($freshUser),
                 'tokens' => $tokens
             ];
         } catch (\Exception $e) {
@@ -99,6 +110,10 @@ class AuthService
 
         if (!$user['is_active']) {
             throw new \Exception('Account is inactive');
+        }
+
+        if (empty($user['email_verified_at'])) {
+            throw new \Exception('Please verify your email before signing in. Check your inbox for the verification link.');
         }
 
         // Generate tokens

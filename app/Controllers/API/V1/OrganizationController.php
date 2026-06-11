@@ -153,12 +153,15 @@ class OrganizationController extends ResourceController
             // OrganizationService::addMember() handles both cases:
             // 1) If a user with this email exists -> adds them directly
             // 2) If no user exists -> creates an invitation with a secure token
+            $inviterUserId = (int)($this->request->getServer('FLOWTRACK_USER_ID') ?? 0) ?: null;
+
             $member = $this->organizationService->addMember(
                 $id,
                 $userId,
                 $data['role'] ?? 'member',
                 $data['hourly_rate'] ?? null,
-                $email
+                $email,
+                $inviterUserId
             );
 
             // Check if it was an invitation

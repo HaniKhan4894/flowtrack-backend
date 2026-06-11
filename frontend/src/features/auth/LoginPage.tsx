@@ -136,9 +136,9 @@ const LoginPage = () => {
                 required
               />
               <div className="text-right">
-                <a href="#" className="text-xs text-primary-400 hover:text-primary-300 transition-colors">
+                <Link to="/forgot-password" className="text-xs text-primary-400 hover:text-primary-300 transition-colors">
                   Forgot password?
-                </a>
+                </Link>
               </div>
             </div>
 

@@ -37,4 +37,24 @@ export const authService = {
         const response = await client.post('/auth/refresh', { refresh_token: refreshToken });
         return response.data;
     },
+
+    forgotPassword: async (email: string): Promise<{ success: boolean; message: string }> => {
+        const response = await client.post('/auth/forgot-password', { email });
+        return response.data;
+    },
+
+    resetPassword: async (token: string, password: string): Promise<{ success: boolean; message: string }> => {
+        const response = await client.post('/auth/reset-password', { token, password });
+        return response.data;
+    },
+
+    verifyEmail: async (token: string): Promise<{ success: boolean; message: string }> => {
+        const response = await client.post('/auth/verify-email', { token });
+        return response.data;
+    },
+
+    resendVerification: async (email: string): Promise<{ success: boolean; message: string }> => {
+        const response = await client.post('/auth/resend-verification', { email });
+        return response.data;
+    },
 };

@@ -201,4 +201,52 @@ class AuthController extends ResourceController
             return $this->fail($e->getMessage(), 400);
         }
     }
+
+    /**
+     * POST /api/v1/auth/verify-email
+     */
+    public function verifyEmail()
+    {
+        try {
+            $data = $this->request->getJSON(true);
+
+            if (empty($data['token'])) {
+                return $this->fail('Verification token is required', 400);
+            }
+
+            $verificationService = new \App\Services\EmailVerificationService();
+            $verificationService->verifyEmail($data['token']);
+
+            return $this->respond([
+                'success' => true,
+                'message' => 'Email verified successfully. You can now sign in.',
+            ]);
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+
+    /**
+     * POST /api/v1/auth/resend-verification
+     */
+    public function resendVerification()
+    {
+        try {
+            $data = $this->request->getJSON(true);
+
+            if (empty($data['email'])) {
+                return $this->fail('Email is required', 400);
+            }
+
+            $verificationService = new \App\Services\EmailVerificationService();
+            $verificationService->resendVerificationEmail($data['email']);
+
+            return $this->respond([
+                'success' => true,
+                'message' => 'If the account exists and is not verified, a new verification email has been sent.',
+            ]);
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
 }

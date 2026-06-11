@@ -3,164 +3,197 @@
 namespace App\Services;
 
 use CodeIgniter\Email\Email;
+use Config\Email as EmailConfig;
 
 class EmailService
 {
-    protected $email;
+    protected Email $email;
+    protected EmailConfig $config;
 
     public function __construct()
     {
         $this->email = \Config\Services::email();
+        $this->config = config('Email');
     }
 
-    /**
-     * Send welcome email to new user
-     */
+    private function frontendUrl(string $path = ''): string
+    {
+        $base = rtrim((string) env('app.frontendURL', 'https://flowtrackhani.vercel.app'), '/');
+        return $path ? $base . '/' . ltrim($path, '/') : $base;
+    }
+
+    private function sendMail(
+        string $to,
+        string $subject,
+        string $htmlMessage,
+        ?string $fromEmail = null,
+        ?string $fromName = null
+    ): bool {
+        try {
+            $this->email->clear(true);
+            $this->email->setFrom(
+                $fromEmail ?? $this->config->fromEmail,
+                $fromName ?? $this->config->fromName
+            );
+            $this->email->setTo($to);
+            $this->email->setSubject($subject);
+            $this->email->setMailType('html');
+            $this->email->setMessage($htmlMessage);
+
+            if (!$this->email->send()) {
+                log_message('error', 'Email send failed: ' . $this->email->printDebugger(['headers', 'subject']));
+                return false;
+            }
+
+            return true;
+        } catch (\Exception $e) {
+            log_message('error', 'Failed to send email: ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    public function sendVerificationEmail(array $user, string $token): bool
+    {
+        $verifyLink = $this->frontendUrl('verify-email?token=' . urlencode($token));
+        $name = $user['first_name'] ?? 'there';
+
+        $message = $this->wrapTemplate(
+            'Verify your FlowTrack email',
+            "
+                <p>Hi {$name},</p>
+                <p>Thanks for signing up for FlowTrack. Please confirm your email address to activate your account.</p>
+                <p><a href='{$verifyLink}' style='background:#4F46E5;color:#fff;padding:12px 24px;text-decoration:none;border-radius:8px;display:inline-block;font-weight:600;'>Verify Email Address</a></p>
+                <p style='color:#94a3b8;font-size:14px;'>This link expires in 24 hours. If you did not create an account, you can ignore this email.</p>
+                <p style='color:#94a3b8;font-size:13px;word-break:break-all;'>{$verifyLink}</p>
+            "
+        );
+
+        return $this->sendMail($user['email'], 'Verify your FlowTrack account', $message);
+    }
+
     public function sendWelcomeEmail(array $user): bool
     {
-        try {
-            $this->email->setFrom('noreply@flowtrack.com', 'FlowTrack');
-            $this->email->setTo($user['email']);
-            $this->email->setSubject('Welcome to FlowTrack!');
+        $name = $user['first_name'] ?? 'there';
+        $loginLink = $this->frontendUrl('login');
 
-            $message = $this->getWelcomeEmailTemplate($user);
-            $this->email->setMessage($message);
+        $message = $this->wrapTemplate(
+            'Welcome to FlowTrack',
+            "
+                <p>Hi {$name},</p>
+                <p>Your email is verified and your FlowTrack account is ready.</p>
+                <p>Track time, capture screenshots, manage projects, and keep your team aligned from one platform.</p>
+                <p><a href='{$loginLink}' style='background:#4F46E5;color:#fff;padding:12px 24px;text-decoration:none;border-radius:8px;display:inline-block;font-weight:600;'>Go to Dashboard</a></p>
+            "
+        );
 
-            return $this->email->send();
-
-        } catch (\Exception $e) {
-            log_message('error', 'Failed to send welcome email: ' . $e->getMessage());
-            return false;
-        }
+        return $this->sendMail($user['email'], 'Welcome to FlowTrack!', $message);
     }
 
-    /**
-     * Send password reset email
-     */
     public function sendPasswordResetEmail(string $email, string $resetToken): bool
     {
-        try {
-            $this->email->setFrom('noreply@flowtrack.com', 'FlowTrack');
-            $this->email->setTo($email);
-            $this->email->setSubject('Reset Your Password');
+        $resetLink = $this->frontendUrl('reset-password?token=' . urlencode($resetToken));
 
-            $resetLink = base_url("reset-password?token={$resetToken}");
-            $message = $this->getPasswordResetTemplate($resetLink);
-            $this->email->setMessage($message);
-            return $this->email->send();
+        $message = $this->wrapTemplate(
+            'Reset your password',
+            "
+                <p>We received a request to reset your FlowTrack password.</p>
+                <p><a href='{$resetLink}' style='background:#4F46E5;color:#fff;padding:12px 24px;text-decoration:none;border-radius:8px;display:inline-block;font-weight:600;'>Reset Password</a></p>
+                <p style='color:#94a3b8;font-size:14px;'>This link expires in 1 hour. If you did not request a reset, please ignore this email.</p>
+                <p style='color:#94a3b8;font-size:13px;word-break:break-all;'>{$resetLink}</p>
+            "
+        );
 
-        } catch (\Exception $e) {
-            log_message('error', 'Failed to send password reset email: ' . $e->getMessage());
-            return false;
-        }
+        return $this->sendMail($email, 'Reset your FlowTrack password', $message);
     }
 
-    /**
-     * Send invoice to client
-     */
+    public function sendTeamInvitationEmail(
+        string $email,
+        string $organizationName,
+        string $role,
+        string $token,
+        ?string $inviterName = null
+    ): bool {
+        $inviteLink = $this->frontendUrl('register?invitation_token=' . urlencode($token));
+        $inviterText = $inviterName ? "<strong>{$inviterName}</strong> has" : 'You have been';
+
+        $message = $this->wrapTemplate(
+            'Team invitation',
+            "
+                <p>Hello,</p>
+                <p>{$inviterText} invited you to join <strong>{$organizationName}</strong> on FlowTrack as a <strong>{$role}</strong>.</p>
+                <p>Click below to create your account and join the team:</p>
+                <p><a href='{$inviteLink}' style='background:#4F46E5;color:#fff;padding:12px 24px;text-decoration:none;border-radius:8px;display:inline-block;font-weight:600;'>Accept Invitation</a></p>
+                <p style='color:#94a3b8;font-size:14px;'>This invitation expires in 7 days.</p>
+                <p style='color:#94a3b8;font-size:13px;word-break:break-all;'>{$inviteLink}</p>
+            "
+        );
+
+        return $this->sendMail($email, "You're invited to {$organizationName} on FlowTrack", $message);
+    }
+
     public function sendInvoiceEmail(array $invoice, string $clientEmail): bool
     {
-        try {
-            $this->email->setFrom('billing@flowtrack.com', 'FlowTrack Billing');
-            $this->email->setTo($clientEmail);
-            $this->email->setSubject("Invoice #{$invoice['invoice_number']}");
+        $message = $this->wrapTemplate(
+            "Invoice #{$invoice['invoice_number']}",
+            "
+                <p>Dear {$invoice['client_name']},</p>
+                <p>Please find your invoice details below.</p>
+                <p><strong>Total:</strong> {$invoice['currency']} {$invoice['total']}</p>
+                <p><strong>Due Date:</strong> {$invoice['due_date']}</p>
+                <p>Thank you for your business.</p>
+            "
+        );
 
-            $message = $this->getInvoiceEmailTemplate($invoice);
-            $this->email->setMessage($message);
-
-            return $this->email->send();
-
-        } catch (\Exception $e) {
-            log_message('error', 'Failed to send invoice email: ' . $e->getMessage());
-            return false;
-        }
+        return $this->sendMail(
+            $clientEmail,
+            "Invoice #{$invoice['invoice_number']}",
+            $message,
+            $this->config->fromEmail,
+            $this->config->fromName . ' Billing'
+        );
     }
 
-    /**
-     * Send weekly report email
-     */
     public function sendWeeklyReport(array $user, array $reportData): bool
     {
-        try {
-            $this->email->setFrom('reports@flowtrack.com', 'FlowTrack Reports');
-            $this->email->setTo($user['email']);
-            $this->email->setSubject('Your Weekly Productivity Report');
+        $totalHours = round(($reportData['total_seconds'] ?? 0) / 3600, 2);
+        $name = $user['first_name'] ?? 'there';
 
-            $message = $this->getWeeklyReportTemplate($user, $reportData);
-            $this->email->setMessage($message);
-
-            return $this->email->send();
-
-        } catch (\Exception $e) {
-            log_message('error', 'Failed to send weekly report: ' . $e->getMessage());
-            return false;
-        }
-    }
-
-    // Email Templates
-
-    private function getWelcomeEmailTemplate(array $user): string
-    {
-        return "
-            <html>
-            <body style='font-family: Arial, sans-serif;'>
-                <h2>Welcome to FlowTrack, {$user['first_name']}!</h2>
-                <p>We're excited to have you on board.</p>
-                <p>FlowTrack helps you track time, manage projects, and boost productivity.</p>
-                <p><a href='" . base_url() . "' style='background: #4F46E5; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;'>Get Started</a></p>
-                <p>Best regards,<br>The FlowTrack Team</p>
-            </body>
-            </html>
-        ";
-    }
-
-    private function getPasswordResetTemplate(string $resetLink): string
-    {
-        return "
-            <html>
-            <body style='font-family: Arial, sans-serif;'>
-                <h2>Reset Your Password</h2>
-                <p>Click the button below to reset your password:</p>
-                <p><a href='{$resetLink}' style='background: #4F46E5; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;'>Reset Password</a></p>
-                <p>This link will expire in 1 hour.</p>
-                <p>If you didn't request this, please ignore this email.</p>
-            </body>
-            </html>
-        ";
-    }
-
-    private function getInvoiceEmailTemplate(array $invoice): string
-    {
-        return "
-            <html>
-            <body style='font-family: Arial, sans-serif;'>
-                <h2>Invoice #{$invoice['invoice_number']}</h2>
-                <p>Dear {$invoice['client_name']},</p>
-                <p>Please find your invoice attached.</p>
-                <p><strong>Total: {$invoice['currency']} {$invoice['total']}</strong></p>
-                <p>Due Date: {$invoice['due_date']}</p>
-                <p>Thank you for your business!</p>
-            </body>
-            </html>
-        ";
-    }
-
-    private function getWeeklyReportTemplate(array $user, array $reportData): string
-    {
-        $totalHours = round($reportData['total_seconds'] / 3600, 2);
-        
-        return "
-            <html>
-            <body style='font-family: Arial, sans-serif;'>
-                <h2>Your Weekly Report</h2>
-                <p>Hi {$user['first_name']},</p>
-                <p>Here's your productivity summary for this week:</p>
+        $message = $this->wrapTemplate(
+            'Weekly productivity report',
+            "
+                <p>Hi {$name},</p>
+                <p>Here is your productivity summary for this week:</p>
                 <ul>
-                    <li><strong>Total Hours:</strong> {$totalHours} hours</li>
+                    <li><strong>Total Hours:</strong> {$totalHours}</li>
                     <li><strong>Projects:</strong> {$reportData['projects_count']}</li>
                     <li><strong>Tasks Completed:</strong> {$reportData['tasks_completed']}</li>
                 </ul>
-                <p>Keep up the great work!</p>
+            "
+        );
+
+        return $this->sendMail(
+            $user['email'],
+            'Your weekly FlowTrack report',
+            $message,
+            $this->config->fromEmail,
+            $this->config->fromName . ' Reports'
+        );
+    }
+
+    private function wrapTemplate(string $title, string $bodyHtml): string
+    {
+        return "
+            <html>
+            <body style='margin:0;padding:0;background:#0f172a;font-family:Arial,sans-serif;color:#e2e8f0;'>
+                <div style='max-width:600px;margin:0 auto;padding:32px 24px;'>
+                    <div style='background:#111827;border:1px solid #1f2937;border-radius:16px;padding:28px;'>
+                        <h2 style='margin:0 0 16px;color:#fff;font-size:24px;'>{$title}</h2>
+                        <div style='font-size:15px;line-height:1.7;color:#cbd5e1;'>{$bodyHtml}</div>
+                    </div>
+                    <p style='text-align:center;color:#64748b;font-size:12px;margin-top:20px;'>
+                        &copy; " . date('Y') . " FlowTrack. All rights reserved.
+                    </p>
+                </div>
             </body>
             </html>
         ";

@@ -34,6 +34,8 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\API\V1'], function ($r
     $routes->post('auth/logout', 'AuthController::logout');
     $routes->post('auth/forgot-password', 'AuthController::forgotPassword');
     $routes->post('auth/reset-password', 'AuthController::resetPassword');
+    $routes->post('auth/verify-email', 'AuthController::verifyEmail');
+    $routes->post('auth/resend-verification', 'AuthController::resendVerification');
 
     // Protected Authentication Routes (Auth Required)
     $routes->get('auth/me', 'AuthController::me', ['filter' => 'auth']);
