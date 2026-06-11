@@ -16,4 +16,5 @@ class BaseController extends ResourceController
 
         // CORS is handled globally by the cors filter + CorsController preflight routes.
     }
+    
 }
