@@ -58,12 +58,14 @@ From repo root:
 
 When going live, only change `config/deploy.json`, run `npm run sync:deploy`, and rebuild installers.
 
-### Vercel deploy (fixes browser CORS)
+### Vercel deploy (fixes browser CORS + ngrok HTML warning)
 
-1. Run `npm run sync:deploy` (generates `frontend/vercel.json` + `.env.production`)
-2. Set Vercel env: `VITE_API_URL=/api/v1`
-3. Push and redeploy frontend — `vercel.json` proxies `/api/*` to your backend (ngrok/production)
-4. Web requests stay same-origin (`flowtrackhani.vercel.app/api/v1/...`), no browser CORS
+1. Run `npm run sync:deploy` (generates `frontend/.env.production` + `.env.vercel.example`)
+2. Set Vercel environment variables:
+   - `VITE_API_URL=/api/v1`
+   - `BACKEND_API_URL=https://your-backend-host/.../api/v1` (ngrok or production API base)
+3. Push and redeploy frontend — `frontend/api/v1/[...path].ts` proxies API calls server-side with `ngrok-skip-browser-warning`
+4. Web requests stay same-origin (`flowtrackhani.vercel.app/api/v1/...`)
 
 Windows build notes:
 - Unsigned builds are enabled by default (`signAndEditExecutable: false`).

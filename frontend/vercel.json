@@ -1,8 +1,1 @@
-{
-  "rewrites": [
-    {
-      "source": "/api/:path*",
-      "destination": "https://8b8a-124-109-46-74.ngrok-free.app/flowtrack-backend/public/api/:path*"
-    }
-  ]
-}
+{}

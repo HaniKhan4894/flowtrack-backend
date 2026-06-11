@@ -30,17 +30,14 @@ const frontendEnv = [
 
 fs.writeFileSync(path.join(root, 'frontend', '.env.production'), frontendEnv);
 
-const vercelConfig = {
-    rewrites: [
-        {
-            source: '/api/:path*',
-            destination: `${apiProxyTarget}/api/:path*`,
-        },
-    ],
-};
+// Vercel serverless proxy reads BACKEND_API_URL (set in Vercel dashboard).
 fs.writeFileSync(
-    path.join(root, 'frontend', 'vercel.json'),
-    `${JSON.stringify(vercelConfig, null, 2)}\n`
+    path.join(root, 'frontend', '.env.vercel.example'),
+    [
+        `BACKEND_API_URL=${apiBaseUrl}`,
+        'VITE_API_URL=/api/v1',
+        '',
+    ].join('\n')
 );
 
 const desktopBuildEnv = [`FLOWTRACK_API_URL=${apiBaseUrl}`];
@@ -52,7 +49,8 @@ fs.writeFileSync(path.join(root, 'desktop', '.env.build'), desktopBuildEnv.join(
 
 console.log('Synced deploy config:');
 console.log(`  API (desktop): ${apiBaseUrl}`);
-console.log(`  API (web proxy): /api/v1 -> ${apiProxyTarget}/api/*`);
+console.log(`  API (Vercel proxy fn): /api/v1 -> ${apiBaseUrl}`);
+console.log('  Set Vercel env BACKEND_API_URL to the API URL above');
 console.log(`  Public: ${publicBaseUrl}`);
 if (frontendUrl) {
     console.log(`  Frontend: ${frontendUrl}`);
