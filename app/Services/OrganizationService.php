@@ -65,34 +65,31 @@ class OrganizationService
 
     public function createOrganization(int $ownerId, array $data): array
     {
-        $this->db->transStart();
+        $data['owner_id'] = $ownerId;
 
-        try {
-            $data['owner_id'] = $ownerId;
-            
-            $orgId = $this->organizationModel->insert($data);
+        $orgId = $this->organizationModel->insert($data);
 
-            if (!$orgId) {
-                throw new \Exception('Failed to create organization');
-            }
-
-            $ownerRoleId = $this->getRoleIdBySlug('owner') ?? $this->getRoleIdBySlug('admin');
-            // Add owner as owner/admin member
-            $this->memberModel->insert([
-                'organization_id' => $orgId,
-                'user_id' => $ownerId,
-                'role' => 'owner',
-                'role_id' => $ownerRoleId
-            ]);
-
-            $this->db->transComplete();
-
-            return $this->getOrganizationById($orgId);
-
-        } catch (\Exception $e) {
-            $this->db->transRollback();
-            throw $e;
+        if (!$orgId) {
+            $errors = $this->organizationModel->errors();
+            $message = $errors ? implode(' ', array_values($errors)) : 'Unknown validation error';
+            throw new \Exception('Failed to create organization: ' . $message);
         }
+
+        $ownerRoleId = $this->getRoleIdBySlug('owner') ?? $this->getRoleIdBySlug('admin');
+        $memberId = $this->memberModel->insert([
+            'organization_id' => $orgId,
+            'user_id' => $ownerId,
+            'role' => 'owner',
+            'role_id' => $ownerRoleId,
+        ]);
+
+        if (!$memberId) {
+            $errors = $this->memberModel->errors();
+            $message = $errors ? implode(' ', array_values($errors)) : 'Unknown validation error';
+            throw new \Exception('Failed to add organization owner: ' . $message);
+        }
+
+        return $this->getOrganizationById($orgId);
     }
 
     public function updateOrganization(int $id, array $data): bool

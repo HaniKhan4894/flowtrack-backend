@@ -28,17 +28,32 @@ class AuthService
      */
     public function register(array $data): array
     {
-        // Check if email exists
-        if ($this->userModel->where('email', $data['email'])->first()) {
+        $invitationToken = !empty($data['invitation_token']) ? trim((string) $data['invitation_token']) : null;
+
+        // Check if email exists (including soft-deleted accounts)
+        if ($this->userModel->withDeleted()->where('email', $data['email'])->first()) {
             throw new \Exception('Email already exists');
+        }
+
+        if (!$invitationToken) {
+            $pendingInvite = $this->db->table('organization_invitations')
+                ->where('email', $data['email'])
+                ->where('expires_at >=', date('Y-m-d H:i:s'))
+                ->get()
+                ->getRowArray();
+
+            if ($pendingInvite) {
+                throw new \Exception('You have a pending team invitation. Please register using the invite link sent to your email.');
+            }
         }
 
         $this->db->transStart();
 
         try {
-            $invitationToken = $data['invitation_token'] ?? null;
-            // Create user
-            $user = $this->userService->createUser($data);
+
+            $data['first_name'] = trim((string) ($data['first_name'] ?? ''));
+            $data['last_name'] = trim((string) ($data['last_name'] ?? ''));
+            unset($data['invitation_token']);
 
             if ($invitationToken) {
                 $invite = $this->db->table('organization_invitations')
@@ -47,23 +62,38 @@ class AuthService
                     ->get()
                     ->getRowArray();
 
-                if ($invite) {
-                    $this->organizationService->addMember(
-                        (int)$invite['organization_id'],
-                        (int)$user['id'],
-                        (string)$invite['role'],
-                        null
-                    );
-                    $this->db->table('organization_invitations')->where('id', $invite['id'])->delete();
-                } else {
-                    // Invalid/expired invite token should not create orphan accounts with default org
+                if (!$invite) {
                     throw new \Exception('Invitation is invalid or expired');
                 }
+
+                if (strcasecmp((string) $invite['email'], (string) $data['email']) !== 0) {
+                    throw new \Exception('This invitation was sent to a different email address');
+                }
+
+                // Invited users join as team members — never create their own organization
+                $data['role'] = (string) ($invite['role'] ?? 'member');
+                $user = $this->userService->createUser($data);
+
+                $this->organizationService->addMember(
+                    (int) $invite['organization_id'],
+                    (int) $user['id'],
+                    (string) $invite['role'],
+                    null
+                );
+                $this->db->table('organization_invitations')->where('id', $invite['id'])->delete();
             } else {
-                // Create default organization only for regular signups
+                // Self-signup creates an organization owner/admin account
+                $data['role'] = 'owner';
+                $user = $this->userService->createUser($data);
+
+                $orgName = trim(($data['first_name'] ?: 'User') . "'s Team");
                 $this->organizationService->createOrganization($user['id'], [
-                    'name' => ($data['first_name'] ?? 'User') . "'s Team",
+                    'name' => $orgName,
                 ]);
+            }
+
+            if ($this->db->transStatus() === false) {
+                throw new \Exception('Registration failed. Please try again.');
             }
 
             $this->db->transComplete();
@@ -252,7 +282,7 @@ class AuthService
             }
         }
 
-        $orgRole = $orgMember['role'] ?? 'member';
+        $orgRole = $orgMember['role'] ?? ($user['role'] ?? 'member');
         $permissionService = new PermissionService();
         $permissions = $organizationId > 0
             ? $permissionService->getUserPermissions($userId, $organizationId)
@@ -269,7 +299,8 @@ class AuthService
         }
 
         $user['organization_role'] = $orgRole;
-        $user['is_org_admin'] = in_array($orgRole, ['owner', 'admin'], true);
+        $user['is_org_admin'] = in_array($orgRole, ['owner', 'admin', 'manager'], true)
+            || in_array($user['role'] ?? '', ['owner', 'admin', 'manager'], true);
         $user['permissions'] = $permissionSlugs;
         $user['monitoring'] = $monitoring;
 

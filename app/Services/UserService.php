@@ -45,34 +45,19 @@ class UserService
      */
     public function createUser(array $data): array
     {
-        $this->db->transStart();
-
-        try {
-            // Hash password if provided
-            if (isset($data['password'])) {
-                $data['password_hash'] = password_hash($data['password'], PASSWORD_BCRYPT);
-                unset($data['password']);
-            }
-
-            // Insert user
-            $userId = $this->userModel->insert($data);
-
-            if (!$userId) {
-                throw new \Exception('Failed to create user: ' . json_encode($this->userModel->errors()));
-            }
-
-            $this->db->transComplete();
-
-            if ($this->db->transStatus() === false) {
-                throw new \Exception('Transaction failed');
-            }
-
-            return $this->getUserById($userId);
-
-        } catch (\Exception $e) {
-            $this->db->transRollback();
-            throw $e;
+        // Hash password if provided
+        if (isset($data['password'])) {
+            $data['password_hash'] = password_hash($data['password'], PASSWORD_BCRYPT);
+            unset($data['password']);
         }
+
+        $userId = $this->userModel->insert($data);
+
+        if (!$userId) {
+            throw new \Exception('Failed to create user: ' . json_encode($this->userModel->errors()));
+        }
+
+        return $this->getUserById($userId);
     }
 
     /**

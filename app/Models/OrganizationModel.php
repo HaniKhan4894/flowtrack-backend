@@ -69,7 +69,16 @@ class OrganizationModel extends Model
     protected function generateSlug(array $data)
     {
         if (!isset($data['data']['slug']) && isset($data['data']['name'])) {
-            $data['data']['slug'] = url_title($data['data']['name'], '-', true);
+            $base = url_title($data['data']['name'], '-', true) ?: 'team';
+            $slug = $base;
+            $counter = 1;
+
+            while ($this->where('slug', $slug)->first()) {
+                $slug = $base . '-' . $counter;
+                $counter++;
+            }
+
+            $data['data']['slug'] = $slug;
         }
         return $data;
     }
