@@ -27,7 +27,11 @@ export const billingService = {
         return response.data;
     },
     cancel: async (): Promise<any> => {
-        const response = await client.delete('/subscriptions/current');
+        const response = await client.post('/subscriptions/cancel');
         return response.data;
-    }
+    },
+    getPlans: async (): Promise<{ data: any[] }> => {
+        const response = await client.get('/plans');
+        return response.data;
+    },
 };

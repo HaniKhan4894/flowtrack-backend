@@ -24,7 +24,7 @@ class OrganizationSeeder extends Seeder
                 'password_hash' => password_hash('Admin@1122', PASSWORD_DEFAULT),
                 'first_name' => 'Admin',
                 'last_name' => 'User',
-                'role' => 'user',
+                'role' => 'admin',
                 'is_active' => true,
             ]);
             echo "✓ Created user: admin@flowtrack.com (Password: Admin@1122)\n";

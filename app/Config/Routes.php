@@ -39,9 +39,26 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\API\V1'], function ($r
 
     // Protected Authentication Routes (Auth Required)
     $routes->get('auth/me', 'AuthController::me', ['filter' => 'auth']);
+    $routes->post('auth/change-password', 'AuthController::changePassword', ['filter' => 'auth']);
+
+    // Location lookups (authenticated)
+    $routes->get('locations/countries', 'LocationController::countries', ['filter' => 'auth']);
+    $routes->get('locations/states', 'LocationController::states', ['filter' => 'auth']);
+    $routes->get('locations/cities', 'LocationController::cities', ['filter' => 'auth']);
+    $routes->get('locations/timezones', 'LocationController::timezones', ['filter' => 'auth']);
+
+    // Super-admin routes
+    $routes->group('admin', ['filter' => ['auth', 'superadmin']], function ($routes) {
+        $routes->get('organizations', 'AdminController::organizations');
+        $routes->get('subscriptions/stats', 'AdminController::subscriptionStats');
+        $routes->get('activity/overview', 'AdminController::activityOverview');
+        $routes->get('organizations/(:num)', 'AdminController::organizationDetail/$1');
+    });
 
     // User Routes (Protected)
     $routes->get('users', 'UserController::index', ['filter' => 'auth']);
+    $routes->post('users/(:num)/avatar', 'UserController::uploadAvatar/$1', ['filter' => 'auth']);
+    $routes->get('users/(:num)/avatar', 'UserController::avatar/$1', ['filter' => 'auth']);
     $routes->get('users/(:num)', 'UserController::show/$1', ['filter' => 'auth']);
     $routes->post('users', 'UserController::create', ['filter' => ['auth', 'admin']]);
     $routes->put('users/(:num)', 'UserController::update/$1', ['filter' => 'auth']);

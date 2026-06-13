@@ -77,6 +77,66 @@ class UserService
         return $this->userModel->update($id, $data);
     }
 
+    public function uploadAvatar(int $userId, $file): array
+    {
+        if (!$file || !$file->isValid()) {
+            throw new \Exception('Invalid file upload');
+        }
+
+        $allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+        if (!in_array($file->getMimeType(), $allowed, true)) {
+            throw new \Exception('Only JPEG, PNG, WebP or GIF images are allowed');
+        }
+
+        if ($file->getSize() > 5 * 1024 * 1024) {
+            throw new \Exception('Image must be 5MB or smaller');
+        }
+
+        $uploadDir = WRITEPATH . 'uploads/avatars/' . $userId . '/';
+        if (!is_dir($uploadDir)) {
+            mkdir($uploadDir, 0755, true);
+        }
+
+        $extension = $file->guessExtension() ?: 'jpg';
+        $filename = 'avatar_' . time() . '.' . $extension;
+        $file->move($uploadDir, $filename);
+
+        $relativePath = 'avatars/' . $userId . '/' . $filename;
+        $this->userModel->update($userId, ['avatar_url' => $relativePath]);
+
+        $user = $this->getUserById($userId);
+        unset($user['password_hash']);
+
+        return $user;
+    }
+
+    public function getAvatarPath(int $userId): ?string
+    {
+        $user = $this->getUserById($userId);
+        if (!$user || empty($user['avatar_url'])) {
+            return null;
+        }
+
+        $path = WRITEPATH . 'uploads/' . $user['avatar_url'];
+        return file_exists($path) ? $path : null;
+    }
+
+    public function changePassword(int $userId, string $currentPassword, string $newPassword): void
+    {
+        $user = $this->getUserById($userId);
+        if (!$user || !password_verify($currentPassword, $user['password_hash'])) {
+            throw new \Exception('Current password is incorrect');
+        }
+
+        if (strlen($newPassword) < 6) {
+            throw new \Exception('New password must be at least 6 characters');
+        }
+
+        $this->userModel->update($userId, [
+            'password_hash' => password_hash($newPassword, PASSWORD_BCRYPT),
+        ]);
+    }
+
     /**
      * Delete user (soft delete)
      */

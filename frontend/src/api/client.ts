@@ -90,7 +90,13 @@ client.interceptors.response.use(
         }
 
         if (error.response?.status === 403 && error.response.data?.error_code === 'PLAN_LIMIT_REACHED') {
-            // Plan limit handling hook
+            const message = error.response.data?.message || 'Plan limit reached. Please upgrade your subscription.';
+            if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('plan-limit-reached', { detail: { message } }));
+                if (window.location.pathname !== '/billing' && confirm(`${message}\n\nOpen billing to upgrade?`)) {
+                    window.location.href = '/billing';
+                }
+            }
         }
 
         return Promise.reject(error);

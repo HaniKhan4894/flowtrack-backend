@@ -136,6 +136,57 @@ class UserController extends ResourceController
     }
 
     /**
+     * POST /api/v1/users/{id}/avatar
+     */
+    public function uploadAvatar($id = null)
+    {
+        try {
+            $authUserId = (int)($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
+            if (!$authUserId || (int)$id !== $authUserId) {
+                return $this->fail('You can only update your own avatar', 403);
+            }
+
+            $file = $this->request->getFile('avatar');
+            $user = $this->userService->uploadAvatar((int)$id, $file);
+
+            return $this->respond([
+                'success' => true,
+                'message' => 'Avatar uploaded successfully',
+                'data' => $user,
+            ]);
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+
+    /**
+     * GET /api/v1/users/{id}/avatar
+     */
+    public function avatar($id = null)
+    {
+        try {
+            $authUserId = (int)($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
+            if (!$authUserId) {
+                return $this->fail('Unauthorized', 401);
+            }
+
+            $path = $this->userService->getAvatarPath((int)$id);
+            if (!$path) {
+                return $this->fail('Avatar not found', 404);
+            }
+
+            $mimeType = mime_content_type($path);
+
+            return $this->response
+                ->setHeader('Content-Type', $mimeType)
+                ->setHeader('Cache-Control', 'private, max-age=3600')
+                ->setBody(file_get_contents($path));
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+
+    /**
      * DELETE /api/v1/users/{id}
      */
     public function delete($id = null)

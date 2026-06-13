@@ -5,12 +5,14 @@ namespace App\Services;
 use App\Models\ActivityLogModel;
 use App\Models\ProductivityRuleModel;
 use App\Models\TimeEntryModel;
+use App\Services\TimezoneService;
 
 class ActivityLogService
 {
     protected $activityLogModel;
     protected $productivityRuleModel;
     protected $timeEntryModel;
+    protected $timezoneService;
     protected $db;
 
     public function __construct()
@@ -18,6 +20,7 @@ class ActivityLogService
         $this->activityLogModel = new ActivityLogModel();
         $this->productivityRuleModel = new ProductivityRuleModel();
         $this->timeEntryModel = new TimeEntryModel();
+        $this->timezoneService = new TimezoneService();
         $this->db = \Config\Database::connect();
     }
 
@@ -107,12 +110,17 @@ class ActivityLogService
             $builder->where('category', $filters['category']);
         }
 
-        if (isset($filters['start_date'])) {
-            $builder->where('logged_at >=', $filters['start_date']);
-        }
-
-        if (isset($filters['end_date'])) {
-            $builder->where('logged_at <=', $filters['end_date']);
+        if (isset($filters['start_date']) || isset($filters['end_date'])) {
+            $orgId = (int) ($filters['organization_id'] ?? 0);
+            $phpTz = $this->timezoneService->getOrgTimezone($orgId);
+            if (isset($filters['start_date'])) {
+                $startUtc = $this->timezoneService->dateRangeUtc($filters['start_date'], $filters['start_date'], $phpTz)[0];
+                $builder->where('logged_at >=', $startUtc);
+            }
+            if (isset($filters['end_date'])) {
+                $endUtc = $this->timezoneService->dateRangeUtc($filters['end_date'], $filters['end_date'], $phpTz)[1];
+                $builder->where('logged_at <=', $endUtc);
+            }
         }
 
         $page = $filters['page'] ?? 1;
@@ -121,6 +129,8 @@ class ActivityLogService
 
         $total = $builder->countAllResults(false);
         $logs = $builder->orderBy('logged_at', 'DESC')->limit($perPage, $offset)->get()->getResultArray();
+        $phpTz = $this->timezoneService->getOrgTimezone((int) ($filters['organization_id'] ?? 0));
+        $logs = $this->timezoneService->applyToCollection($logs, $phpTz, ['logged_at', 'created_at']);
 
         return [
             'data' => $logs,

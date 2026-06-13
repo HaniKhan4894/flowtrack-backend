@@ -19,6 +19,25 @@ interface TimerState {
     resetLocal: () => void;
 }
 
+let resyncInterval: ReturnType<typeof setInterval> | null = null;
+
+function startResync() {
+    if (resyncInterval) return;
+    resyncInterval = setInterval(() => {
+        const { isRunning } = useTimerStore.getState();
+        if (isRunning) {
+            useTimerStore.getState().loadActive().catch(() => undefined);
+        }
+    }, 60_000);
+}
+
+function stopResync() {
+    if (resyncInterval) {
+        clearInterval(resyncInterval);
+        resyncInterval = null;
+    }
+}
+
 export const useTimerStore = create<TimerState>((set, get) => ({
     activeEntry: null,
     elapsed: 0,
@@ -28,16 +47,17 @@ export const useTimerStore = create<TimerState>((set, get) => ({
     start: async (projectId, description) => {
         try {
             const response = await timeService.startTimer({ project_id: projectId, description });
+            const entry = response.data;
             set({
-                activeEntry: response.data,
+                activeEntry: entry,
                 isRunning: true,
                 isPaused: false,
-                elapsed: 0
+                elapsed: entry.elapsed_seconds ?? 0,
             });
-            // Start monitoring — pass current auth token so Electron has it immediately
             const token = useAuthStore.getState().accessToken ?? undefined;
             monitoringService.startMonitoring(response.data.id, token);
             syncElectronAuthToken(token ?? localStorage.getItem('access_token'));
+            startResync();
         } catch (error) {
             console.error('Failed to start timer', error);
             throw error;
@@ -52,16 +72,17 @@ export const useTimerStore = create<TimerState>((set, get) => ({
             await timeService.stopTimer(activeEntry.id);
             set({ activeEntry: null, isRunning: false, isPaused: false, elapsed: 0 });
             monitoringService.stopMonitoring();
+            stopResync();
         } catch (error) {
             console.error('Failed to stop timer', error);
             throw error;
         }
     },
 
-    /** Local reset only — used during logout (do not await API). */
     resetLocal: () => {
         set({ activeEntry: null, isRunning: false, isPaused: false, elapsed: 0 });
         monitoringService.stopMonitoring();
+        stopResync();
     },
 
     pause: async () => {
@@ -69,8 +90,12 @@ export const useTimerStore = create<TimerState>((set, get) => ({
         if (!activeEntry) return;
 
         try {
-            await timeService.pauseTimer(activeEntry.id);
-            set({ isPaused: true });
+            const response = await timeService.pauseTimer(activeEntry.id);
+            set({
+                isPaused: true,
+                activeEntry: response.data,
+                elapsed: response.data.elapsed_seconds ?? get().elapsed,
+            });
             monitoringService.pauseMonitoring();
         } catch (error) {
             console.error('Failed to pause timer', error);
@@ -82,8 +107,12 @@ export const useTimerStore = create<TimerState>((set, get) => ({
         if (!activeEntry) return;
 
         try {
-            await timeService.resumeTimer(activeEntry.id);
-            set({ isPaused: false });
+            const response = await timeService.resumeTimer(activeEntry.id);
+            set({
+                isPaused: false,
+                activeEntry: response.data,
+                elapsed: response.data.elapsed_seconds ?? get().elapsed,
+            });
             const token = useAuthStore.getState().accessToken ?? undefined;
             monitoringService.resumeMonitoring(token);
         } catch (error) {
@@ -96,32 +125,23 @@ export const useTimerStore = create<TimerState>((set, get) => ({
             const response = await timeService.getActive();
             if (response.data && response.data.started_at) {
                 const isPaused = !!response.data.paused_at;
-                const startTime = new Date(response.data.started_at).getTime();
-                const now = new Date().getTime();
-
-                // If paused, we show duration until pause start
-                // If not, we show total net duration
-                let elapsed = 0;
-                if (isPaused) {
-                    const pausedAt = new Date(response.data.paused_at).getTime();
-                    elapsed = Math.floor((pausedAt - startTime) / 1000) - (response.data.paused_duration_seconds || 0);
-                } else {
-                    elapsed = Math.floor((now - startTime) / 1000) - (response.data.paused_duration_seconds || 0);
-                }
+                const elapsed = response.data.elapsed_seconds ?? 0;
 
                 set({
                     activeEntry: response.data,
                     isRunning: true,
-                    isPaused: isPaused,
-                    elapsed: elapsed > 0 ? elapsed : 0
+                    isPaused,
+                    elapsed: elapsed > 0 ? elapsed : 0,
                 });
+
                 if (!isPaused) {
-                    // Resume monitoring only when timer is running
                     const token = useAuthStore.getState().accessToken ?? undefined;
                     monitoringService.startMonitoring(response.data.id, token);
+                    startResync();
                 }
             } else {
                 set({ activeEntry: null, isRunning: false, isPaused: false });
+                stopResync();
             }
         } catch (error) {
             console.error('Failed to load active timer', error);
@@ -136,13 +156,11 @@ export const useTimerStore = create<TimerState>((set, get) => ({
     },
 }));
 
-// Global ticker
 if (typeof window !== 'undefined') {
     setInterval(() => {
         useTimerStore.getState().tick();
     }, 1000);
 
-    // Desktop: auto pause/resume timer when system is locked/unlocked
     if ('electronAPI' in window && window.electronAPI?.onSystemLockChange) {
         window.electronAPI.onSystemLockChange((locked: boolean) => {
             const store = useTimerStore.getState();

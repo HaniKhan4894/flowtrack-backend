@@ -36,6 +36,7 @@ class ActivityLogController extends ResourceController
 
             $filters = [
                 'user_id' => $targetUserId,
+                'organization_id' => $organizationId,
                 'time_entry_id' => $this->request->getGet('time_entry_id'),
                 'category' => $this->request->getGet('category'),
                 'start_date' => $this->request->getGet('start_date'),

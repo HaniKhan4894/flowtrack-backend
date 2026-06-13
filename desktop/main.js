@@ -9,9 +9,10 @@ const { API_BASE_URL, FRONTEND_URL, getApiHeaders } = require('./config');
 // ──────────────────────────────────────────────
 //  Config
 // ──────────────────────────────────────────────
-const SCREENSHOT_MIN_MS = 1 * 60 * 1000; // 1 minute minimum
-const SCREENSHOT_MAX_MS = 4 * 60 * 1000; // 4 minutes maximum
+const SCREENSHOT_MIN_MS = 1 * 60 * 1000; // fallback minimum
+const SCREENSHOT_MAX_MS = 4 * 60 * 1000; // fallback maximum
 const ACTIVITY_SYNC_INTERVAL_MS = 60 * 1000;  // 1 minute
+let planScreenshotIntervalMinutes = 0;
 
 // ──────────────────────────────────────────────
 //  State
@@ -389,15 +390,25 @@ async function uploadScreenshot(jpegBuffer, activityLevel, screenIndex = 0, retr
  * Returns a random delay between SCREENSHOT_MIN_MS and SCREENSHOT_MAX_MS
  */
 function randomScreenshotDelay() {
+    const minutes = Number(planScreenshotIntervalMinutes) || 0;
+    if (minutes > 0) {
+        const baseMs = minutes * 60 * 1000;
+        const jitter = Math.floor(baseMs * 0.1);
+        return baseMs + Math.floor(Math.random() * jitter);
+    }
     return Math.floor(Math.random() * (SCREENSHOT_MAX_MS - SCREENSHOT_MIN_MS + 1)) + SCREENSHOT_MIN_MS;
 }
 
 /**
- * Recursive random-interval screenshot scheduler.
- * Each screenshot schedules the NEXT one with a fresh random delay.
+ * Recursive screenshot scheduler honoring plan interval when provided.
  */
 async function scheduleNextScreenshot() {
-    if (!currentSession.isTracking || isPaused) return; // stopped or paused
+    if (!currentSession.isTracking || isPaused) return;
+
+    if (Number(planScreenshotIntervalMinutes) === 0) {
+        console.log('[Screenshot] Disabled for current plan (interval=0)');
+        return;
+    }
 
     const delay = randomScreenshotDelay();
     const delayMin = (delay / 60000).toFixed(1);
@@ -592,7 +603,7 @@ async function syncActivityToBackend(retried = false) {
 function startMonitoringLoop() {
     if (screenshotTimer || isPaused) return; // already running or paused
 
-    console.log('[Monitoring] Starting screenshot capture loop (random 1-4 min)...');
+    console.log(`[Monitoring] Starting screenshot loop (interval: ${planScreenshotIntervalMinutes || 'random 1-4'} min)...`);
 
     // Kick off the first random screenshot
     scheduleNextScreenshot();
@@ -656,10 +667,11 @@ ipcMain.handle('logout-session', () => {
 });
 
 // Called from renderer when a timer starts
-ipcMain.handle('start-tracking', (_event, { timeEntryId, token }) => {
+ipcMain.handle('start-tracking', (_event, { timeEntryId, token, screenshotIntervalMinutes }) => {
     currentSession.token = token || currentSession.token;
     currentSession.timeEntryId = timeEntryId;
     currentSession.isTracking = true;
+    planScreenshotIntervalMinutes = Number(screenshotIntervalMinutes) || 0;
     isPaused = false;
     pausedByLock = false;
     currentSession.activityBuffer = { mouseMovements: 0, clicks: 0, keystrokes: 0 };

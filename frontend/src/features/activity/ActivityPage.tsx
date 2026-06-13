@@ -80,6 +80,16 @@ const ActivityPage = () => {
     (log.url || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const formattedSelectedDate = useMemo(() => {
+    const d = new Date(`${selectedDate}T12:00:00`);
+    return d.toLocaleDateString(undefined, {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+  }, [selectedDate]);
+
   const productivityReport = useMemo(() => {
     const categories: Record<string, number> = { productive: 0, unproductive: 0, uncategorized: 0 };
     let keystrokes = 0;
@@ -297,10 +307,13 @@ const ActivityPage = () => {
             className="overlay-panel p-6"
           >
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                <BarChart3 className="text-secondary-400" size={20} />
-                Productivity Snapshot
-              </h3>
+              <div>
+                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                  <BarChart3 className="text-secondary-400" size={20} />
+                  Productivity Snapshot
+                </h3>
+                <p className="text-xs text-slate-500 mt-1">{formattedSelectedDate}</p>
+              </div>
               <span className="text-xs font-bold text-primary-400 bg-primary-500/10 px-3 py-1 rounded-full">
                 {productivityReport.focusScore}% focus
               </span>
@@ -317,7 +330,9 @@ const ActivityPage = () => {
                 return (
                   <div key={key} className="space-y-1.5">
                     <div className="flex justify-between text-xs">
-                      <span className="text-slate-400 font-semibold uppercase tracking-wider">{label}</span>
+                      <span className="text-slate-400 font-semibold uppercase tracking-wider">
+                        {label} <span className="text-slate-600 normal-case">({selectedDate})</span>
+                      </span>
                       <span className="text-white font-bold">{formatDuration(seconds)} ({pct}%)</span>
                     </div>
                     <div className="h-2 bg-white/5 rounded-full overflow-hidden">

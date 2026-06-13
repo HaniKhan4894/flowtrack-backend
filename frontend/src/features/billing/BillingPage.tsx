@@ -51,12 +51,14 @@ const BillingPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const [currentSub, setCurrentSub] = useState<Subscription | null>(null);
+  const [apiPlans, setApiPlans] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [subscribingId, setSubscribingId] = useState<number | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
 
   useEffect(() => {
     fetchSubscription();
+    billingService.getPlans().then((r) => setApiPlans(r.data ?? [])).catch(() => setApiPlans([]));
   }, []);
 
   useEffect(() => {
@@ -114,6 +116,20 @@ const BillingPage = () => {
     );
   }
 
+  const displayPlans = apiPlans.length
+    ? apiPlans.map((p: any) => ({
+        id: p.id,
+        name: p.name,
+        price: p.price_monthly === 0 ? '$0' : `$${p.price_monthly}`,
+        period: p.pricing_model === 'per_user' ? '/base + per user' : '/month',
+        description: p.description || '',
+        features: (p.features ?? []).slice(0, 5).map((f: any) => `${f.feature_key}: ${f.feature_value}`),
+        buttonText: p.slug === 'free' ? 'Current Plan' : `Upgrade to ${p.name}`,
+        variant: p.is_popular ? 'primary' : 'secondary',
+        popular: !!p.is_popular,
+      }))
+    : plans;
+
   return (
     <div className="space-y-12 pb-12">
       <AnimatePresence>
@@ -150,7 +166,7 @@ const BillingPage = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {plans.map((plan, i) => {
+        {displayPlans.map((plan, i) => {
           const isCurrent = currentSub?.plan_id === plan.id;
           return (
             <motion.div
@@ -186,7 +202,7 @@ const BillingPage = () => {
               </div>
 
               <div className="space-y-4 mb-10 flex-1">
-                {plan.features.map(feature => (
+                {plan.features.map((feature: string) => (
                   <div key={feature} className="flex items-start gap-3 text-sm text-slate-300">
                     <div className="mt-0.5 p-0.5 rounded-full bg-primary-500/10 text-primary-400">
                       <Check size={12} />

@@ -40,6 +40,7 @@ class Filters extends BaseFilters
         'admin'         => \App\Filters\AdminFilter::class,
         'permission'    => \App\Filters\PermissionFilter::class,
         'planFeature'   => \App\Filters\PlanFeatureFilter::class,
+        'superadmin'    => \App\Filters\SuperAdminFilter::class,
     ];
 
     /**

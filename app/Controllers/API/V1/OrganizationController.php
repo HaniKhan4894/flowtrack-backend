@@ -135,7 +135,7 @@ class OrganizationController extends ResourceController
             $rules = [
                 'user_id' => 'permit_empty|is_natural_no_zero',
                 'email' => 'permit_empty|valid_email',
-                'role' => 'permit_empty|in_list[admin,manager,member]',
+                'role' => 'permit_empty|in_list[admin,manager,team_lead,member]',
             ];
 
             if (!$this->validate($rules)) {
@@ -189,6 +189,15 @@ class OrganizationController extends ResourceController
             ]);
 
         } catch (\Exception $e) {
+            if (str_contains($e->getMessage(), 'limit reached')) {
+                return $this->respond([
+                    'status' => 403,
+                    'error' => 403,
+                    'error_code' => 'PLAN_LIMIT_REACHED',
+                    'message' => $e->getMessage(),
+                    'messages' => ['error' => $e->getMessage()],
+                ], 403);
+            }
             return $this->fail($e->getMessage(), 400);
         }
     }

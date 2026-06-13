@@ -3,6 +3,8 @@
 namespace App\Services;
 
 use App\Models\ProjectModel;
+use App\Models\PlanModel;
+use App\Models\SubscriptionModel;
 
 class ProjectService
 {
@@ -22,6 +24,19 @@ class ProjectService
 
     public function createProject(int $organizationId, array $data): array
     {
+        $subscriptionModel = new SubscriptionModel();
+        $planModel = new PlanModel();
+        $subscription = $subscriptionModel->getActiveSubscription($organizationId);
+        if ($subscription && !empty($subscription['plan_id'])) {
+            $maxProjects = $planModel->getFeatureValue((int) $subscription['plan_id'], 'max_projects');
+            if ($maxProjects !== null && $maxProjects !== '' && $maxProjects !== 'unlimited') {
+                $current = $this->projectModel->where('organization_id', $organizationId)->countAllResults();
+                if ($current >= (int) $maxProjects) {
+                    throw new \Exception('Project limit reached for your plan. Please upgrade to create more projects.');
+                }
+            }
+        }
+
         $data['organization_id'] = $organizationId;
 
         $projectId = $this->projectModel->insert($data);

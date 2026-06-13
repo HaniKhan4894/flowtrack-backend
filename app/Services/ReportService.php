@@ -5,12 +5,14 @@ namespace App\Services;
 use App\Models\TimeEntryModel;
 use App\Models\ProjectModel;
 use App\Models\UserModel;
+use App\Services\TimezoneService;
 
 class ReportService
 {
     protected $timeEntryModel;
     protected $projectModel;
     protected $userModel;
+    protected $timezoneService;
     protected $db;
 
     public function __construct()
@@ -18,27 +20,45 @@ class ReportService
         $this->timeEntryModel = new TimeEntryModel();
         $this->projectModel = new ProjectModel();
         $this->userModel = new UserModel();
+        $this->timezoneService = new TimezoneService();
         $this->db = \Config\Database::connect();
     }
 
-    private function normalizeStartDate(string $date): string
+    private function getOrgTimezone(array $filters): string
     {
+        $orgId = (int) ($filters['organization_id'] ?? 0);
+
+        return $this->timezoneService->getOrgTimezone($orgId);
+    }
+
+    private function normalizeStartDate(string $date, ?string $phpTz = null): string
+    {
+        if ($phpTz && preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+            return $this->timezoneService->dateRangeUtc($date, $date, $phpTz)[0];
+        }
+
         return strlen($date) <= 10 ? $date . ' 00:00:00' : $date;
     }
 
-    private function normalizeEndDate(string $date): string
+    private function normalizeEndDate(string $date, ?string $phpTz = null): string
     {
+        if ($phpTz && preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+            return $this->timezoneService->dateRangeUtc($date, $date, $phpTz)[1];
+        }
+
         return strlen($date) <= 10 ? $date . ' 23:59:59' : $date;
     }
 
     private function applyDateFilters($builder, array $filters, string $column = 'started_at'): void
     {
+        $phpTz = $this->getOrgTimezone($filters);
+
         if (isset($filters['start_date'])) {
-            $builder->where($column . ' >=', $this->normalizeStartDate($filters['start_date']));
+            $builder->where($column . ' >=', $this->normalizeStartDate($filters['start_date'], $phpTz));
         }
 
         if (isset($filters['end_date'])) {
-            $builder->where($column . ' <=', $this->normalizeEndDate($filters['end_date']));
+            $builder->where($column . ' <=', $this->normalizeEndDate($filters['end_date'], $phpTz));
         }
     }
 
@@ -205,16 +225,21 @@ class ReportService
             ? 1
             : $this->db->table('organization_members')->where('organization_id', $organizationId)->countAllResults();
 
-        // Weekly breakdown (last 7 days)
+        // Weekly breakdown (last 7 days in org timezone)
+        $phpTz = $this->timezoneService->getOrgTimezone($organizationId);
         $weeklyStats = [];
         for ($i = 6; $i >= 0; $i--) {
-            $date = date('Y-m-d', strtotime("-$i days"));
-            $dayName = date('D', strtotime($date));
+            $localDate = (new \DateTime('now', new \DateTimeZone($phpTz)))
+                ->modify("-{$i} days")
+                ->format('Y-m-d');
+            $dayName = (new \DateTime($localDate, new \DateTimeZone($phpTz)))->format('D');
+            [$startUtc, $endUtc] = $this->timezoneService->dateRangeUtc($localDate, $phpTz);
 
             $weeklyBuilder = $this->db->table('time_entries')
                 ->select('COALESCE(SUM(duration_seconds), 0) as total_seconds', false)
                 ->where('organization_id', $organizationId)
-                ->where('DATE(started_at)', $date);
+                ->where('started_at >=', $startUtc)
+                ->where('started_at <=', $endUtc);
             if ($userId !== null) {
                 $weeklyBuilder->where('user_id', $userId);
             }
@@ -251,13 +276,19 @@ class ReportService
             ->get()
             ->getResultArray();
 
-        $formattedActivity = array_map(function($act) {
+        $formattedActivity = array_map(function ($act) use ($phpTz) {
             $start = strtotime($act['started_at']);
             $diff = time() - $start;
-            
-            if ($diff < 60) $time = 'just now';
-            elseif ($diff < 3600) $time = floor($diff / 60) . 'm ago';
-            else $time = floor($diff / 3600) . 'h ago';
+
+            if ($diff < 60) {
+                $time = 'just now';
+            } elseif ($diff < 3600) {
+                $time = floor($diff / 60) . 'm ago';
+            } else {
+                $time = floor($diff / 3600) . 'h ago';
+            }
+
+            $localStarted = $this->timezoneService->toOrgLocal($act['started_at'], $phpTz);
 
             return [
                 'id' => $act['id'],
@@ -265,13 +296,14 @@ class ReportService
                 'action' => 'worked on',
                 'target' => $act['project_name'] ?? 'General Task',
                 'time' => $time,
-                'duration' => $this->formatDuration($act['duration_seconds'] ?? 0)
+                'started_at_local' => $localStarted,
+                'duration' => $this->formatDuration($act['duration_seconds'] ?? 0),
             ];
         }, $recentActivity);
 
         return [
             'total_hours' => $timeSummary['total_hours'],
-            'productivity_score' => 85, // Placeholder logic
+            'productivity_score' => $this->calculateProductivityScore($organizationId, $userId),
             'team_count' => $teamCount,
             'active_timers' => $activeTimers,
             'recent_activity' => $formattedActivity,
@@ -296,8 +328,8 @@ class ReportService
             ')
             ->join('users', 'users.id = time_entries.user_id')
             ->where('time_entries.organization_id', $organizationId)
-            ->where('time_entries.started_at >=', $this->normalizeStartDate($startDate))
-            ->where('time_entries.started_at <=', $this->normalizeEndDate($endDate))
+            ->where('time_entries.started_at >=', $this->normalizeStartDate($startDate, $this->timezoneService->getOrgTimezone($organizationId)))
+            ->where('time_entries.started_at <=', $this->normalizeEndDate($endDate, $this->timezoneService->getOrgTimezone($organizationId)))
             ->groupBy('users.id')
             ->orderBy('total_seconds', 'DESC')
             ->limit(10)
@@ -318,5 +350,41 @@ class ReportService
         $m = floor(($seconds % 3600) / 60);
         $s = $seconds % 60;
         return sprintf('%02d:%02d:%02d', $h, $m, $s);
+    }
+
+    private function calculateProductivityScore(int $organizationId, ?int $userId = null): int
+    {
+        $phpTz = $this->timezoneService->getOrgTimezone($organizationId);
+        $weekStart = (new \DateTime('now', new \DateTimeZone($phpTz)))
+            ->modify('-6 days')
+            ->format('Y-m-d');
+        $today = (new \DateTime('now', new \DateTimeZone($phpTz)))->format('Y-m-d');
+        [$startUtc] = $this->timezoneService->dayRangeUtc($weekStart, $phpTz);
+        [, $endUtc] = $this->timezoneService->dayRangeUtc($today, $phpTz);
+
+        $builder = $this->db->table('activity_logs')
+            ->select('category, SUM(CASE WHEN activity_logs.duration_seconds > 0 THEN activity_logs.duration_seconds ELSE 60 END) as total_seconds', false)
+            ->join('time_entries', 'time_entries.id = activity_logs.time_entry_id')
+            ->where('time_entries.organization_id', $organizationId)
+            ->where('activity_logs.logged_at >=', $startUtc)
+            ->where('activity_logs.logged_at <=', $endUtc);
+
+        if ($userId !== null) {
+            $builder->where('activity_logs.user_id', $userId);
+        }
+
+        $rows = $builder->groupBy('category')->get()->getResultArray();
+        $productive = 0;
+        $total = 0;
+
+        foreach ($rows as $row) {
+            $seconds = (int) ($row['total_seconds'] ?? 0);
+            $total += $seconds;
+            if (($row['category'] ?? '') === 'productive') {
+                $productive += $seconds;
+            }
+        }
+
+        return $total > 0 ? (int) round(($productive / $total) * 100) : 0;
     }
 }

@@ -9,8 +9,10 @@ import {
   ArrowUpRight,
   Calendar
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { reportService, type TimeSummary, type ProjectBreakdown, type TeamLeaderboard } from '../../api/reportService';
+import { useAuthStore } from '../../store/authStore';
+import { canViewMemberTracking } from '../../utils/access';
 
 function buildRangeParams(filterRange: 'today' | '7days' | '30days' | 'month', startDate: string, endDate: string) {
   const params: Record<string, string> = {};
@@ -46,6 +48,8 @@ function buildRangeParams(filterRange: 'today' | '7days' | '30days' | 'month', s
 
 const AnalyticsPage = () => {
   const navigate = useNavigate();
+  const { user } = useAuthStore();
+  const canTrackMembers = canViewMemberTracking(user);
   const [summary, setSummary] = useState<TimeSummary | null>(null);
   const [projects, setProjects] = useState<ProjectBreakdown[]>([]);
   const [leaderboard, setLeaderboard] = useState<TeamLeaderboard[]>([]);
@@ -268,7 +272,7 @@ const AnalyticsPage = () => {
               <p className="text-slate-500 text-sm">Loading…</p>
             ) : leaderboard.length > 0 ? (
               leaderboard.map((member, i) => (
-                <div key={member.id} className="flex items-center gap-4 group cursor-default">
+                <div key={member.id} className="flex items-center gap-4 group">
                   <div className="relative">
                     <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center text-primary-400 font-bold text-sm border border-white/5">
                       {member.first_name[0]}{member.last_name[0]}
@@ -283,8 +287,13 @@ const AnalyticsPage = () => {
                     </h4>
                     <span className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">{member.entries_count} logs</span>
                   </div>
-                  <div className="text-right">
+                  <div className="text-right flex items-center gap-3">
                     <p className="text-sm font-bold text-primary-400 font-mono">{member.total_hours}h</p>
+                    {canTrackMembers && (
+                      <Link to={`/team/member/${member.id}`} className="text-[10px] font-bold text-primary-400 hover:underline uppercase">
+                        Track
+                      </Link>
+                    )}
                   </div>
                 </div>
               ))

@@ -57,4 +57,13 @@ export const authService = {
         const response = await client.post('/auth/resend-verification', { email });
         return response.data;
     },
+
+    changePassword: async (currentPassword: string, newPassword: string, confirmPassword: string): Promise<{ success: boolean; message: string }> => {
+        const response = await client.post('/auth/change-password', {
+            current_password: currentPassword,
+            new_password: newPassword,
+            confirm_password: confirmPassword,
+        });
+        return response.data;
+    },
 };

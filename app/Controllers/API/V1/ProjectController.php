@@ -111,6 +111,15 @@ class ProjectController extends ResourceController
             ]);
 
         } catch (\Exception $e) {
+            if (str_contains($e->getMessage(), 'limit reached')) {
+                return $this->respond([
+                    'status' => 403,
+                    'error' => 403,
+                    'error_code' => 'PLAN_LIMIT_REACHED',
+                    'message' => $e->getMessage(),
+                    'messages' => ['error' => $e->getMessage()],
+                ], 403);
+            }
             return $this->fail($e->getMessage(), 400);
         }
     }

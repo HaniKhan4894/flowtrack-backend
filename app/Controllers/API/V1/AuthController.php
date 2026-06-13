@@ -249,4 +249,38 @@ class AuthController extends ResourceController
             return $this->fail($e->getMessage(), 400);
         }
     }
+
+    /**
+     * POST /api/v1/auth/change-password
+     */
+    public function changePassword()
+    {
+        try {
+            $userId = (int)($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
+            if (!$userId) {
+                return $this->fail('Unauthorized', 401);
+            }
+
+            $data = $this->request->getJSON(true);
+            $rules = [
+                'current_password' => 'required',
+                'new_password' => 'required|min_length[6]',
+                'confirm_password' => 'required|matches[new_password]',
+            ];
+
+            if (!$this->validate($rules)) {
+                return $this->failValidationErrors($this->validator->getErrors());
+            }
+
+            $userService = new \App\Services\UserService();
+            $userService->changePassword($userId, $data['current_password'], $data['new_password']);
+
+            return $this->respond([
+                'success' => true,
+                'message' => 'Password changed successfully',
+            ]);
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
 }

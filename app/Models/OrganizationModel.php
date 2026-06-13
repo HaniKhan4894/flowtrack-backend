@@ -19,6 +19,11 @@ class OrganizationModel extends Model
         'owner_id',
         'settings',
         'billing_email',
+        'country_id',
+        'state_id',
+        'city_id',
+        'timezone_id',
+        'php_timezone',
         'is_active',
         'trial_ends_at'
     ];

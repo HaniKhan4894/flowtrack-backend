@@ -1,4 +1,5 @@
 import client from './client';
+import { useAuthStore } from '../store/authStore';
 
 // Detect if running inside Electron desktop app
 const isElectron = typeof window !== 'undefined' && 'electronAPI' in window;
@@ -11,7 +12,6 @@ let monitoringInterval: ReturnType<typeof setInterval> | null = null;
 let screenshotInterval: ReturnType<typeof setInterval> | null = null;
 let cleanupScreenshotListener: (() => void) | null = null;
 let activeTimeEntryId: number | null = null;
-let queuedScreenshots: Array<{ timeEntryId: number; activityLevel: number; blob: Blob }> = [];
 let webActivityHandlersAttached = false;
 let onWebMouseMove: (() => void) | null = null;
 let onWebClick: (() => void) | null = null;
@@ -49,73 +49,13 @@ function untrackWebActivity() {
     onWebKeyDown = null;
 }
 
-function calcWebActivityLevel() {
-    const total = webActivityData.mouseMovements + (webActivityData.clicks * 5) + (webActivityData.keystrokes * 3);
-    return Math.min(100, Math.round(total / 10));
-}
-
 function resetWebActivity() {
     webActivityData.mouseMovements = 0;
     webActivityData.clicks = 0;
     webActivityData.keystrokes = 0;
 }
 
-// ─────────────────────────────────────────────────────────
-//  Web screenshot fallback (canvas placeholder)
-// ─────────────────────────────────────────────────────────
-async function captureWebScreenshot(timeEntryId: number, activityLevel: number) {
-    const canvas = document.createElement('canvas');
-    canvas.width = 1280;
-    canvas.height = 720;
-    const ctx = canvas.getContext('2d');
-    if (ctx) {
-        ctx.fillStyle = '#0f172a';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = '#3b82f6';
-        ctx.font = 'bold 24px Arial';
-        ctx.fillText('FlowTrack – Web Session Capture', 60, 120);
-        ctx.fillStyle = '#94a3b8';
-        ctx.font = '18px Arial';
-        ctx.fillText(new Date().toLocaleString(), 60, 160);
-        ctx.fillText(`Activity: ${activityLevel}%`, 60, 200);
-    }
-    const blob = await new Promise<Blob>((resolve) =>
-        canvas.toBlob((b) => resolve(b!), 'image/jpeg', 0.85)
-    );
-    const formData = new FormData();
-    formData.append('time_entry_id', timeEntryId.toString());
-    formData.append('activity_level', activityLevel.toString());
-    formData.append('is_blurred', '0');
-    formData.append('screenshot', blob, 'screenshot.jpg');
-    try {
-        await client.post('/screenshots/upload', formData, {
-            headers: { 'Content-Type': 'multipart/form-data' }
-        });
-    } catch {
-        queuedScreenshots.push({ timeEntryId, activityLevel, blob });
-    }
-}
-
-async function flushQueuedScreenshots() {
-    if (!queuedScreenshots.length) return;
-    const queue = [...queuedScreenshots];
-    queuedScreenshots = [];
-
-    for (const item of queue) {
-        const formData = new FormData();
-        formData.append('time_entry_id', item.timeEntryId.toString());
-        formData.append('activity_level', item.activityLevel.toString());
-        formData.append('is_blurred', '0');
-        formData.append('screenshot', item.blob, 'queued_screenshot.jpg');
-        try {
-            await client.post('/screenshots/upload', formData, {
-                headers: { 'Content-Type': 'multipart/form-data' }
-            });
-        } catch {
-            queuedScreenshots.push(item);
-        }
-    }
-}
+// Web screenshot capture disabled — desktop-only
 
 // ─────────────────────────────────────────────────────────
 //  Electron activity forwarding
@@ -151,10 +91,11 @@ export const monitoringService = {
 
     startMonitoring: (timeEntryId: number, token?: string) => {
         activeTimeEntryId = timeEntryId;
+        const screenshotInterval = Number(useAuthStore.getState().user?.features?.screenshot_interval ?? 0);
+
         if (isElectron && electronAPI) {
-            // ── DESKTOP MODE ─────────────────────────────────────
             console.log('[Desktop] Starting tracking via Electron IPC');
-            electronAPI.startTracking(timeEntryId, token ?? null);
+            electronAPI.startTracking(timeEntryId, token ?? null, screenshotInterval);
             startElectronActivityForwarding();
 
             // Listen for events pushed from the main process
@@ -166,15 +107,13 @@ export const monitoringService = {
                 monitoringService.stopMonitoring();
             };
         } else {
-            // ── WEB FALLBACK MODE ─────────────────────────────────
-            console.log('[Web] Starting monitoring via browser APIs');
+            // Web: activity sync only — screenshots are desktop-only
+            console.log('[Web] View-only mode — no screenshot capture');
             if (monitoringInterval) return;
             trackWebActivity();
 
-            // Activity sync every 1 minute
             monitoringInterval = setInterval(async () => {
                 try {
-                    await flushQueuedScreenshots();
                     await client.post('/activity-logs/sync', {
                         time_entry_id: activeTimeEntryId ?? timeEntryId,
                         app_name: 'FlowTrack Web',
@@ -183,20 +122,13 @@ export const monitoringService = {
                         mouse_clicks: webActivityData.clicks,
                         keyboard_strokes: webActivityData.keystrokes,
                         duration_seconds: 60,
-                        logged_at: new Date().toISOString()
+                        logged_at: new Date().toISOString(),
                     });
                     resetWebActivity();
                 } catch (err) {
                     console.error('[Web] Activity sync error:', err);
                 }
             }, 60_000);
-
-            // Screenshot every 3 minutes
-            screenshotInterval = setInterval(async () => {
-                const level = calcWebActivityLevel();
-                await captureWebScreenshot(activeTimeEntryId ?? timeEntryId, level);
-                resetWebActivity();
-            }, 180_000);
 
             return () => {
                 monitoringService.stopMonitoring();

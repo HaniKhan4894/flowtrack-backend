@@ -87,6 +87,21 @@ const DashboardPage = () => {
 
   return (
     <div className="space-y-8">
+      {user?.plan?.slug === 'free' && user?.features?.screenshots === false && (
+        <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 flex items-center justify-between gap-4">
+          <p className="text-sm text-amber-200">
+            Screenshots are not available on the Free plan — time tracking only.
+          </p>
+          <button
+            type="button"
+            onClick={() => navigate('/billing')}
+            className="text-xs font-bold text-amber-300 hover:underline whitespace-nowrap"
+          >
+            Upgrade plan
+          </button>
+        </div>
+      )}
+
       <div className={`grid grid-cols-1 md:grid-cols-2 ${adminView ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} gap-6`}>
         {statCards.map((card) => (
           <StatCard key={card.label} {...card} />

@@ -5,6 +5,9 @@ namespace App\Services;
 use App\Models\UserModel;
 use App\Libraries\JWTHandler;
 use App\Services\EmailVerificationService;
+use App\Models\SubscriptionModel;
+use App\Models\PlanModel;
+use App\Models\OrganizationModel;
 
 class AuthService
 {
@@ -303,8 +306,71 @@ class AuthService
             || in_array($user['role'] ?? '', ['owner', 'admin', 'manager'], true);
         $user['permissions'] = $permissionSlugs;
         $user['monitoring'] = $monitoring;
+        $user['is_super_admin'] = !empty($user['is_super_admin']);
+
+        if ($organizationId > 0) {
+            $org = (new OrganizationModel())->find($organizationId);
+            if ($org) {
+                $user['organization'] = [
+                    'id' => (int) $org['id'],
+                    'name' => $org['name'],
+                    'php_timezone' => $org['php_timezone'] ?? 'UTC',
+                    'country_id' => $org['country_id'] ?? null,
+                    'state_id' => $org['state_id'] ?? null,
+                    'city_id' => $org['city_id'] ?? null,
+                    'timezone_id' => $org['timezone_id'] ?? null,
+                ];
+
+                if (!empty($org['timezone_id'])) {
+                    $tz = (new LocationService())->getTimezoneById((int) $org['timezone_id']);
+                    if ($tz) {
+                        $user['organization']['timezone'] = [
+                            'id' => (int) $tz['id'],
+                            'timezone' => $tz['timezone'],
+                            'php_timezone' => $tz['php_timezone'],
+                        ];
+                    }
+                }
+            }
+
+            $subscription = (new SubscriptionModel())->getActiveSubscription($organizationId);
+            if ($subscription && !empty($subscription['plan'])) {
+                $plan = $subscription['plan'];
+                $features = $this->resolvePlanFeatures((int) $plan['id']);
+                $user['plan'] = [
+                    'id' => (int) $plan['id'],
+                    'name' => $plan['name'],
+                    'slug' => $plan['slug'],
+                ];
+                $user['features'] = $features;
+            }
+        }
 
         return $user;
+    }
+
+    private function resolvePlanFeatures(int $planId): array
+    {
+        $rows = $this->db->table('plan_features')
+            ->where('plan_id', $planId)
+            ->get()
+            ->getResultArray();
+
+        $features = [];
+        foreach ($rows as $row) {
+            $value = $row['feature_value'];
+            if ($value === 'true') {
+                $features[$row['feature_key']] = true;
+            } elseif ($value === 'false') {
+                $features[$row['feature_key']] = false;
+            } elseif (is_numeric($value)) {
+                $features[$row['feature_key']] = (int) $value;
+            } else {
+                $features[$row['feature_key']] = $value;
+            }
+        }
+
+        return $features;
     }
 
     private function sanitizeUser(array $user): array

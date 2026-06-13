@@ -5,6 +5,9 @@ namespace App\Services;
 use App\Models\OrganizationModel;
 use App\Models\OrganizationMemberModel;
 use App\Models\UserModel;
+use App\Models\PlanModel;
+use App\Models\SubscriptionModel;
+use App\Services\LocationService;
 
 class OrganizationService
 {
@@ -13,6 +16,7 @@ class OrganizationService
     protected $invitationModel;
     protected $userModel;
     protected $emailService;
+    protected $locationService;
     protected $db;
 
     public function __construct()
@@ -22,6 +26,7 @@ class OrganizationService
         $this->invitationModel = new \App\Models\InvitationModel();
         $this->userModel = new UserModel();
         $this->emailService = new EmailService();
+        $this->locationService = new LocationService();
         $this->db = \Config\Database::connect();
     }
 
@@ -60,12 +65,108 @@ class OrganizationService
 
     public function getOrganizationById(int $id): ?array
     {
-        return $this->organizationModel->find($id);
+        $org = $this->organizationModel->find($id);
+        if (!$org) {
+            return null;
+        }
+
+        return $this->enrichOrganization($org);
+    }
+
+    private function enrichOrganization(array $org): array
+    {
+        if (!empty($org['country_id'])) {
+            $country = $this->db->table('countries')->select('id, name')->where('id', $org['country_id'])->get()->getRowArray();
+            $org['country'] = $country;
+        }
+        if (!empty($org['state_id'])) {
+            $state = $this->db->table('states')->select('id, name')->where('id', $org['state_id'])->get()->getRowArray();
+            $org['state'] = $state;
+        }
+        if (!empty($org['city_id'])) {
+            $city = $this->db->table('cities')->select('id, name')->where('id', $org['city_id'])->get()->getRowArray();
+            $org['city'] = $city;
+        }
+        if (!empty($org['timezone_id'])) {
+            $tz = $this->locationService->getTimezoneById((int) $org['timezone_id']);
+            $org['timezone'] = $tz ? [
+                'id' => (int) $tz['id'],
+                'timezone' => $tz['timezone'],
+                'php_timezone' => $tz['php_timezone'],
+                'zone_group' => $tz['zone_group'],
+            ] : null;
+        }
+
+        return $org;
+    }
+
+    private function resolveTimezoneFields(array $data): array
+    {
+        if (!empty($data['timezone_id'])) {
+            $tz = $this->locationService->getTimezoneById((int) $data['timezone_id']);
+            if (!$tz) {
+                throw new \Exception('Invalid timezone selected');
+            }
+            $data['php_timezone'] = $tz['php_timezone'];
+        } elseif (empty($data['php_timezone'])) {
+            $data['php_timezone'] = 'UTC';
+        }
+
+        return $data;
+    }
+
+    private function assignFreePlan(int $organizationId): void
+    {
+        $planModel = new PlanModel();
+        $subscriptionModel = new SubscriptionModel();
+        $freePlan = $planModel->getPlanBySlug('free');
+        if (!$freePlan) {
+            return;
+        }
+
+        $existing = $subscriptionModel->getActiveSubscription($organizationId);
+        if ($existing) {
+            return;
+        }
+
+        $subscriptionModel->insert([
+            'organization_id' => $organizationId,
+            'plan_id' => $freePlan['id'],
+            'user_count' => 1,
+            'amount' => 0,
+            'billing_cycle' => 'monthly',
+            'status' => 'active',
+            'current_period_start' => date('Y-m-d H:i:s'),
+            'current_period_end' => date('Y-m-d H:i:s', strtotime('+10 years')),
+        ]);
+    }
+
+    private function checkUserLimit(int $organizationId): void
+    {
+        $subscriptionModel = new SubscriptionModel();
+        $subscription = $subscriptionModel->getActiveSubscription($organizationId);
+        if (!$subscription || empty($subscription['plan_id'])) {
+            return;
+        }
+
+        $planModel = new PlanModel();
+        $maxUsers = $planModel->getFeatureValue((int) $subscription['plan_id'], 'max_users');
+        if ($maxUsers === null || $maxUsers === '' || $maxUsers === 'unlimited') {
+            return;
+        }
+
+        $current = $this->memberModel->where('organization_id', $organizationId)->countAllResults();
+        $pendingInvites = $this->invitationModel->where('organization_id', $organizationId)->countAllResults();
+
+        if (($current + $pendingInvites) >= (int) $maxUsers) {
+            throw new \Exception('User limit reached for your plan. Please upgrade to add more members.');
+        }
     }
 
     public function createOrganization(int $ownerId, array $data): array
     {
         $data['owner_id'] = $ownerId;
+        $data = $this->resolveTimezoneFields($data);
 
         $orgId = $this->organizationModel->insert($data);
 
@@ -89,12 +190,19 @@ class OrganizationService
             throw new \Exception('Failed to add organization owner: ' . $message);
         }
 
-        return $this->getOrganizationById($orgId);
+        $this->assignFreePlan((int) $orgId);
+
+        return $this->getOrganizationById((int) $orgId);
     }
 
     public function updateOrganization(int $id, array $data): bool
     {
         unset($data['id'], $data['uuid'], $data['owner_id']);
+
+        if (isset($data['timezone_id']) || isset($data['php_timezone'])) {
+            $data = $this->resolveTimezoneFields($data);
+        }
+
         return $this->organizationModel->update($id, $data);
     }
 
@@ -107,6 +215,8 @@ class OrganizationService
         ?int $inviterUserId = null
     ): array
     {
+        $this->checkUserLimit($organizationId);
+
         // Case 1: Add existing user by ID or Email
         if (!$userId && $email) {
             $user = $this->userModel->where('email', $email)->first();

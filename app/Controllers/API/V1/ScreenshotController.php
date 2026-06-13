@@ -35,6 +35,7 @@ class ScreenshotController extends ResourceController
 
             $filters = [
                 'user_id' => $targetUserId,
+                'organization_id' => $organizationId,
                 'time_entry_id' => $this->request->getGet('time_entry_id'),
                 'start_date' => $this->request->getGet('start_date'),
                 'end_date' => $this->request->getGet('end_date'),

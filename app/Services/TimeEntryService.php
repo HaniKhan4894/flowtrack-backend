@@ -4,18 +4,55 @@ namespace App\Services;
 
 use App\Models\TimeEntryModel;
 use App\Models\ProjectModel;
+use App\Services\TimezoneService;
 
 class TimeEntryService
 {
     protected $timeEntryModel;
     protected $projectModel;
+    protected $timezoneService;
     protected $db;
 
     public function __construct()
     {
         $this->timeEntryModel = new TimeEntryModel();
         $this->projectModel = new ProjectModel();
+        $this->timezoneService = new TimezoneService();
         $this->db = \Config\Database::connect();
+    }
+
+    private function computeElapsedSeconds(array $entry): int
+    {
+        $startedAt = strtotime((string) $entry['started_at']);
+        if (!$startedAt) {
+            return 0;
+        }
+
+        $pausedDuration = (int) ($entry['paused_duration_seconds'] ?? 0);
+        $now = !empty($entry['paused_at']) ? strtotime((string) $entry['paused_at']) : time();
+        $elapsed = $now - $startedAt - $pausedDuration;
+
+        return max(0, $elapsed);
+    }
+
+    private function formatActiveTimer(array $entry): array
+    {
+        $orgId = (int) ($entry['organization_id'] ?? 0);
+        $phpTz = $this->timezoneService->getOrgTimezone($orgId);
+
+        $entry['elapsed_seconds'] = $this->computeElapsedSeconds($entry);
+        $entry['server_now'] = gmdate('Y-m-d\TH:i:s\Z');
+        $entry = $this->timezoneService->applyToRecord($entry, $phpTz, ['started_at', 'ended_at', 'paused_at']);
+
+        return $entry;
+    }
+
+    private function formatTimeEntry(array $entry): array
+    {
+        $orgId = (int) ($entry['organization_id'] ?? 0);
+        $phpTz = $this->timezoneService->getOrgTimezone($orgId);
+
+        return $this->timezoneService->applyToRecord($entry, $phpTz, ['started_at', 'ended_at', 'paused_at']);
     }
 
     /**
@@ -60,7 +97,7 @@ class TimeEntryService
 
             $this->db->transComplete();
 
-            return $this->timeEntryModel->find($entryId);
+            return $this->formatTimeEntry($this->timeEntryModel->find($entryId));
 
         } catch (\Exception $e) {
             $this->db->transRollback();
@@ -107,7 +144,7 @@ class TimeEntryService
             'duration_seconds' => $netDuration > 0 ? $netDuration : 0
         ]);
 
-        return $this->timeEntryModel->find($entryId);
+        return $this->formatTimeEntry($this->timeEntryModel->find($entryId));
     }
 
     /**
@@ -129,7 +166,7 @@ class TimeEntryService
             'paused_at' => date('Y-m-d H:i:s')
         ]);
 
-        return $this->timeEntryModel->find($entryId);
+        return $this->formatActiveTimer($this->timeEntryModel->find($entryId));
     }
 
     /**
@@ -156,7 +193,7 @@ class TimeEntryService
             'paused_duration_seconds' => $totalPaused
         ]);
 
-        return $this->timeEntryModel->find($entryId);
+        return $this->formatActiveTimer($this->timeEntryModel->find($entryId));
     }
 
     /**
@@ -164,10 +201,12 @@ class TimeEntryService
      */
     public function getActiveTimer(int $userId): ?array
     {
-        return $this->timeEntryModel
+        $entry = $this->timeEntryModel
             ->where('user_id', $userId)
             ->where('ended_at', null)
             ->first();
+
+        return $entry ? $this->formatActiveTimer($entry) : null;
     }
 
     /**
@@ -186,16 +225,21 @@ class TimeEntryService
             $builder->where('organization_id', $filters['organization_id']);
         }
 
-        if (isset($filters['project_id'])) {
-            $builder->where('project_id', $filters['project_id']);
-        }
+        $orgId = (int) ($filters['organization_id'] ?? 0);
+        $phpTz = $this->timezoneService->getOrgTimezone($orgId);
 
         if (isset($filters['start_date'])) {
-            $builder->where('started_at >=', $filters['start_date']);
+            $startUtc = $this->timezoneService->dateRangeUtc($filters['start_date'], $filters['start_date'], $phpTz)[0];
+            $builder->where('started_at >=', $startUtc);
         }
 
         if (isset($filters['end_date'])) {
-            $builder->where('started_at <=', $filters['end_date']);
+            $endUtc = $this->timezoneService->dateRangeUtc($filters['end_date'], $filters['end_date'], $phpTz)[1];
+            $builder->where('started_at <=', $endUtc);
+        }
+
+        if (isset($filters['project_id'])) {
+            $builder->where('project_id', $filters['project_id']);
         }
 
         if (isset($filters['is_billable'])) {
@@ -209,6 +253,7 @@ class TimeEntryService
 
         $total = $builder->countAllResults(false);
         $entries = $builder->orderBy('started_at', 'DESC')->limit($perPage, $offset)->get()->getResultArray();
+        $entries = array_map(fn ($e) => $this->formatTimeEntry($e), $entries);
 
         return [
             'data' => $entries,
@@ -254,7 +299,7 @@ class TimeEntryService
 
             $this->db->transComplete();
 
-            return $this->timeEntryModel->find($entryId);
+            return $this->formatTimeEntry($this->timeEntryModel->find($entryId));
 
         } catch (\Exception $e) {
             $this->db->transRollback();

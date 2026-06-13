@@ -3,16 +3,19 @@
 namespace App\Services;
 
 use App\Models\ScreenshotModel;
+use App\Services\TimezoneService;
 
 class ScreenshotService
 {
     protected $screenshotModel;
+    protected $timezoneService;
     protected $db;
     protected $uploadPath = WRITEPATH . 'uploads/screenshots/';
 
     public function __construct()
     {
         $this->screenshotModel = new ScreenshotModel();
+        $this->timezoneService = new TimezoneService();
         $this->db = \Config\Database::connect();
         
         // Create upload directory if not exists
@@ -117,12 +120,17 @@ class ScreenshotService
             $builder->where('time_entry_id', $filters['time_entry_id']);
         }
 
-        if (isset($filters['start_date'])) {
-            $builder->where('captured_at >=', $filters['start_date']);
-        }
-
-        if (isset($filters['end_date'])) {
-            $builder->where('captured_at <=', $filters['end_date']);
+        if (isset($filters['start_date']) || isset($filters['end_date'])) {
+            $orgId = (int) ($filters['organization_id'] ?? 0);
+            $phpTz = $this->timezoneService->getOrgTimezone($orgId);
+            if (isset($filters['start_date'])) {
+                $startUtc = $this->timezoneService->dateRangeUtc($filters['start_date'], $filters['start_date'], $phpTz)[0];
+                $builder->where('captured_at >=', $startUtc);
+            }
+            if (isset($filters['end_date'])) {
+                $endUtc = $this->timezoneService->dateRangeUtc($filters['end_date'], $filters['end_date'], $phpTz)[1];
+                $builder->where('captured_at <=', $endUtc);
+            }
         }
 
         $builder->where('deleted_by_user', false);
@@ -133,6 +141,8 @@ class ScreenshotService
 
         $total = $builder->countAllResults(false);
         $screenshots = $builder->orderBy('captured_at', 'DESC')->limit($perPage, $offset)->get()->getResultArray();
+        $phpTz = $this->timezoneService->getOrgTimezone((int) ($filters['organization_id'] ?? 0));
+        $screenshots = $this->timezoneService->applyToCollection($screenshots, $phpTz, ['captured_at', 'created_at']);
 
         return [
             'data' => $screenshots,

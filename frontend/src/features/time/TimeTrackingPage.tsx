@@ -1,12 +1,16 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Calendar, Filter, Download, MoreHorizontal, Clock, Tag, Briefcase, Loader2, Search } from 'lucide-react';
+import { Calendar, Filter, Download, MoreHorizontal, Clock, Tag, Briefcase, Loader2, Search, AlertCircle } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { timeService } from '../../api/timeService';
 import { projectService, type Project } from '../../api/projectService';
 import { reportService } from '../../api/reportService';
+import { useAuthStore } from '../../store/authStore';
+import { isOrgAdmin } from '../../utils/access';
 import type { TimeEntry } from '../../types';
 
 const TimeTrackingPage = () => {
+  const { user } = useAuthStore();
   const [entries, setEntries] = useState<TimeEntry[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,14 +63,17 @@ const TimeTrackingPage = () => {
   };
 
   const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr);
+    const date = new Date(dateStr.includes('T') ? dateStr : dateStr.replace(' ', 'T') + 'Z');
     return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(date);
   };
 
   const formatTime = (dateStr: string) => {
-    const date = new Date(dateStr);
+    const date = new Date(dateStr.includes('T') ? dateStr : dateStr.replace(' ', 'T') + 'Z');
     return new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }).format(date);
   };
+
+  const displayStart = (entry: TimeEntry) => entry.started_at_local ?? entry.started_at;
+  const displayEnd = (entry: TimeEntry) => entry.ended_at_local ?? entry.ended_at;
 
   const getProjectName = (id?: number) => {
     if (!id) return 'General';
@@ -79,6 +86,22 @@ const TimeTrackingPage = () => {
 
   return (
     <div className="space-y-8">
+      {projects.length === 0 && (
+        <div className="flex items-center gap-3 bg-amber-500/10 border border-amber-500/20 rounded-2xl px-5 py-4">
+          <AlertCircle size={18} className="text-amber-400 shrink-0" />
+          <p className="text-sm text-amber-200">
+            {isOrgAdmin(user)
+              ? 'No projects yet. Create your first project to start tracking time.'
+              : 'No projects available. Ask your admin to create a project.'}
+          </p>
+          {isOrgAdmin(user) && (
+            <Link to="/projects" className="text-xs font-bold text-amber-300 hover:underline whitespace-nowrap ml-auto">
+              Create project
+            </Link>
+          )}
+        </div>
+      )}
+
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-white mb-2">Time Logs</h1>
@@ -211,7 +234,7 @@ const TimeTrackingPage = () => {
                       </div>
                       <div className="flex items-center gap-1">
                         <Calendar size={14} />
-                        {entry.started_at ? formatDate(entry.started_at) : 'No Date'}
+                        {entry.started_at ? formatDate(displayStart(entry)) : 'No Date'}
                       </div>
                     </div>
                   </div>
@@ -221,8 +244,8 @@ const TimeTrackingPage = () => {
                   <div className="text-right">
                     <p className="text-sm font-bold text-white font-mono">{formatDuration(entry.duration_seconds || 0)}</p>
                     <p className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">
-                       {entry.started_at ? formatTime(entry.started_at) : ''} - 
-                       {entry.ended_at ? formatTime(entry.ended_at) : 'Now'}
+                       {entry.started_at ? formatTime(displayStart(entry)) : ''} - 
+                       {entry.ended_at ? formatTime(displayEnd(entry)!) : 'Now'}
                     </p>
                   </div>
                   <button className="p-2 text-slate-600 hover:text-white hover:bg-white/5 rounded-lg transition-all opacity-0 group-hover:opacity-100">

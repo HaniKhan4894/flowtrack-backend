@@ -33,10 +33,21 @@ class TimeEntryController extends ResourceController
                 return $authError;
             }
 
+            $currentUserId = (int)($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
+            $organizationId = (int)($this->request->getGet('organization_id') ?? $this->request->getServer('FLOWTRACK_ORGANIZATION_ID') ?? 0);
+            if (!$currentUserId || !$organizationId) {
+                return $this->fail('Unauthorized', 401);
+            }
+
+            $permissionService = new \App\Services\PermissionService();
+            $canViewTeam = $permissionService->userHasPermission($currentUserId, $organizationId, 'time.view_team');
+            $requestedUserId = $this->request->getGet('user_id');
+            $targetUserId = $canViewTeam && $requestedUserId ? (int) $requestedUserId : $currentUserId;
+
             // Get query parameters
             $filters = [
-                'user_id' => (int)($this->request->getServer('FLOWTRACK_USER_ID') ?? 0),
-                'organization_id' => $this->request->getGet('organization_id') ?? (int)($this->request->getServer('FLOWTRACK_ORGANIZATION_ID') ?? 0),
+                'user_id' => $targetUserId,
+                'organization_id' => $organizationId,
                 'project_id' => $this->request->getGet('project_id'),
                 'start_date' => $this->request->getGet('start_date'),
                 'end_date' => $this->request->getGet('end_date'),

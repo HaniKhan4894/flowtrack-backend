@@ -137,6 +137,11 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
             <h2 className="text-xl font-semibold text-white">
               {navItems.find(item => item.path === location.pathname)?.label || 'Dashboard'}
             </h2>
+            {user?.plan && (
+              <span className="text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-primary-500/10 text-primary-400 border border-primary-500/20">
+                {user.plan.name}
+              </span>
+            )}
             <div className="h-4 w-px bg-white/10"></div>
             <span className="text-sm">Welcome back, {user?.first_name || 'Agent'}</span>
           </div>

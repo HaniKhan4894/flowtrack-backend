@@ -7,6 +7,7 @@ import { monitoringService } from '../../api/monitoringService';
 import { TeamMemberFilter } from '../../components/TeamMemberFilter';
 import { useAuthStore } from '../../store/authStore';
 import { isOrgAdmin } from '../../utils/access';
+import { Link } from 'react-router-dom';
 
 const ScreenshotsPage = () => {
   const { user } = useAuthStore();
@@ -108,6 +109,13 @@ const ScreenshotsPage = () => {
 
   return (
     <div className="space-y-8">
+      {user?.features?.screenshots === false && (
+        <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 flex items-center justify-between gap-4">
+          <p className="text-sm text-amber-200">Screenshots are not available on the Free plan — time tracking only.</p>
+          <Link to="/billing" className="text-xs font-bold text-amber-300 hover:underline whitespace-nowrap">Upgrade plan</Link>
+        </div>
+      )}
+
       {/* Toast */}
       {captureToast && (
         <div className="fixed top-6 right-6 z-50 bg-surface-700 border border-white/10 text-white px-5 py-3 rounded-2xl shadow-2xl text-sm font-semibold">

@@ -4,7 +4,8 @@ import { UserPlus, Mail, Shield, Trash2, Search, Filter, X, Loader2, CheckCircle
 import { teamService, type TeamMember } from '../../api/teamService';
 import { Button, Input } from '../../components/ui';
 import { useAuthStore } from '../../store/authStore';
-import { isOrgAdmin } from '../../utils/access';
+import { canManageTeam, canViewMemberTracking } from '../../utils/access';
+import { Link } from 'react-router-dom';
 import type { MemberMonitoringSettings } from '../../types';
 
 const TeamPage = () => {
@@ -23,7 +24,7 @@ const TeamPage = () => {
   const [monitorSettings, setMonitorSettings] = useState<MemberMonitoringSettings | null>(null);
   const [savingMonitoring, setSavingMonitoring] = useState(false);
   const { user } = useAuthStore();
-  const canManageTeam = isOrgAdmin(user);
+  const canManageTeamAccess = canManageTeam(user);
 
   useEffect(() => {
     fetchMembers();
@@ -140,13 +141,15 @@ const TeamPage = () => {
           <h1 className="text-3xl font-bold text-white mb-2">Team Management</h1>
           <p className="text-slate-400">Manage your organization's members and their roles.</p>
         </div>
+        {canManageTeamAccess && (
         <Button onClick={() => setShowInviteModal(true)} className="w-fit">
           <UserPlus size={20} className="mr-2" />
           Invite Member
         </Button>
+        )}
       </div>
 
-      {!canManageTeam && (
+      {!canManageTeamAccess && (
         <div className="glass-card border border-amber-500/20 text-amber-300 p-4 rounded-2xl text-sm">
           You need administrator access to manage team monitoring settings.
         </div>
@@ -175,6 +178,8 @@ const TeamPage = () => {
             <option value="all">All Roles</option>
             <option value="owner">Owner</option>
             <option value="admin">Administrator</option>
+            <option value="manager">Manager</option>
+            <option value="team_lead">Team Lead</option>
             <option value="member">Member</option>
           </select>
           <Filter className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" size={18} />
@@ -234,7 +239,15 @@ const TeamPage = () => {
                 </td>
                 <td className="px-6 py-4 text-right">
                   <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                    {canManageTeam && (
+                    {canViewMemberTracking(user) && (
+                      <Link
+                        to={`/team/member/${member.user_id ?? member.id}`}
+                        className="px-2 py-1 text-xs font-bold text-primary-400 hover:bg-primary-500/10 rounded-lg"
+                      >
+                        Tracking
+                      </Link>
+                    )}
+                    {canManageTeamAccess && (
                       <button
                         className="p-2 rounded-lg text-slate-500 hover:text-primary-400 hover:bg-primary-500/10 transition-all"
                         title="Monitoring settings"
@@ -243,7 +256,7 @@ const TeamPage = () => {
                         <SlidersHorizontal size={18} />
                       </button>
                     )}
-                    {canManageTeam && (
+                    {canManageTeamAccess && (
                   <button 
                     className="p-2 rounded-lg text-slate-500 hover:text-accent hover:bg-accent/10 transition-all"
                     onClick={async () => {
@@ -317,16 +330,16 @@ const TeamPage = () => {
                     <Shield size={16} /> Assign Role
                   </label>
                   <div className="grid grid-cols-2 gap-4">
-                    {['member', 'admin'].map(role => (
+                    {['member', 'team_lead', 'manager', 'admin'].map((role) => (
                       <button
                         key={role}
                         type="button"
                         onClick={() => setInviteRole(role)}
                         className={`p-4 rounded-2xl border transition-all text-left ${inviteRole === role ? 'bg-primary-500/10 border-primary-500/50 text-white' : 'bg-white/5 border-white/10 text-slate-400 hover:bg-white/10'}`}
                       >
-                        <div className="font-bold capitalize mb-1">{role}</div>
+                        <div className="font-bold capitalize mb-1">{role.replace('_', ' ')}</div>
                         <div className="text-[10px] uppercase opacity-60">
-                           {role === 'admin' ? 'Manage Projects & Team' : 'Track time & view tasks'}
+                          {role === 'admin' ? 'Full org access' : role === 'manager' ? 'Team management' : role === 'team_lead' ? 'Team visibility' : 'Own tracking only'}
                         </div>
                       </button>
                     ))}
