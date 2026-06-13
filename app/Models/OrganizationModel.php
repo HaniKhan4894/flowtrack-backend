@@ -24,6 +24,7 @@ class OrganizationModel extends Model
         'city_id',
         'timezone_id',
         'php_timezone',
+        'currency',
         'is_active',
         'trial_ends_at'
     ];

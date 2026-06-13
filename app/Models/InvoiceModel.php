@@ -13,7 +13,7 @@ class InvoiceModel extends Model
     protected $useSoftDeletes   = false;
     protected $protectFields    = true;
     protected $allowedFields    = [
-        'uuid', 'organization_id', 'invoice_number', 'client_name', 'client_email',
+        'uuid', 'organization_id', 'invoice_number', 'client_name', 'client_email', 'client_id',
         'project_id', 'status', 'subtotal', 'tax_rate', 'tax_amount', 'total',
         'currency', 'issue_date', 'due_date', 'paid_at', 'notes', 'created_by'
     ];

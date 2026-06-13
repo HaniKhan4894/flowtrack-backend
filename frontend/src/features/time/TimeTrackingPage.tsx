@@ -1,19 +1,36 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Calendar, Filter, Download, MoreHorizontal, Clock, Tag, Briefcase, Loader2, Search, AlertCircle } from 'lucide-react';
+import { Calendar, Filter, Download, MoreHorizontal, Clock, Tag, Briefcase, Loader2, Search, AlertCircle, Plus, Pencil, Trash2, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { timeService } from '../../api/timeService';
 import { projectService, type Project } from '../../api/projectService';
+import { taskService } from '../../api/taskService';
 import { reportService } from '../../api/reportService';
 import { useAuthStore } from '../../store/authStore';
 import { isOrgAdmin } from '../../utils/access';
-import type { TimeEntry } from '../../types';
+import { getApiErrorMessage } from '../../utils/apiError';
+import { Button, Input } from '../../components/ui';
+import type { Task, TimeEntry } from '../../types';
 
 const TimeTrackingPage = () => {
   const { user } = useAuthStore();
   const [entries, setEntries] = useState<TimeEntry[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showManualModal, setShowManualModal] = useState(false);
+  const [editingEntry, setEditingEntry] = useState<TimeEntry | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [entryForm, setEntryForm] = useState({
+    project_id: '',
+    task_id: '',
+    description: '',
+    started_at: '',
+    ended_at: '',
+    is_billable: true,
+  });
+  const [menuEntryId, setMenuEntryId] = useState<number | null>(null);
   
   // Filters
   const [selectedProjectId, setSelectedProjectId] = useState<string>('all');
@@ -54,6 +71,86 @@ const TimeTrackingPage = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadTasksForProject = async (projectId: string) => {
+    if (!projectId) {
+      setTasks([]);
+      return;
+    }
+    try {
+      const resp = await taskService.getAll({ project_id: Number(projectId), is_active: 1 });
+      setTasks(resp.data ?? []);
+    } catch {
+      setTasks([]);
+    }
+  };
+
+  const openManualModal = (entry?: TimeEntry) => {
+    setEditingEntry(entry ?? null);
+    setFormError(null);
+    if (entry) {
+      const start = entry.started_at_local ?? entry.started_at;
+      const end = entry.ended_at_local ?? entry.ended_at;
+      setEntryForm({
+        project_id: entry.project_id ? String(entry.project_id) : '',
+        task_id: entry.task_id ? String(entry.task_id) : '',
+        description: entry.description ?? '',
+        started_at: start ? start.replace(' ', 'T').slice(0, 16) : '',
+        ended_at: end ? end.replace(' ', 'T').slice(0, 16) : '',
+        is_billable: !!(entry as any).is_billable,
+      });
+      if (entry.project_id) loadTasksForProject(String(entry.project_id));
+    } else {
+      setEntryForm({
+        project_id: projects[0]?.id ? String(projects[0].id) : '',
+        task_id: '',
+        description: '',
+        started_at: '',
+        ended_at: '',
+        is_billable: true,
+      });
+      if (projects[0]?.id) loadTasksForProject(String(projects[0].id));
+    }
+    setShowManualModal(true);
+  };
+
+  const handleSaveEntry = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    setFormError(null);
+    try {
+      const payload = {
+        project_id: entryForm.project_id ? Number(entryForm.project_id) : undefined,
+        task_id: entryForm.task_id ? Number(entryForm.task_id) : undefined,
+        description: entryForm.description,
+        started_at: entryForm.started_at.replace('T', ' ') + ':00',
+        ended_at: entryForm.ended_at.replace('T', ' ') + ':00',
+        is_billable: entryForm.is_billable,
+      };
+      if (editingEntry) {
+        await timeService.updateEntry(editingEntry.id, payload);
+      } else {
+        await timeService.createManual(payload);
+      }
+      setShowManualModal(false);
+      await fetchEntries();
+    } catch (err) {
+      setFormError(getApiErrorMessage(err, 'Failed to save entry'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteEntry = async (entry: TimeEntry) => {
+    if (!confirm('Delete this time entry?')) return;
+    try {
+      await timeService.deleteEntry(entry.id);
+      await fetchEntries();
+    } catch (err) {
+      setFormError(getApiErrorMessage(err, 'Failed to delete entry'));
+    }
+    setMenuEntryId(null);
   };
 
   const formatDuration = (seconds: number) => {
@@ -108,6 +205,10 @@ const TimeTrackingPage = () => {
           <p className="text-slate-400">Review and manage your tracked time entries.</p>
         </div>
         <div className="flex items-center gap-3">
+          <Button onClick={() => openManualModal()} className="!rounded-xl">
+            <Plus size={18} className="mr-2" />
+            Manual Entry
+          </Button>
           <div className="flex bg-white/5 rounded-xl border border-white/10 p-1">
             <button 
               onClick={() => {
@@ -248,8 +349,27 @@ const TimeTrackingPage = () => {
                        {entry.ended_at ? formatTime(displayEnd(entry)!) : 'Now'}
                     </p>
                   </div>
-                  <button className="p-2 text-slate-600 hover:text-white hover:bg-white/5 rounded-lg transition-all opacity-0 group-hover:opacity-100">
+                  <button
+                    onClick={() => setMenuEntryId(menuEntryId === entry.id ? null : entry.id)}
+                    className="p-2 text-slate-600 hover:text-white hover:bg-white/5 rounded-lg transition-all opacity-0 group-hover:opacity-100 relative"
+                  >
                     <MoreHorizontal size={20} />
+                    {menuEntryId === entry.id && (
+                      <div className="absolute right-0 top-full mt-1 z-20 w-36 glass border border-white/10 rounded-xl overflow-hidden shadow-2xl">
+                        <button
+                          onClick={() => { setMenuEntryId(null); openManualModal(entry); }}
+                          className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-slate-300 hover:bg-white/10"
+                        >
+                          <Pencil size={14} /> Edit
+                        </button>
+                        <button
+                          onClick={() => handleDeleteEntry(entry)}
+                          className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-rose-400 hover:bg-rose-500/10"
+                        >
+                          <Trash2 size={14} /> Delete
+                        </button>
+                      </div>
+                    )}
                   </button>
                 </div>
               </motion.div>
@@ -265,6 +385,84 @@ const TimeTrackingPage = () => {
           )}
         </div>
       </div>
+
+      {showManualModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <form onSubmit={handleSaveEntry} className="w-full max-w-lg glass-card border border-white/10 p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xl font-bold text-white">
+                {editingEntry ? 'Edit Time Entry' : 'Manual Time Entry'}
+              </h3>
+              <button type="button" onClick={() => setShowManualModal(false)} className="text-slate-500 hover:text-white">
+                <X size={20} />
+              </button>
+            </div>
+            {formError && <p className="text-rose-400 text-sm">{formError}</p>}
+            <select
+              value={entryForm.project_id}
+              onChange={(e) => {
+                setEntryForm((f) => ({ ...f, project_id: e.target.value, task_id: '' }));
+                loadTasksForProject(e.target.value);
+              }}
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white outline-none"
+            >
+              <option value="">No project</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+            <select
+              value={entryForm.task_id}
+              onChange={(e) => setEntryForm((f) => ({ ...f, task_id: e.target.value }))}
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white outline-none"
+            >
+              <option value="">No task</option>
+              {tasks.map((t) => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
+            </select>
+            <Input
+              placeholder="Description"
+              value={entryForm.description}
+              onChange={(e) => setEntryForm((f) => ({ ...f, description: e.target.value }))}
+            />
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-slate-500 uppercase font-bold mb-1 block">Start</label>
+                <input
+                  required
+                  type="datetime-local"
+                  value={entryForm.started_at}
+                  onChange={(e) => setEntryForm((f) => ({ ...f, started_at: e.target.value }))}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white outline-none"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 uppercase font-bold mb-1 block">End</label>
+                <input
+                  required
+                  type="datetime-local"
+                  value={entryForm.ended_at}
+                  onChange={(e) => setEntryForm((f) => ({ ...f, ended_at: e.target.value }))}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white outline-none"
+                />
+              </div>
+            </div>
+            <label className="flex items-center gap-2 text-sm text-slate-300">
+              <input
+                type="checkbox"
+                checked={entryForm.is_billable}
+                onChange={(e) => setEntryForm((f) => ({ ...f, is_billable: e.target.checked }))}
+                className="rounded border-white/20"
+              />
+              Billable
+            </label>
+            <Button type="submit" isLoading={saving} className="w-full">
+              {editingEntry ? 'Save changes' : 'Add entry'}
+            </Button>
+          </form>
+        </div>
+      )}
     </div>
   );
 };

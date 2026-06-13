@@ -66,7 +66,13 @@ class AuthController extends ResourceController
                 return $this->failValidationErrors($this->validator->getErrors());
             }
 
-            $result = $this->authService->login($data['email'], $data['password']);
+            $result = $this->authService->login(
+                $data['email'],
+                $data['password'],
+                $data['totp_code'] ?? null,
+                $this->request->getUserAgent()->getAgentString(),
+                $this->request->getIPAddress()
+            );
 
             return $this->respond([
                 'success' => true,
@@ -91,7 +97,11 @@ class AuthController extends ResourceController
                 return $this->fail('Refresh token is required', 400);
             }
 
-            $result = $this->authService->refreshToken($data['refresh_token']);
+            $result = $this->authService->refreshToken(
+                $data['refresh_token'],
+                $this->request->getUserAgent()->getAgentString(),
+                $this->request->getIPAddress()
+            );
 
             return $this->respond([
                 'success' => true,
@@ -109,6 +119,13 @@ class AuthController extends ResourceController
      */
     public function logout()
     {
+        try {
+            $data = $this->request->getJSON(true) ?? [];
+            $this->authService->logout($data['refresh_token'] ?? null);
+        } catch (\Exception $e) {
+            // Ignore logout errors
+        }
+
         return $this->respond([
             'success' => true,
             'message' => 'Logged out successfully'
@@ -279,6 +296,97 @@ class AuthController extends ResourceController
                 'success' => true,
                 'message' => 'Password changed successfully',
             ]);
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+
+    public function setupTwoFactor()
+    {
+        try {
+            $userId = (int)($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
+            if (!$userId) {
+                return $this->fail('Unauthorized', 401);
+            }
+
+            $result = $this->authService->setupTwoFactor($userId);
+
+            return $this->respond(['success' => true, 'data' => $result]);
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+
+    public function verifyTwoFactor()
+    {
+        try {
+            $userId = (int)($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
+            if (!$userId) {
+                return $this->fail('Unauthorized', 401);
+            }
+
+            $data = $this->request->getJSON(true);
+            if (empty($data['code'])) {
+                return $this->fail('code is required', 400);
+            }
+
+            $this->authService->verifyTwoFactor($userId, $data['code']);
+
+            return $this->respond(['success' => true, 'message' => 'Two-factor authentication enabled']);
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+
+    public function disableTwoFactor()
+    {
+        try {
+            $userId = (int)($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
+            if (!$userId) {
+                return $this->fail('Unauthorized', 401);
+            }
+
+            $data = $this->request->getJSON(true);
+            if (empty($data['password']) || empty($data['code'])) {
+                return $this->fail('password and code are required', 400);
+            }
+
+            $this->authService->disableTwoFactor($userId, $data['password'], $data['code']);
+
+            return $this->respond(['success' => true, 'message' => 'Two-factor authentication disabled']);
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+
+    public function sessions()
+    {
+        try {
+            $userId = (int)($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
+            if (!$userId) {
+                return $this->fail('Unauthorized', 401);
+            }
+
+            return $this->respond([
+                'success' => true,
+                'data' => $this->authService->listSessions($userId),
+            ]);
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+
+    public function revokeSession($id = null)
+    {
+        try {
+            $userId = (int)($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
+            if (!$userId) {
+                return $this->fail('Unauthorized', 401);
+            }
+
+            $this->authService->revokeSession($userId, (int) $id);
+
+            return $this->respond(['success' => true, 'message' => 'Session revoked']);
         } catch (\Exception $e) {
             return $this->fail($e->getMessage(), 400);
         }

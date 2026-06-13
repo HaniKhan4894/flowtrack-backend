@@ -11,6 +11,8 @@ class TimeEntryService
     protected $timeEntryModel;
     protected $projectModel;
     protected $timezoneService;
+    protected $permissionService;
+    protected $notificationService;
     protected $db;
 
     public function __construct()
@@ -18,6 +20,8 @@ class TimeEntryService
         $this->timeEntryModel = new TimeEntryModel();
         $this->projectModel = new ProjectModel();
         $this->timezoneService = new TimezoneService();
+        $this->permissionService = new PermissionService();
+        $this->notificationService = new NotificationService();
         $this->db = \Config\Database::connect();
     }
 
@@ -97,7 +101,11 @@ class TimeEntryService
 
             $this->db->transComplete();
 
-            return $this->formatTimeEntry($this->timeEntryModel->find($entryId));
+            $entry = $this->formatTimeEntry($this->timeEntryModel->find($entryId));
+            $entry = $this->attachProjectName($entry);
+            $this->notificationService->notifyTimeEntryStarted($userId, $entry);
+
+            return $entry;
 
         } catch (\Exception $e) {
             $this->db->transRollback();
@@ -144,7 +152,11 @@ class TimeEntryService
             'duration_seconds' => $netDuration > 0 ? $netDuration : 0
         ]);
 
-        return $this->formatTimeEntry($this->timeEntryModel->find($entryId));
+        $entry = $this->formatTimeEntry($this->timeEntryModel->find($entryId));
+        $entry = $this->attachProjectName($entry);
+        $this->notificationService->notifyTimeEntryStopped($userId, $entry);
+
+        return $entry;
     }
 
     /**
@@ -305,5 +317,92 @@ class TimeEntryService
             $this->db->transRollback();
             throw $e;
         }
+    }
+
+    public function updateEntry(int $entryId, int $actorUserId, int $organizationId, array $data): array
+    {
+        $entry = $this->timeEntryModel->find($entryId);
+        if (!$entry || (int) $entry['organization_id'] !== $organizationId) {
+            throw new \Exception('Time entry not found');
+        }
+
+        $this->assertCanEditEntry($actorUserId, $organizationId, $entry);
+
+        if (empty($entry['ended_at']) && isset($data['ended_at'])) {
+            throw new \Exception('Cannot set end time on an active timer');
+        }
+
+        $updates = [];
+        $allowed = ['project_id', 'task_id', 'description', 'started_at', 'ended_at', 'is_billable', 'hourly_rate'];
+        foreach ($allowed as $field) {
+            if (array_key_exists($field, $data)) {
+                $updates[$field] = $data[$field];
+            }
+        }
+
+        if (isset($updates['project_id']) && $updates['project_id']) {
+            $project = $this->projectModel->find($updates['project_id']);
+            if (!$project || (int) $project['organization_id'] !== $organizationId) {
+                throw new \Exception('Invalid project');
+            }
+        }
+
+        if (isset($updates['started_at'], $updates['ended_at'])) {
+            $duration = strtotime($updates['ended_at']) - strtotime($updates['started_at']);
+            $updates['duration_seconds'] = max(0, $duration);
+        } elseif (isset($updates['ended_at']) || isset($updates['started_at'])) {
+            $started = $updates['started_at'] ?? $entry['started_at'];
+            $ended = $updates['ended_at'] ?? $entry['ended_at'];
+            if ($started && $ended) {
+                $updates['duration_seconds'] = max(0, strtotime($ended) - strtotime($started));
+            }
+        }
+
+        if (!empty($updates)) {
+            $this->timeEntryModel->update($entryId, $updates);
+        }
+
+        return $this->formatTimeEntry($this->timeEntryModel->find($entryId));
+    }
+
+    public function deleteEntry(int $entryId, int $actorUserId, int $organizationId): bool
+    {
+        $entry = $this->timeEntryModel->find($entryId);
+        if (!$entry || (int) $entry['organization_id'] !== $organizationId) {
+            throw new \Exception('Time entry not found');
+        }
+
+        $this->assertCanEditEntry($actorUserId, $organizationId, $entry);
+
+        if (empty($entry['ended_at'])) {
+            throw new \Exception('Stop the timer before deleting this entry');
+        }
+
+        return $this->timeEntryModel->delete($entryId);
+    }
+
+    private function assertCanEditEntry(int $actorUserId, int $organizationId, array $entry): void
+    {
+        $ownerId = (int) $entry['user_id'];
+        if ($ownerId === $actorUserId) {
+            if (!$this->permissionService->userHasPermission($actorUserId, $organizationId, 'time.edit_own')) {
+                throw new \Exception('Unauthorized');
+            }
+            return;
+        }
+
+        if (!$this->permissionService->userHasPermission($actorUserId, $organizationId, 'time.edit_team')) {
+            throw new \Exception('Unauthorized');
+        }
+    }
+
+    private function attachProjectName(array $entry): array
+    {
+        if (!empty($entry['project_id'])) {
+            $project = $this->projectModel->select('name')->find($entry['project_id']);
+            $entry['project_name'] = $project['name'] ?? null;
+        }
+
+        return $entry;
     }
 }

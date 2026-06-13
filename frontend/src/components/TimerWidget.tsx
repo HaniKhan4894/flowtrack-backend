@@ -4,6 +4,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { useTimerStore } from '../store/timerStore';
 import { projectService, type Project } from '../api/projectService';
+import { taskService } from '../api/taskService';
+import type { Task } from '../types';
 import { monitoringService } from '../api/monitoringService';
 import { useAuthStore } from '../store/authStore';
 import { isOrgAdmin } from '../utils/access';
@@ -14,10 +16,34 @@ export const TimerWidget = () => {
   const { user } = useAuthStore();
   const { activeEntry, isRunning, isPaused, elapsed, start, stop, pause, resume, loadActive } = useTimerStore();
   const [projects, setProjects] = useState<Project[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
+  const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
   const [description, setDescription] = useState('');
   const [showProjectSelect, setShowProjectSelect] = useState(false);
+  const [showTaskSelect, setShowTaskSelect] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const fetchTasks = useCallback(async (projectId: number) => {
+    try {
+      const resp = await taskService.getAll({ project_id: projectId, is_active: 1 });
+      setTasks(resp.data ?? []);
+      setSelectedTaskId(null);
+    } catch (e) {
+      console.error(e);
+      setTasks([]);
+      setSelectedTaskId(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (selectedProjectId) {
+      fetchTasks(selectedProjectId);
+    } else {
+      setTasks([]);
+      setSelectedTaskId(null);
+    }
+  }, [selectedProjectId, fetchTasks]);
 
   const fetchProjects = useCallback(async () => {
     try {
@@ -51,7 +77,7 @@ export const TimerWidget = () => {
           setError('Please select a project first');
           return;
         }
-        await start(selectedProjectId, description);
+        await start(selectedProjectId, description, selectedTaskId ?? undefined);
       }
     } catch (e: unknown) {
       setError(getApiErrorMessage(e, 'Timer action failed'));
@@ -142,6 +168,53 @@ export const TimerWidget = () => {
                       {p.name}
                     </button>
                   ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          <div className="relative">
+            <button
+              onClick={() => setShowTaskSelect(!showTaskSelect)}
+              disabled={!selectedProjectId}
+              className="flex items-center gap-2 text-xs font-bold text-slate-400 hover:text-white transition-colors uppercase tracking-wider bg-white/5 px-3 py-1.5 rounded-lg disabled:opacity-40"
+            >
+              {tasks.find((t) => t.id === selectedTaskId)?.name || 'Task (optional)'}
+              <ChevronDown size={14} />
+            </button>
+
+            <AnimatePresence>
+              {showTaskSelect && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 10 }}
+                  className="absolute top-full mt-2 left-0 w-48 bg-[#1A1C26] border border-white/10 rounded-xl overflow-hidden z-50 shadow-2xl"
+                >
+                  <button
+                    onClick={() => {
+                      setSelectedTaskId(null);
+                      setShowTaskSelect(false);
+                    }}
+                    className="w-full text-left px-4 py-2.5 text-sm text-slate-400 hover:bg-primary-500/10 hover:text-primary-400 transition-colors border-b border-white/5"
+                  >
+                    No task
+                  </button>
+                  {tasks.map((t) => (
+                    <button
+                      key={t.id}
+                      onClick={() => {
+                        setSelectedTaskId(t.id);
+                        setShowTaskSelect(false);
+                      }}
+                      className="w-full text-left px-4 py-2.5 text-sm text-slate-300 hover:bg-primary-500/10 hover:text-primary-400 transition-colors border-b border-white/5 last:border-0"
+                    >
+                      {t.name}
+                    </button>
+                  ))}
+                  {tasks.length === 0 && (
+                    <p className="px-4 py-3 text-xs text-slate-500">No tasks for this project</p>
+                  )}
                 </motion.div>
               )}
             </AnimatePresence>

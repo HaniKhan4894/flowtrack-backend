@@ -21,6 +21,12 @@ import AnalyticsPage from './features/analytics/AnalyticsPage'
 import ScreenshotsPage from './features/screenshots/ScreenshotsPage'
 import ActivityPage from './features/activity/ActivityPage'
 import InvoicesPage from './features/invoices/InvoicesPage'
+import InvoiceDetailPage from './features/invoices/InvoiceDetailPage'
+import TimesheetsPage from './features/timesheets/TimesheetsPage'
+import PayrollPage from './features/payroll/PayrollPage'
+import PayrollRunDetailPage from './features/payroll/PayrollRunDetailPage'
+import ClientsPage from './features/clients/ClientsPage'
+import LeavePage from './features/leave/LeavePage'
 
 import { Shell } from './layouts/Shell'
 import { useAuthStore } from './store/authStore'
@@ -92,6 +98,7 @@ createRoot(document.getElementById('root')!).render(
         {/* Tracker routes — all authenticated users */}
         <Route path="/app" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
         <Route path="/time" element={<ProtectedRoute><TimeTrackingPage /></ProtectedRoute>} />
+        <Route path="/timesheets" element={<RoleRoute path="/timesheets"><TimesheetsPage /></RoleRoute>} />
         <Route path="/activity" element={<ProtectedRoute><ActivityPage /></ProtectedRoute>} />
         <Route path="/screenshots" element={<ProtectedRoute><ScreenshotsPage /></ProtectedRoute>} />
 
@@ -103,6 +110,11 @@ createRoot(document.getElementById('root')!).render(
         <Route path="/settings" element={<RoleRoute path="/settings"><SettingsPage /></RoleRoute>} />
         <Route path="/analytics" element={<RoleRoute path="/analytics"><AnalyticsPage /></RoleRoute>} />
         <Route path="/invoices" element={<RoleRoute path="/invoices"><InvoicesPage /></RoleRoute>} />
+        <Route path="/invoices/:id" element={<RoleRoute path="/invoices"><InvoiceDetailPage /></RoleRoute>} />
+        <Route path="/clients" element={<RoleRoute path="/clients"><ClientsPage /></RoleRoute>} />
+        <Route path="/leave" element={<RoleRoute path="/leave"><LeavePage /></RoleRoute>} />
+        <Route path="/payroll" element={<RoleRoute path="/payroll"><PayrollPage /></RoleRoute>} />
+        <Route path="/payroll/runs/:runId" element={<RoleRoute path="/payroll"><PayrollRunDetailPage /></RoleRoute>} />
         <Route path="/admin" element={<SuperAdminRoute><AdminDashboardPage /></SuperAdminRoute>} />
 
         {/* Fallback */}

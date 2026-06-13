@@ -4,15 +4,19 @@ namespace App\Controllers\API\V1;
 
 use CodeIgniter\RESTful\ResourceController;
 use App\Services\ScreenshotService;
+use App\Services\TeamScopeService;
+use App\Services\PermissionService;
 
 class ScreenshotController extends ResourceController
 {
     protected $screenshotService;
+    protected TeamScopeService $teamScopeService;
     protected $format = 'json';
 
     public function __construct()
     {
         $this->screenshotService = new ScreenshotService();
+        $this->teamScopeService = new TeamScopeService();
     }
 
     /**
@@ -27,11 +31,20 @@ class ScreenshotController extends ResourceController
                 return $this->fail('Unauthorized', 401);
             }
             
-            $permissionService = new \App\Services\PermissionService();
+            $permissionService = new PermissionService();
             $canViewTeam = $permissionService->userHasPermission($userId, $organizationId, 'screenshots.view_team');
 
             $requestedUserId = $this->request->getGet('user_id');
-            $targetUserId = $canViewTeam && $requestedUserId ? (int) $requestedUserId : $userId;
+            if (!$canViewTeam) {
+                $targetUserId = $userId;
+            } elseif ($requestedUserId) {
+                $targetUserId = (int) $requestedUserId;
+                if (!$this->teamScopeService->canViewUser($userId, $organizationId, $targetUserId)) {
+                    return $this->fail('Forbidden', 403);
+                }
+            } else {
+                $targetUserId = $userId;
+            }
 
             $filters = [
                 'user_id' => $targetUserId,
@@ -91,6 +104,11 @@ class ScreenshotController extends ResourceController
                 'is_blurred' => $this->request->getPost('is_blurred') ?? false,
                 'activity_level' => $this->request->getPost('activity_level') ?? 0,
             ];
+
+            $subscriptionService = new \App\Services\SubscriptionService();
+            if ($organizationId && $subscriptionService->checkFeatureLimit($organizationId, 'screenshot_blur')) {
+                $data['apply_blur'] = true;
+            }
 
             $screenshot = $this->screenshotService->saveScreenshot($timeEntryId, $userId, $file, $data);
 

@@ -35,4 +35,38 @@ export const timeService = {
         const response = await client.post(`/time-entries/${id}/resume`);
         return response.data;
     },
+
+    createManual: async (data: {
+        project_id?: number;
+        task_id?: number;
+        description?: string;
+        started_at: string;
+        ended_at: string;
+        is_billable?: boolean;
+        hourly_rate?: number;
+    }) => {
+        const response = await client.post('/time-entries/manual', data);
+        return response.data;
+    },
+
+    updateEntry: async (
+        id: number,
+        data: {
+            project_id?: number;
+            task_id?: number;
+            description?: string;
+            started_at?: string;
+            ended_at?: string;
+            is_billable?: boolean;
+            hourly_rate?: number;
+        },
+    ) => {
+        const response = await client.put(`/time-entries/${id}`, data);
+        return response.data;
+    },
+
+    deleteEntry: async (id: number) => {
+        const response = await client.delete(`/time-entries/${id}`);
+        return response.data;
+    },
 };

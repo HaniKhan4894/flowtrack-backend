@@ -510,6 +510,58 @@ function stopDistractionMonitor() {
     resetDistractionState();
 }
 
+const SENSITIVE_APP_PATTERNS = [
+    { pattern: /bank|chase|wells\s*fargo|bofa|citibank|capital\s*one|hdfc|barclays/i, label: 'banking' },
+    { pattern: /1password|1pw/i, label: '1password' },
+    { pattern: /lastpass/i, label: 'lastpass' },
+];
+
+function extractUrlFromTitle(windowTitle, appName) {
+    const title = (windowTitle || '').trim();
+    if (!title) return '';
+
+    const directUrl = title.match(/https?:\/\/[^\s|–—-]+/i);
+    if (directUrl) return directUrl[0].replace(/[|–—-]+$/, '');
+
+    const hay = `${appName} ${title}`.toLowerCase();
+    const isBrowser = /chrome|firefox|edge|msedge|brave|opera|safari/i.test(hay);
+    if (!isBrowser) return '';
+
+    const chromeMatch = title.match(/^(.+?)\s*[-–—]\s*Google Chrome\s*$/i);
+    const firefoxMatch = title.match(/^(.+?)\s*[-–—]\s*(?:Mozilla )?Firefox\s*$/i);
+    const edgeMatch = title.match(/^(.+?)\s*[-–—]\s*(?:.+?\s*[-–—]\s*)?Microsoft(?:\s*Edge)?\s*$/i);
+
+    const candidate = (chromeMatch || firefoxMatch || edgeMatch)?.[1]?.trim() || '';
+    if (!candidate) return '';
+
+    if (/^https?:\/\//i.test(candidate)) return candidate;
+
+    const domainMatch = candidate.match(/^([a-z0-9][-a-z0-9]*(?:\.[a-z0-9][-a-z0-9]*)+(?:\/[^\s]*)?)/i);
+    if (domainMatch) {
+        const domain = domainMatch[1];
+        if (!domain.includes(' ') && domain.includes('.')) {
+            return domain.startsWith('http') ? domain : `https://${domain}`;
+        }
+    }
+
+    return '';
+}
+
+function detectSensitiveApp(appName, windowTitle = '') {
+    const hay = `${appName} ${windowTitle}`;
+    for (const { pattern, label } of SENSITIVE_APP_PATTERNS) {
+        if (pattern.test(hay)) {
+            return { sensitive: true, reason: label };
+        }
+    }
+    return { sensitive: false };
+}
+
+function computeIdleSeconds(syncIntervalSec) {
+    const idleMs = Math.max(0, Date.now() - lastInputActivityTs);
+    return Math.min(syncIntervalSec, Math.round(idleMs / 1000));
+}
+
 async function getForegroundApp() {
     try {
         const activeWin = require('active-win');
@@ -542,15 +594,25 @@ async function syncActivityToBackend(retried = false) {
             return;
         }
 
+        const url = extractUrlFromTitle(windowTitle, appName);
+        const sensitiveMeta = detectSensitiveApp(appName, windowTitle);
+        const syncIntervalSec = Math.round(ACTIVITY_SYNC_INTERVAL_MS / 1000);
+        const idleSeconds = computeIdleSeconds(syncIntervalSec);
+        const activeSeconds = Math.max(0, syncIntervalSec - idleSeconds);
+
         const body = JSON.stringify({
             time_entry_id: currentSession.timeEntryId,
             app_name: appName,
             window_title: windowTitle,
+            url,
             mouse_movement: currentSession.activityBuffer.mouseMovements,
             mouse_clicks: currentSession.activityBuffer.clicks,
             keyboard_strokes: currentSession.activityBuffer.keystrokes,
-            duration_seconds: Math.round(ACTIVITY_SYNC_INTERVAL_MS / 1000),
+            duration_seconds: syncIntervalSec,
+            idle_seconds: idleSeconds,
+            active_seconds: activeSeconds,
             logged_at: new Date().toISOString(),
+            metadata: sensitiveMeta,
         });
 
         const urlParts = new URL(`${API_BASE_URL}/activity-logs/sync`);

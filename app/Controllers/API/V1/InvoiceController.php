@@ -161,4 +161,55 @@ class InvoiceController extends ResourceController
             return $this->fail($e->getMessage(), 400);
         }
     }
+
+    /**
+     * POST /api/v1/invoices/{id}/send
+     */
+    public function send($id = null)
+    {
+        try {
+            $organizationId = (int) ($this->request->getServer('FLOWTRACK_ORGANIZATION_ID') ?? 0);
+            $sentBy = (int) ($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
+            if (!$organizationId || !$sentBy) {
+                return $this->fail('Unauthorized', 401);
+            }
+
+            $invoice = $this->invoiceService->sendInvoice((int) $id, $organizationId, $sentBy);
+
+            return $this->respond([
+                'success' => true,
+                'message' => 'Invoice sent successfully',
+                'data' => $invoice,
+            ]);
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+
+    /**
+     * GET /api/v1/invoices/{id}/pdf
+     */
+    public function pdf($id = null)
+    {
+        try {
+            $organizationId = (int) ($this->request->getServer('FLOWTRACK_ORGANIZATION_ID') ?? 0);
+            if (!$organizationId) {
+                return $this->fail('Unauthorized', 401);
+            }
+
+            $invoice = $this->invoiceService->getInvoiceById((int) $id);
+            if (!$invoice || (int) $invoice['organization_id'] !== $organizationId) {
+                return $this->failNotFound('Invoice not found');
+            }
+
+            $pdf = $this->invoiceService->generatePdf((int) $id);
+
+            return $this->response
+                ->setHeader('Content-Type', 'application/pdf')
+                ->setHeader('Content-Disposition', 'attachment; filename="invoice-' . $invoice['invoice_number'] . '.pdf"')
+                ->setBody($pdf);
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
 }

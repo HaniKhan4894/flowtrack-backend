@@ -81,6 +81,54 @@ class RoleController extends ResourceController
     }
 
     /**
+     * PUT /api/v1/roles/{id}
+     */
+    public function update($id = null)
+    {
+        try {
+            $organizationId = $this->request->getServer('FLOWTRACK_ORGANIZATION_ID') ?? $this->request->getGet('organization_id');
+            $data = $this->request->getJSON(true);
+
+            if (!$organizationId) {
+                return $this->fail('organization_id is required', 400);
+            }
+
+            $role = $this->permissionService->updateRole((int) $id, (int) $organizationId, $data ?? []);
+
+            return $this->respond([
+                'success' => true,
+                'message' => 'Role updated successfully',
+                'data' => $role,
+            ]);
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+
+    /**
+     * DELETE /api/v1/roles/{id}
+     */
+    public function delete($id = null)
+    {
+        try {
+            $organizationId = $this->request->getServer('FLOWTRACK_ORGANIZATION_ID') ?? $this->request->getGet('organization_id');
+
+            if (!$organizationId) {
+                return $this->fail('organization_id is required', 400);
+            }
+
+            $this->permissionService->deleteRole((int) $id, (int) $organizationId);
+
+            return $this->respondDeleted([
+                'success' => true,
+                'message' => 'Role deleted successfully',
+            ]);
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+
+    /**
      * PUT /api/v1/roles/{id}/permissions
      * Update role permissions
      */

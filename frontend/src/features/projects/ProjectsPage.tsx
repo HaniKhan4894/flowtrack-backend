@@ -1,8 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Search, MoreVertical, Folder, X, Palette, Clock, Users, Archive, Trash2 } from 'lucide-react';
+import { Plus, Search, MoreVertical, Folder, X, Palette, Clock, Users, Archive, Trash2, ChevronDown, ChevronUp, ListTodo } from 'lucide-react';
 import { Button, Input } from '../../components/ui';
 import { projectService, type Project } from '../../api/projectService';
+import { clientService, type Client } from '../../api/clientService';
+import { useAuthStore } from '../../store/authStore';
+import { taskService } from '../../api/taskService';
+import type { Task } from '../../types';
+import { hasPermission } from '../../utils/access';
+import { getApiErrorMessage } from '../../utils/apiError';
 
 function formatDuration(seconds: number): string {
   if (!seconds) return '0h 0m';
@@ -12,22 +18,41 @@ function formatDuration(seconds: number): string {
 }
 
 export const ProjectsPage = () => {
+  const { user } = useAuthStore();
+  const canEditProjects = hasPermission(user, 'projects.edit');
   const [projects, setProjects] = useState<Project[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'active' | 'archived'>('active');
   const [menuOpenId, setMenuOpenId] = useState<number | null>(null);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [projectTasks, setProjectTasks] = useState<Record<number, Task[]>>({});
+  const [tasksLoading, setTasksLoading] = useState<number | null>(null);
+  const [showTaskModal, setShowTaskModal] = useState(false);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [taskProjectId, setTaskProjectId] = useState<number | null>(null);
+  const [taskForm, setTaskForm] = useState({ name: '', description: '', estimated_hours: '' });
+  const [taskSaving, setTaskSaving] = useState(false);
+  const [taskError, setTaskError] = useState<string | null>(null);
 
   // Create state
   const [newProject, setNewProject] = useState({
     name: '',
     description: '',
-    color: '#6366F1'
+    color: '#6366F1',
+    client_id: '' as string | number,
+    budget_hours: '',
+    budget_amount: '',
   });
 
   const colors = ['#6366F1', '#06B6D4', '#F43F5E', '#10B981', '#F59E0B', '#8B5CF6'];
+
+  useEffect(() => {
+    clientService.getAll({ is_active: 1 }).then((r) => setClients(r.data ?? [])).catch(() => undefined);
+  }, []);
 
   const fetchProjects = useCallback(async () => {
     setIsLoading(true);
@@ -54,9 +79,15 @@ export const ProjectsPage = () => {
     e.preventDefault();
     setIsCreating(true);
     try {
-      await projectService.create({ ...newProject, organization_id: 1 });
+      await projectService.create({
+        ...newProject,
+        organization_id: user?.organization_id,
+        client_id: newProject.client_id ? Number(newProject.client_id) : undefined,
+        budget_hours: newProject.budget_hours ? parseFloat(newProject.budget_hours) : undefined,
+        budget_amount: newProject.budget_amount ? parseFloat(newProject.budget_amount) : undefined,
+      });
       setShowCreateModal(false);
-      setNewProject({ name: '', description: '', color: '#6366F1' });
+      setNewProject({ name: '', description: '', color: '#6366F1', client_id: '', budget_hours: '', budget_amount: '' });
       fetchProjects();
     } catch (error) {
       console.error('Failed to create project', error);
@@ -84,6 +115,77 @@ export const ProjectsPage = () => {
       console.error('Failed to delete project', err);
     }
     setMenuOpenId(null);
+  };
+
+  const loadTasks = async (projectId: number) => {
+    setTasksLoading(projectId);
+    try {
+      const resp = await taskService.getAll({ project_id: projectId, is_active: 1 });
+      setProjectTasks((prev) => ({ ...prev, [projectId]: resp.data ?? [] }));
+    } catch (err) {
+      console.error('Failed to load tasks', err);
+      setProjectTasks((prev) => ({ ...prev, [projectId]: [] }));
+    } finally {
+      setTasksLoading(null);
+    }
+  };
+
+  const toggleExpand = (projectId: number) => {
+    if (expandedId === projectId) {
+      setExpandedId(null);
+      return;
+    }
+    setExpandedId(projectId);
+    if (!projectTasks[projectId]) {
+      loadTasks(projectId);
+    }
+  };
+
+  const openTaskModal = (projectId: number, task?: Task) => {
+    setTaskProjectId(projectId);
+    setEditingTask(task ?? null);
+    setTaskForm({
+      name: task?.name ?? '',
+      description: task?.description ?? '',
+      estimated_hours: task?.estimated_hours != null ? String(task.estimated_hours) : '',
+    });
+    setTaskError(null);
+    setShowTaskModal(true);
+  };
+
+  const handleSaveTask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!taskProjectId) return;
+    setTaskSaving(true);
+    setTaskError(null);
+    try {
+      const payload = {
+        name: taskForm.name,
+        description: taskForm.description || undefined,
+        estimated_hours: taskForm.estimated_hours ? Number(taskForm.estimated_hours) : undefined,
+      };
+      if (editingTask) {
+        await taskService.update(editingTask.id, payload);
+      } else {
+        await taskService.create({ project_id: taskProjectId, ...payload });
+      }
+      setShowTaskModal(false);
+      await loadTasks(taskProjectId);
+    } catch (err) {
+      setTaskError(getApiErrorMessage(err, 'Failed to save task'));
+    } finally {
+      setTaskSaving(false);
+    }
+  };
+
+  const handleDeleteTask = async (task: Task) => {
+    if (!confirm(`Delete task "${task.name}"?`)) return;
+    try {
+      await taskService.delete(task.id);
+      await loadTasks(task.project_id);
+    } catch (err) {
+      console.error('Failed to delete task', err);
+    }
   };
 
   return (
@@ -190,6 +292,57 @@ export const ProjectsPage = () => {
                 <p className="text-slate-400 text-sm line-clamp-2">{project.description || <span className="italic opacity-50">No description</span>}</p>
               </div>
 
+              <div className="mt-4">
+                <button
+                  onClick={() => toggleExpand(project.id)}
+                  className="flex items-center gap-2 text-xs font-bold text-slate-400 hover:text-primary-400 transition-colors"
+                >
+                  <ListTodo size={14} />
+                  Tasks
+                  {expandedId === project.id ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                </button>
+
+                {expandedId === project.id && (
+                  <div className="mt-3 space-y-2 border-t border-white/10 pt-3">
+                    {tasksLoading === project.id ? (
+                      <p className="text-xs text-slate-500">Loading tasks…</p>
+                    ) : (projectTasks[project.id]?.length ?? 0) === 0 ? (
+                      <p className="text-xs text-slate-500">No tasks yet.</p>
+                    ) : (
+                      projectTasks[project.id]?.map((task) => (
+                        <div key={task.id} className="flex items-center justify-between gap-2 text-sm bg-white/5 rounded-lg px-3 py-2">
+                          <span className="text-slate-200 truncate">{task.name}</span>
+                          {canEditProjects && (
+                            <div className="flex gap-1 shrink-0">
+                              <button
+                                onClick={() => openTaskModal(project.id, task)}
+                                className="text-xs text-primary-400 hover:underline"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => handleDeleteTask(task)}
+                                className="text-xs text-rose-400 hover:underline"
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      ))
+                    )}
+                    {canEditProjects && (
+                      <button
+                        onClick={() => openTaskModal(project.id)}
+                        className="text-xs font-bold text-primary-400 hover:underline"
+                      >
+                        + Add task
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+
               <div className="mt-8 pt-6 border-t border-white/10 flex items-center justify-between">
                 {/* Member count */}
                 <div className="flex items-center gap-2 text-slate-400">
@@ -260,6 +413,43 @@ export const ProjectsPage = () => {
                   />
                 </div>
 
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-400 uppercase tracking-wider ml-1">Client</label>
+                  <select
+                    className="form-select"
+                    value={newProject.client_id}
+                    onChange={(e) => setNewProject({ ...newProject, client_id: e.target.value })}
+                  >
+                    <option value="">No client</option>
+                    {clients.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-bold text-slate-400 uppercase tracking-wider ml-1">Budget Hours</label>
+                    <Input
+                      type="number"
+                      step="0.5"
+                      value={newProject.budget_hours}
+                      onChange={(e) => setNewProject({ ...newProject, budget_hours: e.target.value })}
+                      placeholder="e.g. 120"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-bold text-slate-400 uppercase tracking-wider ml-1">Budget Amount</label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={newProject.budget_amount}
+                      onChange={(e) => setNewProject({ ...newProject, budget_amount: e.target.value })}
+                      placeholder="e.g. 5000"
+                    />
+                  </div>
+                </div>
+
                 <div className="space-y-4">
                   <label className="text-sm font-bold text-slate-400 uppercase tracking-wider ml-1 flex items-center gap-2">
                     <Palette size={16} /> Project Color
@@ -283,6 +473,70 @@ export const ProjectsPage = () => {
                   </Button>
                   <Button type="submit" className="flex-1" isLoading={isCreating}>
                     Create Project
+                  </Button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Task Modal */}
+      <AnimatePresence>
+        {showTaskModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowTaskModal(false)}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative w-full max-w-md glass-card border border-white/10 p-8 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-bold text-white">
+                  {editingTask ? 'Edit Task' : 'New Task'}
+                </h2>
+                <button onClick={() => setShowTaskModal(false)} className="text-slate-500 hover:text-white">
+                  <X size={24} />
+                </button>
+              </div>
+              {taskError && <p className="text-rose-400 text-sm mb-4">{taskError}</p>}
+              <form onSubmit={handleSaveTask} className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-400 uppercase tracking-wider ml-1">Name</label>
+                  <Input value={taskForm.name} onChange={(e) => setTaskForm((f) => ({ ...f, name: e.target.value }))} required />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-400 uppercase tracking-wider ml-1">Description</label>
+                  <textarea
+                    value={taskForm.description}
+                    onChange={(e) => setTaskForm((f) => ({ ...f, description: e.target.value }))}
+                    className="w-full h-24 bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white outline-none resize-none"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-400 uppercase tracking-wider ml-1">Estimated hours</label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.25"
+                    value={taskForm.estimated_hours}
+                    onChange={(e) => setTaskForm((f) => ({ ...f, estimated_hours: e.target.value }))}
+                  />
+                </div>
+                <div className="flex gap-4 pt-2">
+                  <Button variant="secondary" type="button" className="flex-1" onClick={() => setShowTaskModal(false)}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" className="flex-1" isLoading={taskSaving}>
+                    Save
                   </Button>
                 </div>
               </form>

@@ -75,6 +75,17 @@ class OrganizationService
 
     private function enrichOrganization(array $org): array
     {
+        if (!empty($org['settings'])) {
+            $decoded = is_string($org['settings']) ? json_decode($org['settings'], true) : $org['settings'];
+            $org['settings'] = is_array($decoded) ? $decoded : [];
+        } else {
+            $org['settings'] = [];
+        }
+
+        if (!isset($org['settings']['default_daily_hours'])) {
+            $org['settings']['default_daily_hours'] = 8;
+        }
+
         if (!empty($org['country_id'])) {
             $country = $this->db->table('countries')->select('id, name')->where('id', $org['country_id'])->get()->getRowArray();
             $org['country'] = $country;
@@ -203,7 +214,75 @@ class OrganizationService
             $data = $this->resolveTimezoneFields($data);
         }
 
+        if (array_key_exists('settings', $data) && is_array($data['settings'])) {
+            $existing = $this->organizationModel->find($id);
+            $currentSettings = [];
+            if ($existing && !empty($existing['settings'])) {
+                $decoded = is_string($existing['settings']) ? json_decode($existing['settings'], true) : $existing['settings'];
+                $currentSettings = is_array($decoded) ? $decoded : [];
+            }
+
+            if (array_key_exists('default_daily_hours', $data['settings'])) {
+                $currentSettings['default_daily_hours'] = round((float) $data['settings']['default_daily_hours'], 2);
+            }
+
+            $data['settings'] = json_encode($currentSettings);
+        }
+
         return $this->organizationModel->update($id, $data);
+    }
+
+    public function updateMember(int $organizationId, int $userId, array $data): array
+    {
+        $member = $this->memberModel
+            ->where('organization_id', $organizationId)
+            ->where('user_id', $userId)
+            ->first();
+
+        if (!$member) {
+            throw new \Exception('Member not found');
+        }
+
+        $update = [];
+
+        if (array_key_exists('daily_hours_target', $data)) {
+            $value = $data['daily_hours_target'];
+            $update['daily_hours_target'] = ($value === null || $value === '')
+                ? null
+                : round((float) $value, 2);
+        }
+
+        if (array_key_exists('team_id', $data)) {
+            $update['team_id'] = $data['team_id'] !== null && $data['team_id'] !== ''
+                ? (int) $data['team_id']
+                : null;
+        }
+
+        if (array_key_exists('role', $data) && $data['role'] !== '') {
+            $role = (string) $data['role'];
+            $update['role'] = $role;
+            $roleId = $this->getRoleIdBySlug($role);
+            if ($roleId) {
+                $update['role_id'] = $roleId;
+            }
+        }
+
+        if (empty($update)) {
+            return $member;
+        }
+
+        $this->memberModel
+            ->where('organization_id', $organizationId)
+            ->where('user_id', $userId)
+            ->set($update)
+            ->update();
+
+        $updated = $this->memberModel
+            ->where('organization_id', $organizationId)
+            ->where('user_id', $userId)
+            ->first();
+
+        return $updated ?? $member;
     }
 
     public function addMember(

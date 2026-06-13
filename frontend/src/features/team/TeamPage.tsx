@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { UserPlus, Mail, Shield, Trash2, Search, Filter, X, Loader2, CheckCircle2, SlidersHorizontal } from 'lucide-react';
-import { teamService, type TeamMember } from '../../api/teamService';
+import { UserPlus, Mail, Shield, Trash2, Search, Filter, X, Loader2, CheckCircle2, SlidersHorizontal, UsersRound, Target, Pencil } from 'lucide-react';
+import { teamService, type TeamMember, type TeamGroup } from '../../api/teamService';
+import { reportService } from '../../api/reportService';
 import { Button, Input } from '../../components/ui';
 import { useAuthStore } from '../../store/authStore';
 import { canManageTeam, canViewMemberTracking } from '../../utils/access';
@@ -23,11 +24,31 @@ const TeamPage = () => {
   const [monitorMember, setMonitorMember] = useState<TeamMember | null>(null);
   const [monitorSettings, setMonitorSettings] = useState<MemberMonitoringSettings | null>(null);
   const [savingMonitoring, setSavingMonitoring] = useState(false);
+  const [activeUserIds, setActiveUserIds] = useState<Set<number>>(new Set());
+  const [teams, setTeams] = useState<TeamGroup[]>([]);
+  const [showTeamModal, setShowTeamModal] = useState(false);
+  const [editingTeam, setEditingTeam] = useState<TeamGroup | null>(null);
+  const [teamForm, setTeamForm] = useState({ name: '', member_ids: [] as number[] });
+  const [savingTeam, setSavingTeam] = useState(false);
+  const [editingTarget, setEditingTarget] = useState<number | null>(null);
+  const [targetValue, setTargetValue] = useState('');
   const { user } = useAuthStore();
   const canManageTeamAccess = canManageTeam(user);
 
   useEffect(() => {
     fetchMembers();
+    teamService.getTeams().then((r) => setTeams(r.data ?? [])).catch(() => setTeams([]));
+  }, []);
+
+  useEffect(() => {
+    const poll = () => {
+      reportService.getActiveSessions()
+        .then((r) => setActiveUserIds(new Set((r.data ?? []).map((s) => s.user_id))))
+        .catch(() => setActiveUserIds(new Set()));
+    };
+    poll();
+    const interval = setInterval(poll, 30_000);
+    return () => clearInterval(interval);
   }, []);
 
   const fetchMembers = async () => {
@@ -186,6 +207,67 @@ const TeamPage = () => {
         </div>
       </div>
 
+      {canManageTeamAccess && (
+        <div className="glass-card p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-bold text-white flex items-center gap-2">
+              <UsersRound size={20} className="text-primary-400" /> Teams
+            </h2>
+            <Button size="sm" onClick={() => { setEditingTeam(null); setTeamForm({ name: '', member_ids: [] }); setShowTeamModal(true); }}>Create Team</Button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {teams.map((team) => (
+              <div key={team.id} className="p-4 rounded-2xl bg-white/5 border border-white/10">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="font-bold text-white">{team.name}</p>
+                    <p className="text-xs text-slate-500 mt-1">{team.member_count} members</p>
+                    {team.lead && <p className="text-xs text-primary-400 mt-2">Lead: {team.lead.first_name} {team.lead.last_name}</p>}
+                  </div>
+                  {canManageTeamAccess && (
+                    <div className="flex gap-1 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingTeam(team);
+                          setTeamForm({
+                            name: team.name,
+                            member_ids: team.members.map((m) => m.user_id),
+                          });
+                          setShowTeamModal(true);
+                        }}
+                        className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/10"
+                        title="Edit team"
+                      >
+                        <Pencil size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!window.confirm(`Delete team "${team.name}"?`)) return;
+                          try {
+                            await teamService.deleteTeam(team.id);
+                            const r = await teamService.getTeams();
+                            setTeams(r.data ?? []);
+                          } catch (e) {
+                            console.error(e);
+                          }
+                        }}
+                        className="p-2 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10"
+                        title="Delete team"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+            {teams.length === 0 && <p className="text-slate-500 text-sm col-span-full">No teams created yet.</p>}
+          </div>
+        </div>
+      )}
+
       <div className="glass rounded-3xl overflow-hidden border border-white/5 shadow-ai">
         <table className="w-full text-left border-collapse">
           <thead>
@@ -193,6 +275,7 @@ const TeamPage = () => {
               <th className="px-6 py-4 text-sm font-bold text-slate-400 uppercase tracking-wider">Member</th>
               <th className="px-6 py-4 text-sm font-bold text-slate-400 uppercase tracking-wider">Role</th>
               <th className="px-6 py-4 text-sm font-bold text-slate-400 uppercase tracking-wider">Monitoring</th>
+              <th className="px-6 py-4 text-sm font-bold text-slate-400 uppercase tracking-wider">Daily Target</th>
               <th className="px-6 py-4 text-sm font-bold text-slate-400 uppercase tracking-wider">Joined</th>
               <th className="px-6 py-4 text-sm font-bold text-slate-400 uppercase tracking-wider text-right">Actions</th>
             </tr>
@@ -202,8 +285,11 @@ const TeamPage = () => {
               <tr key={member.id} className="hover:bg-white/[0.02] transition-colors group">
                 <td className="px-6 py-4">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-ai-gradient flex items-center justify-center text-white font-bold ring-2 ring-white/10 transition-transform group-hover:scale-110">
-                      {member.first_name[0]}{member.last_name[0]}
+                    <div className="relative">
+                      <div className="w-10 h-10 rounded-xl bg-ai-gradient flex items-center justify-center text-white font-bold ring-2 ring-white/10 transition-transform group-hover:scale-110">
+                        {member.first_name[0]}{member.last_name[0]}
+                      </div>
+                      <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-[#12141C] ${activeUserIds.has(member.user_id ?? member.id) ? 'bg-emerald-400' : 'bg-slate-600'}`} title={activeUserIds.has(member.user_id ?? member.id) ? 'Working now' : 'Offline'} />
                     </div>
                     <div>
                       <div className="font-semibold text-white group-hover:text-primary-400 transition-colors uppercase tracking-tight">{member.first_name} {member.last_name}</div>
@@ -233,6 +319,43 @@ const TeamPage = () => {
                       </span>
                     );
                   })()}
+                </td>
+                <td className="px-6 py-4">
+                  {canManageTeamAccess && editingTarget === (member.user_id ?? member.id) ? (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        step="0.5"
+                        value={targetValue}
+                        onChange={(e) => setTargetValue(e.target.value)}
+                        className="w-16 h-8 bg-white/5 border border-white/10 rounded-lg px-2 text-white text-sm"
+                      />
+                      <button
+                        className="text-xs text-primary-400"
+                        onClick={async () => {
+                          await teamService.updateMember(member.user_id ?? member.id, {
+                            daily_hours_target: targetValue ? parseFloat(targetValue) : null,
+                          });
+                          setEditingTarget(null);
+                          fetchMembers();
+                        }}
+                      >
+                        Save
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      className="text-sm text-slate-300 flex items-center gap-1"
+                      onClick={() => {
+                        if (!canManageTeamAccess) return;
+                        setEditingTarget(member.user_id ?? member.id);
+                        setTargetValue(member.daily_hours_target != null ? String(member.daily_hours_target) : '');
+                      }}
+                    >
+                      <Target size={14} className="text-primary-400" />
+                      {member.daily_hours_target != null ? `${member.daily_hours_target}h` : '—'}
+                    </button>
+                  )}
                 </td>
                 <td className="px-6 py-4 text-slate-400 text-sm font-medium">
                   {new Date(member.joined_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
@@ -534,6 +657,75 @@ const TeamPage = () => {
           </div>
         )}
       </AnimatePresence>
+
+      {showTeamModal && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80">
+          <div className="modal-panel w-full max-w-lg p-8 space-y-4">
+            <div className="flex justify-between">
+              <h2 className="text-xl font-bold text-white">{editingTeam ? 'Edit Team' : 'Create Team'}</h2>
+              <button onClick={() => { setShowTeamModal(false); setEditingTeam(null); }}><X size={24} className="text-slate-500" /></button>
+            </div>
+            <Input value={teamForm.name} onChange={(e) => setTeamForm((p) => ({ ...p, name: e.target.value }))} placeholder="Team name" required />
+            <div className="space-y-2 max-h-48 overflow-y-auto">
+              <p className="text-xs text-slate-500 uppercase font-bold">Assign members</p>
+              {members.map((m) => {
+                const id = m.user_id;
+                if (!id) return null;
+                const checked = teamForm.member_ids.includes(id);
+                return (
+                  <label key={id} className="flex items-center gap-2 text-sm text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => setTeamForm((p) => ({
+                        ...p,
+                        member_ids: checked ? p.member_ids.filter((x) => x !== id) : [...p.member_ids, id],
+                      }))}
+                    />
+                    {m.first_name} {m.last_name}
+                  </label>
+                );
+              })}
+            </div>
+            <Button
+              isLoading={savingTeam}
+              onClick={async () => {
+                setSavingTeam(true);
+                try {
+                  if (editingTeam) {
+                    await teamService.updateTeam(editingTeam.id, { name: teamForm.name });
+                    const currentIds = new Set(editingTeam.members.map((m) => m.user_id));
+                    const nextIds = new Set(teamForm.member_ids);
+                    for (const uid of teamForm.member_ids) {
+                      if (!currentIds.has(uid)) {
+                        await teamService.assignMembers(editingTeam.id, [uid]);
+                      }
+                    }
+                    for (const uid of editingTeam.members.map((m) => m.user_id)) {
+                      if (!nextIds.has(uid)) {
+                        await teamService.removeTeamMember(editingTeam.id, uid);
+                      }
+                    }
+                  } else {
+                    await teamService.createTeam({ name: teamForm.name, member_ids: teamForm.member_ids });
+                  }
+                  const r = await teamService.getTeams();
+                  setTeams(r.data ?? []);
+                  setShowTeamModal(false);
+                  setEditingTeam(null);
+                  setTeamForm({ name: '', member_ids: [] });
+                } catch (e) {
+                  console.error(e);
+                } finally {
+                  setSavingTeam(false);
+                }
+              }}
+            >
+              {editingTeam ? 'Save Team' : 'Create Team'}
+            </Button>
+          </div>
+        </div>
+      )}
 
     </div>
   );

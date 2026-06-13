@@ -1,16 +1,22 @@
 import client from './client';
+import type { InvoiceItem } from '../types';
 
 export interface Invoice {
     id: number;
     invoice_number: string;
     client_name: string;
+    client_email?: string;
     project_name?: string;
+    project_id?: number;
     amount?: number;
     subtotal?: number;
+    tax_amount?: number;
     total?: number;
     status: 'draft' | 'sent' | 'paid' | 'overdue';
     issue_date: string;
     due_date: string;
+    notes?: string;
+    items?: InvoiceItem[];
 }
 
 export const invoiceService = {
@@ -40,5 +46,42 @@ export const invoiceService = {
     get: async (id: number) => {
         const response = await client.get<{ data: Invoice }>(`/invoices/${id}`);
         return response.data;
-    }
+    },
+
+    getById: async (id: number) => {
+        const response = await client.get<{ data: Invoice }>(`/invoices/${id}`);
+        return response.data;
+    },
+
+    addItem: async (
+        id: number,
+        data: { description: string; quantity: number; unit_price: number },
+    ) => {
+        const response = await client.post(`/invoices/${id}/items`, data);
+        return response.data;
+    },
+
+    send: async (id: number) => {
+        const response = await client.post(`/invoices/${id}/send`);
+        return response.data;
+    },
+
+    updateStatus: async (id: number, status: Invoice['status']) => {
+        const response = await client.put(`/invoices/${id}/status`, { status });
+        return response.data;
+    },
+
+    downloadPdf: async (id: number, filename?: string) => {
+        const response = await client.get(`/invoices/${id}/pdf`, { responseType: 'blob' });
+        const blob = response.data as Blob;
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename ?? `invoice-${id}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.URL.revokeObjectURL(url);
+        return blob;
+    },
 };

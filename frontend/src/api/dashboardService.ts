@@ -10,7 +10,10 @@ export interface DashboardStats {
         day: string;
         hours: number;
     }[];
-    scope?: 'own' | 'organization';
+    hours_today?: number;
+    daily_target?: number;
+    pct_of_target?: number;
+    scope?: 'own' | 'organization' | 'team';
 }
 
 export const dashboardService = {

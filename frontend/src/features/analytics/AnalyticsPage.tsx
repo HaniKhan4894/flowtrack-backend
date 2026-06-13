@@ -7,12 +7,15 @@ import {
   Clock, 
   Download, 
   ArrowUpRight,
-  Calendar
+  Globe,
+  Moon,
+  DollarSign,
+  Calendar,
 } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
-import { reportService, type TimeSummary, type ProjectBreakdown, type TeamLeaderboard } from '../../api/reportService';
+import { reportService, type TimeSummary, type ProjectBreakdown, type TeamLeaderboard, type TopUrl, type OrgProductivityMember, type IdleBreakdownUser, type ProjectProfitability } from '../../api/reportService';
 import { useAuthStore } from '../../store/authStore';
-import { canViewMemberTracking } from '../../utils/access';
+import { canViewMemberTracking, hasPermission } from '../../utils/access';
 
 function buildRangeParams(filterRange: 'today' | '7days' | '30days' | 'month', startDate: string, endDate: string) {
   const params: Record<string, string> = {};
@@ -53,6 +56,13 @@ const AnalyticsPage = () => {
   const [summary, setSummary] = useState<TimeSummary | null>(null);
   const [projects, setProjects] = useState<ProjectBreakdown[]>([]);
   const [leaderboard, setLeaderboard] = useState<TeamLeaderboard[]>([]);
+  const [topUrls, setTopUrls] = useState<TopUrl[]>([]);
+  const [orgProductivity, setOrgProductivity] = useState<OrgProductivityMember[]>([]);
+  const [idleBreakdown, setIdleBreakdown] = useState<IdleBreakdownUser[]>([]);
+  const [profitability, setProfitability] = useState<ProjectProfitability[]>([]);
+  const [exportFormat, setExportFormat] = useState<'csv' | 'pdf' | 'xlsx'>('csv');
+  const canExport = hasPermission(user, 'reports.export');
+  const canViewTeamReports = hasPermission(user, 'reports.view_team');
   const [loading, setLoading] = useState(true);
 
   const [filterRange, setFilterRange] = useState<'today' | '7days' | '30days' | 'month'>('7days');
@@ -72,6 +82,24 @@ const AnalyticsPage = () => {
       setSummary(sumResp.data);
       setProjects(projResp.data ?? []);
       setLeaderboard(leadResp.data ?? []);
+
+      if (canViewTeamReports && params.start_date && params.end_date) {
+        const [urlsResp, prodResp, idleResp, profitResp] = await Promise.all([
+          reportService.getTopUrls({ start_date: params.start_date, end_date: params.end_date }).catch(() => ({ data: { urls: [] } })),
+          reportService.getOrgProductivity({ start_date: params.start_date, end_date: params.end_date }).catch(() => ({ data: { members: [] } })),
+          reportService.getIdleBreakdown({ start_date: params.start_date, end_date: params.end_date }).catch(() => ({ data: { users: [] } })),
+          reportService.getProjectProfitability({ start_date: params.start_date, end_date: params.end_date }).catch(() => ({ data: { projects: [] } })),
+        ]);
+        setTopUrls(urlsResp.data?.urls ?? []);
+        setOrgProductivity(prodResp.data?.members ?? []);
+        setIdleBreakdown(idleResp.data?.users ?? []);
+        setProfitability(profitResp.data?.projects ?? []);
+      } else {
+        setTopUrls([]);
+        setOrgProductivity([]);
+        setIdleBreakdown([]);
+        setProfitability([]);
+      }
     } catch (e) {
       console.error('Failed to fetch analytics', e);
       setSummary({ total_entries: 0, total_hours: 0, avg_hours: 0, billable_hours: 0, non_billable_hours: 0 });
@@ -80,7 +108,7 @@ const AnalyticsPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [filterRange, startDate, endDate]);
+  }, [filterRange, startDate, endDate, canViewTeamReports]);
 
   useEffect(() => {
     fetchData();
@@ -99,6 +127,18 @@ const AnalyticsPage = () => {
     setFilterRange(range);
     setStartDate('');
     setEndDate('');
+  };
+
+  const handleExport = () => {
+    const reportData = [
+      { metric: 'total_hours', value: summary?.total_hours ?? 0 },
+      { metric: 'billable_hours', value: summary?.billable_hours ?? 0 },
+      { metric: 'non_billable_hours', value: summary?.non_billable_hours ?? 0 },
+    ];
+    const base = `analytics_report.${exportFormat === 'xlsx' ? 'xlsx' : exportFormat === 'pdf' ? 'pdf' : 'csv'}`;
+    if (exportFormat === 'pdf') reportService.exportPdf(base, reportData, 'Analytics Report');
+    else if (exportFormat === 'xlsx') reportService.exportExcel(base, reportData);
+    else reportService.exportCsv(base, reportData);
   };
 
   const productivityPct = summary && summary.total_hours > 0
@@ -128,18 +168,27 @@ const AnalyticsPage = () => {
             ))}
           </div>
 
-          <button
-            type="button"
-            onClick={() => reportService.exportCsv('analytics_report.csv', [
-              { metric: 'total_hours', value: summary?.total_hours ?? 0 },
-              { metric: 'billable_hours', value: summary?.billable_hours ?? 0 },
-              { metric: 'non_billable_hours', value: summary?.non_billable_hours ?? 0 },
-            ])}
-            className="flex items-center gap-2 bg-primary-500 hover:bg-primary-600 text-white px-5 py-2.5 rounded-xl font-bold transition-all shadow-ai"
-          >
-            <Download size={18} />
-            Export CSV
-          </button>
+          {canExport && (
+            <>
+              <select
+                value={exportFormat}
+                onChange={(e) => setExportFormat(e.target.value as 'csv' | 'pdf' | 'xlsx')}
+                className="h-10 bg-[#12141C] border border-white/10 rounded-xl px-3 text-sm text-white"
+              >
+                <option value="csv">CSV</option>
+                <option value="pdf">PDF</option>
+                <option value="xlsx">Excel</option>
+              </select>
+              <button
+                type="button"
+                onClick={handleExport}
+                className="flex items-center gap-2 bg-primary-500 hover:bg-primary-600 text-white px-5 py-2.5 rounded-xl font-bold transition-all shadow-ai"
+              >
+                <Download size={18} />
+                Export
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -311,6 +360,81 @@ const AnalyticsPage = () => {
           </button>
         </div>
       </div>
+
+      {canViewTeamReports && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div className="overlay-panel p-8">
+            <div className="flex items-center gap-4 mb-6">
+              <div className="p-3 rounded-xl bg-primary-500/10 text-primary-400"><Globe size={22} /></div>
+              <h2 className="text-xl font-bold text-white">Top Websites</h2>
+            </div>
+            <div className="space-y-4">
+              {topUrls.length > 0 ? topUrls.slice(0, 8).map((u, i) => (
+                <div key={i} className="space-y-1">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-200 truncate max-w-[70%]">{u.url}</span>
+                    <span className="text-primary-400 font-mono">{u.total_hours}h</span>
+                  </div>
+                  <div className="h-1.5 bg-white/5 rounded-full"><div className="h-full bg-primary-500 rounded-full" style={{ width: `${u.percentage}%` }} /></div>
+                </div>
+              )) : <p className="text-slate-500 text-sm">No URL activity for this period.</p>}
+            </div>
+          </div>
+
+          <div className="overlay-panel p-8">
+            <div className="flex items-center gap-4 mb-6">
+              <div className="p-3 rounded-xl bg-emerald-500/10 text-emerald-400"><TrendingUp size={22} /></div>
+              <h2 className="text-xl font-bold text-white">Org Productivity</h2>
+            </div>
+            <div className="space-y-3">
+              {orgProductivity.slice(0, 8).map((m) => (
+                <div key={m.user_id} className="flex items-center justify-between p-3 rounded-xl bg-white/5">
+                  <span className="text-white font-medium">{m.first_name} {m.last_name}</span>
+                  <span className="text-emerald-400 font-bold">{m.productivity_score}%</span>
+                </div>
+              ))}
+              {orgProductivity.length === 0 && <p className="text-slate-500 text-sm">No productivity data.</p>}
+            </div>
+          </div>
+
+          <div className="overlay-panel p-8">
+            <div className="flex items-center gap-4 mb-6">
+              <div className="p-3 rounded-xl bg-amber-500/10 text-amber-400"><Moon size={22} /></div>
+              <h2 className="text-xl font-bold text-white">Idle Breakdown</h2>
+            </div>
+            <div className="space-y-3">
+              {idleBreakdown.slice(0, 8).map((u) => (
+                <div key={u.user_id} className="flex items-center justify-between p-3 rounded-xl bg-white/5">
+                  <span className="text-white font-medium">{u.first_name} {u.last_name}</span>
+                  <span className="text-amber-400 font-mono">{u.idle_hours ?? Math.round(u.idle_seconds / 3600 * 10) / 10}h idle</span>
+                </div>
+              ))}
+              {idleBreakdown.length === 0 && <p className="text-slate-500 text-sm">No idle data recorded.</p>}
+            </div>
+          </div>
+
+          <div className="overlay-panel p-8">
+            <div className="flex items-center gap-4 mb-6">
+              <div className="p-3 rounded-xl bg-secondary-500/10 text-secondary-400"><DollarSign size={22} /></div>
+              <h2 className="text-xl font-bold text-white">Project Profitability</h2>
+            </div>
+            <div className="space-y-3">
+              {profitability.slice(0, 8).map((p) => (
+                <div key={p.project_id} className="p-3 rounded-xl bg-white/5">
+                  <div className="flex justify-between">
+                    <span className="text-white font-medium">{p.project_name}</span>
+                    <span className={`font-bold ${(p.margin ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                      {p.margin != null ? `$${p.margin}` : '—'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">{p.billable_hours}h billable · rev {p.estimated_revenue != null ? `$${p.estimated_revenue}` : '—'}</p>
+                </div>
+              ))}
+              {profitability.length === 0 && <p className="text-slate-500 text-sm">No profitability data.</p>}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

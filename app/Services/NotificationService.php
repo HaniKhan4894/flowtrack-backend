@@ -6,18 +6,28 @@ use App\Models\NotificationModel;
 
 class NotificationService
 {
-    protected $notificationModel;
+    protected NotificationModel $notificationModel;
+    protected NotificationPreferenceService $preferenceService;
+    protected EmailService $emailService;
+    protected $db;
 
     public function __construct()
     {
         $this->notificationModel = new NotificationModel();
+        $this->preferenceService = new NotificationPreferenceService();
+        $this->emailService = new EmailService();
+        $this->db = \Config\Database::connect();
     }
 
     /**
-     * Create notification
+     * Create notification when user preferences allow in-app alerts.
      */
-    public function create(int $userId, string $type, string $title, string $message, ?array $data = null): array
+    public function create(int $userId, string $type, string $title, string $message, ?array $data = null, ?string $eventKey = null): ?array
     {
+        if ($eventKey && !$this->preferenceService->shouldNotify($userId, $eventKey, 'in_app')) {
+            return null;
+        }
+
         $notificationId = $this->notificationModel->insert([
             'user_id' => $userId,
             'type' => $type,
@@ -29,9 +39,6 @@ class NotificationService
         return $this->notificationModel->find($notificationId);
     }
 
-    /**
-     * Get user notifications
-     */
     public function getUserNotifications(int $userId, bool $unreadOnly = false, int $limit = 50): array
     {
         $builder = $this->notificationModel->builder();
@@ -47,9 +54,6 @@ class NotificationService
             ->getResultArray();
     }
 
-    /**
-     * Mark notification as read
-     */
     public function markAsRead(int $notificationId, int $userId): bool
     {
         return $this->notificationModel
@@ -57,14 +61,11 @@ class NotificationService
             ->where('user_id', $userId)
             ->set([
                 'is_read' => true,
-                'read_at' => date('Y-m-d H:i:s')
+                'read_at' => date('Y-m-d H:i:s'),
             ])
             ->update();
     }
 
-    /**
-     * Mark all as read
-     */
     public function markAllAsRead(int $userId): bool
     {
         return $this->notificationModel
@@ -72,14 +73,11 @@ class NotificationService
             ->where('is_read', false)
             ->set([
                 'is_read' => true,
-                'read_at' => date('Y-m-d H:i:s')
+                'read_at' => date('Y-m-d H:i:s'),
             ])
             ->update();
     }
 
-    /**
-     * Delete notification
-     */
     public function delete(int $notificationId, int $userId): bool
     {
         return $this->notificationModel
@@ -88,9 +86,6 @@ class NotificationService
             ->delete();
     }
 
-    /**
-     * Get unread count
-     */
     public function getUnreadCount(int $userId): int
     {
         return $this->notificationModel
@@ -99,38 +94,138 @@ class NotificationService
             ->countAllResults();
     }
 
-    // Helper methods for common notifications
-
-    public function notifyTimeEntryStarted(int $userId, array $timeEntry): array
+    public function notifyTimeEntryStarted(int $userId, array $timeEntry): ?array
     {
         return $this->create(
             $userId,
             'info',
             'Timer Started',
-            'You started tracking time for ' . ($timeEntry['project_name'] ?? 'a project'),
-            ['time_entry_id' => $timeEntry['id']]
+            'You started tracking time' . (!empty($timeEntry['project_name']) ? ' for ' . $timeEntry['project_name'] : ''),
+            ['time_entry_id' => $timeEntry['id']],
+            NotificationPreferenceService::EVENT_TIME_ENTRY_STARTED
         );
     }
 
-    public function notifyInvoiceCreated(int $userId, array $invoice): array
+    public function notifyTimeEntryStopped(int $userId, array $timeEntry): ?array
+    {
+        $hours = round(((int) ($timeEntry['duration_seconds'] ?? 0)) / 3600, 2);
+
+        return $this->create(
+            $userId,
+            'info',
+            'Timer Stopped',
+            "You tracked {$hours}h" . (!empty($timeEntry['project_name']) ? ' on ' . $timeEntry['project_name'] : ''),
+            ['time_entry_id' => $timeEntry['id']],
+            NotificationPreferenceService::EVENT_TIME_ENTRY_STOPPED
+        );
+    }
+
+    public function notifyTimesheetSubmitted(int $approverId, array $period, int $submitterId): ?array
+    {
+        $submitter = $this->db->table('users')->where('id', $submitterId)->get()->getRowArray();
+        $name = trim(($submitter['first_name'] ?? '') . ' ' . ($submitter['last_name'] ?? '')) ?: 'A team member';
+
+        $notification = $this->create(
+            $approverId,
+            'info',
+            'Timesheet Submitted',
+            "{$name} submitted a timesheet for week starting {$period['week_start']}",
+            ['period_id' => $period['id'], 'user_id' => $submitterId],
+            NotificationPreferenceService::EVENT_TIMESHEET_SUBMITTED
+        );
+
+        if ($this->preferenceService->shouldNotify($approverId, NotificationPreferenceService::EVENT_TIMESHEET_SUBMITTED, 'email')) {
+            $approver = $this->db->table('users')->where('id', $approverId)->get()->getRowArray();
+            if (!empty($approver['email'])) {
+                $this->emailService->sendSimpleEmail(
+                    $approver['email'],
+                    'Timesheet pending approval',
+                    "<p>{$name} submitted a timesheet for week starting {$period['week_start']}.</p>"
+                );
+            }
+        }
+
+        return $notification;
+    }
+
+    public function notifyTimesheetApproved(int $userId, array $period, bool $rejected = false): ?array
+    {
+        if ($rejected) {
+            $title = 'Timesheet Rejected';
+            $message = 'Your timesheet for week starting ' . $period['week_start'] . ' was rejected';
+            if (!empty($period['rejection_reason'])) {
+                $message .= ': ' . $period['rejection_reason'];
+            }
+        } else {
+            $title = 'Timesheet Approved';
+            $message = 'Your timesheet for week starting ' . $period['week_start'] . ' was approved';
+        }
+
+        $notification = $this->create(
+            $userId,
+            $rejected ? 'warning' : 'success',
+            $title,
+            $message,
+            ['period_id' => $period['id'], 'status' => $period['status']],
+            NotificationPreferenceService::EVENT_TIMESHEET_APPROVED
+        );
+
+        if ($this->preferenceService->shouldNotify($userId, NotificationPreferenceService::EVENT_TIMESHEET_APPROVED, 'email')) {
+            $user = $this->db->table('users')->where('id', $userId)->get()->getRowArray();
+            if (!empty($user['email'])) {
+                $this->emailService->sendSimpleEmail($user['email'], $title, "<p>{$message}</p>");
+            }
+        }
+
+        return $notification;
+    }
+
+    public function notifyPayrollFinalized(int $userId, array $run): ?array
+    {
+        return $this->create(
+            $userId,
+            'success',
+            'Payroll Finalized',
+            'Payroll run "' . ($run['title'] ?? 'Payroll') . '" has been finalized',
+            ['payroll_run_id' => $run['id']],
+            NotificationPreferenceService::EVENT_PAYROLL_FINALIZED
+        );
+    }
+
+    public function notifyInvoiceCreated(int $userId, array $invoice): ?array
     {
         return $this->create(
             $userId,
             'success',
             'Invoice Created',
             'Invoice #' . $invoice['invoice_number'] . ' has been created',
-            ['invoice_id' => $invoice['id']]
+            ['invoice_id' => $invoice['id']],
+            NotificationPreferenceService::EVENT_INVOICE_CREATED
+        );
+    }
+
+    public function notifyInvoiceSent(int $userId, array $invoice): ?array
+    {
+        return $this->create(
+            $userId,
+            'success',
+            'Invoice Sent',
+            'Invoice #' . $invoice['invoice_number'] . ' was sent to the client',
+            ['invoice_id' => $invoice['id']],
+            NotificationPreferenceService::EVENT_INVOICE_SENT
         );
     }
 
     public function notifyMemberAdded(int $userId, string $organizationName): array
     {
-        return $this->create(
+        $result = $this->create(
             $userId,
             'info',
             'Added to Organization',
             'You have been added to ' . $organizationName,
             ['organization_name' => $organizationName]
         );
+
+        return $result ?? [];
     }
 }

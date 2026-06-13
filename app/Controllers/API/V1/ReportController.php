@@ -4,15 +4,19 @@ namespace App\Controllers\API\V1;
 
 use CodeIgniter\RESTful\ResourceController;
 use App\Services\ReportService;
+use App\Services\TeamScopeService;
+use App\Services\PermissionService;
 
 class ReportController extends ResourceController
 {
     protected $reportService;
+    protected TeamScopeService $teamScopeService;
     protected $format = 'json';
 
     public function __construct()
     {
         $this->reportService = new ReportService();
+        $this->teamScopeService = new TeamScopeService();
     }
 
     /**
@@ -27,8 +31,9 @@ class ReportController extends ResourceController
                 return $this->fail('Unauthorized', 401);
             }
 
-            $permissionService = new \App\Services\PermissionService();
+            $permissionService = new PermissionService();
             $canViewTeam = $permissionService->userHasPermission($currentUserId, $organizationId, 'reports.view_team');
+            $visibleUserIds = $this->teamScopeService->getVisibleUserIds($currentUserId, $organizationId);
 
             $filters = [
                 'organization_id' => $organizationId,
@@ -39,6 +44,14 @@ class ReportController extends ResourceController
 
             if (!$canViewTeam) {
                 $filters['user_id'] = $currentUserId;
+            } elseif ($requestedUserId = $this->request->getGet('user_id')) {
+                $targetUserId = (int) $requestedUserId;
+                if (!$this->teamScopeService->canViewUser($currentUserId, $organizationId, $targetUserId)) {
+                    return $this->fail('Forbidden', 403);
+                }
+                $filters['user_id'] = $targetUserId;
+            } elseif (!$this->teamScopeService->isOrgWideViewer($currentUserId, $organizationId)) {
+                $filters['user_ids'] = $visibleUserIds;
             }
 
             $filters = array_filter($filters, fn($value) => $value !== null && $value !== '');
@@ -67,8 +80,9 @@ class ReportController extends ResourceController
                 return $this->fail('Unauthorized', 401);
             }
 
-            $permissionService = new \App\Services\PermissionService();
+            $permissionService = new PermissionService();
             $canViewTeam = $permissionService->userHasPermission($currentUserId, $organizationId, 'reports.view_team');
+            $visibleUserIds = $this->teamScopeService->getVisibleUserIds($currentUserId, $organizationId);
 
             $filters = [
                 'organization_id' => $organizationId,
@@ -78,6 +92,14 @@ class ReportController extends ResourceController
 
             if (!$canViewTeam) {
                 $filters['user_id'] = $currentUserId;
+            } elseif ($requestedUserId = $this->request->getGet('user_id')) {
+                $targetUserId = (int) $requestedUserId;
+                if (!$this->teamScopeService->canViewUser($currentUserId, $organizationId, $targetUserId)) {
+                    return $this->fail('Forbidden', 403);
+                }
+                $filters['user_id'] = $targetUserId;
+            } elseif (!$this->teamScopeService->isOrgWideViewer($currentUserId, $organizationId)) {
+                $filters['user_ids'] = $visibleUserIds;
             }
 
             $filters = array_filter($filters, fn($value) => $value !== null && $value !== '');
@@ -100,6 +122,15 @@ class ReportController extends ResourceController
     public function userProductivity($userId = null)
     {
         try {
+            $currentUserId = (int)($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
+            $organizationId = (int)($this->request->getServer('FLOWTRACK_ORGANIZATION_ID') ?? 0);
+            $targetUserId = (int) $userId;
+
+            if ($targetUserId !== $currentUserId
+                && !$this->teamScopeService->canViewUser($currentUserId, $organizationId, $targetUserId)) {
+                return $this->fail('Forbidden', 403);
+            }
+
             $startDate = $this->request->getGet('start_date');
             $endDate = $this->request->getGet('end_date');
 
@@ -107,7 +138,7 @@ class ReportController extends ResourceController
                 return $this->fail('start_date and end_date are required', 400);
             }
 
-            $report = $this->reportService->getUserProductivity($userId, $startDate, $endDate);
+            $report = $this->reportService->getUserProductivity($targetUserId, $startDate, $endDate);
 
             return $this->respond([
                 'success' => true,
@@ -125,7 +156,8 @@ class ReportController extends ResourceController
     public function teamLeaderboard()
     {
         try {
-            $organizationId = $this->request->getGet('organization_id') ?? (int)($this->request->getServer('FLOWTRACK_ORGANIZATION_ID') ?? 0);
+            $currentUserId = (int)($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
+            $organizationId = (int)($this->request->getGet('organization_id') ?? $this->request->getServer('FLOWTRACK_ORGANIZATION_ID') ?? 0);
             $startDate = $this->request->getGet('start_date');
             $endDate = $this->request->getGet('end_date');
 
@@ -133,13 +165,47 @@ class ReportController extends ResourceController
                 return $this->fail('organization_id, start_date, and end_date are required', 400);
             }
 
-            $leaderboard = $this->reportService->getTeamLeaderboard($organizationId, $startDate, $endDate);
+            $visibleUserIds = $this->teamScopeService->getVisibleUserIds($currentUserId, $organizationId);
+            $scopeUserIds = $this->teamScopeService->isOrgWideViewer($currentUserId, $organizationId)
+                ? null
+                : $visibleUserIds;
+
+            $leaderboard = $this->reportService->getTeamLeaderboard($organizationId, $startDate, $endDate, $scopeUserIds);
 
             return $this->respond([
                 'success' => true,
                 'data' => $leaderboard
             ]);
 
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+
+    /**
+     * GET /api/v1/reports/active-sessions
+     */
+    public function activeSessions()
+    {
+        try {
+            $currentUserId = (int)($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
+            $organizationId = (int)($this->request->getGet('organization_id') ?? $this->request->getServer('FLOWTRACK_ORGANIZATION_ID') ?? 0);
+            if (!$currentUserId || !$organizationId) {
+                return $this->fail('Unauthorized', 401);
+            }
+
+            $permissionService = new PermissionService();
+            $canViewTeam = $permissionService->userHasPermission($currentUserId, $organizationId, 'reports.view_team');
+            $visibleUserIds = $canViewTeam
+                ? $this->teamScopeService->getVisibleUserIds($currentUserId, $organizationId)
+                : [$currentUserId];
+
+            $sessions = $this->reportService->getActiveSessions($organizationId, $visibleUserIds);
+
+            return $this->respond([
+                'success' => true,
+                'data' => $sessions,
+            ]);
         } catch (\Exception $e) {
             return $this->fail($e->getMessage(), 400);
         }
@@ -157,14 +223,21 @@ class ReportController extends ResourceController
                 return $this->fail('report_data and filename are required', 400);
             }
 
-            $filepath = $this->reportService->exportToCSV($data['report_data'], $data['filename']);
+            $format = $data['format'] ?? 'csv';
+            $title = $data['title'] ?? 'Report';
+
+            $filepath = match ($format) {
+                'pdf' => $this->reportService->exportToPdf($data['report_data'], $data['filename'], $title),
+                'xlsx' => $this->reportService->exportToExcel($data['report_data'], $data['filename']),
+                default => $this->reportService->exportToCSV($data['report_data'], $data['filename']),
+            };
 
             return $this->respond([
                 'success' => true,
                 'message' => 'Report exported successfully',
                 'data' => [
                     'filepath' => $filepath,
-                    'download_url' => base_url('exports/' . $data['filename'])
+                    'download_url' => base_url('exports/' . basename($filepath))
                 ]
             ]);
 
@@ -185,17 +258,112 @@ class ReportController extends ResourceController
                 return $this->fail('Organization context required', 400);
             }
 
-            $permissionService = new \App\Services\PermissionService();
+            $permissionService = new PermissionService();
             $canViewTeam = $permissionService->userHasPermission($currentUserId, $organizationId, 'reports.view_team');
+            $visibleUserIds = $this->teamScopeService->getVisibleUserIds($currentUserId, $organizationId);
 
-            $scopeUserId = $canViewTeam ? null : $currentUserId;
-            $summary = $this->reportService->getSummary($organizationId, $scopeUserId);
+            if (!$canViewTeam) {
+                $summary = $this->reportService->getSummary($organizationId, $currentUserId);
+            } elseif ($this->teamScopeService->isOrgWideViewer($currentUserId, $organizationId)) {
+                $summary = $this->reportService->getSummary($organizationId);
+            } else {
+                $summary = $this->reportService->getSummary($organizationId, null, $visibleUserIds);
+            }
 
             return $this->respond([
                 'success' => true,
                 'data' => $summary
             ]);
 
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+
+    /**
+     * GET /api/v1/reports/hourly-timeline?date=2026-06-13&user_id=1
+     */
+    public function hourlyTimeline()
+    {
+        try {
+            $currentUserId = (int)($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
+            $organizationId = (int)($this->request->getGet('organization_id') ?? $this->request->getServer('FLOWTRACK_ORGANIZATION_ID') ?? 0);
+            if (!$currentUserId || !$organizationId) {
+                return $this->fail('Unauthorized', 401);
+            }
+
+            $date = $this->request->getGet('date');
+            if (!$date) {
+                return $this->fail('date is required (YYYY-MM-DD)', 400);
+            }
+
+            $targetUserId = (int)($this->request->getGet('user_id') ?? $currentUserId);
+            $permissionService = new PermissionService();
+            $canViewTeam = $permissionService->userHasPermission($currentUserId, $organizationId, 'activity.view_team');
+
+            if ($targetUserId !== $currentUserId && !$canViewTeam) {
+                return $this->fail('Forbidden', 403);
+            }
+
+            if ($targetUserId !== $currentUserId
+                && !$this->teamScopeService->canViewUser($currentUserId, $organizationId, $targetUserId)) {
+                return $this->fail('Forbidden', 403);
+            }
+
+            $timeline = $this->reportService->getHourlyTimeline($organizationId, $targetUserId, $date);
+
+            return $this->respond([
+                'success' => true,
+                'data' => $timeline,
+            ]);
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+
+    public function topUrls()
+    {
+        return $this->respondTeamReport(fn ($orgId, $start, $end) =>
+            $this->reportService->getTopUrls($orgId, $start, $end, $this->request->getGet('user_id') ? (int) $this->request->getGet('user_id') : null)
+        );
+    }
+
+    public function orgProductivity()
+    {
+        return $this->respondTeamReport(fn ($orgId, $start, $end) =>
+            $this->reportService->getOrgProductivity($orgId, $start, $end)
+        );
+    }
+
+    public function projectProfitability()
+    {
+        return $this->respondTeamReport(fn ($orgId, $start, $end) =>
+            $this->reportService->getProjectProfitability($orgId, $start, $end)
+        );
+    }
+
+    public function idleBreakdown()
+    {
+        return $this->respondTeamReport(fn ($orgId, $start, $end) =>
+            $this->reportService->getIdleBreakdown($orgId, $start, $end, $this->request->getGet('user_id') ? (int) $this->request->getGet('user_id') : null)
+        );
+    }
+
+    private function respondTeamReport(callable $callback)
+    {
+        try {
+            $organizationId = (int)($this->request->getGet('organization_id') ?? $this->request->getServer('FLOWTRACK_ORGANIZATION_ID') ?? 0);
+            $startDate = $this->request->getGet('start_date');
+            $endDate = $this->request->getGet('end_date');
+
+            if (!$organizationId || !$startDate || !$endDate) {
+                return $this->fail('organization_id, start_date, and end_date are required', 400);
+            }
+
+            return $this->respond([
+                'success' => true,
+                'data' => $callback($organizationId, $startDate, $endDate),
+            ]);
         } catch (\Exception $e) {
             return $this->fail($e->getMessage(), 400);
         }

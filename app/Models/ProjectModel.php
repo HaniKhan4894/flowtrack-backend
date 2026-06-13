@@ -14,7 +14,7 @@ class ProjectModel extends Model
     protected $protectFields    = true;
     protected $allowedFields    = [
         'uuid', 'organization_id', 'name', 'description', 'color',
-        'client_name', 'budget_hours', 'budget_amount', 'is_billable',
+        'client_name', 'client_id', 'budget_hours', 'budget_amount', 'is_billable',
         'is_active', 'archived_at'
     ];
 

@@ -66,4 +66,29 @@ export const authService = {
         });
         return response.data;
     },
+
+    setup2FA: async (): Promise<{ data: { secret: string; otpauth_url: string } }> => {
+        const response = await client.post('/auth/2fa/setup');
+        return response.data;
+    },
+
+    verify2FA: async (code: string): Promise<{ success: boolean; message: string }> => {
+        const response = await client.post('/auth/2fa/verify', { code });
+        return response.data;
+    },
+
+    disable2FA: async (password: string, code: string): Promise<{ success: boolean; message: string }> => {
+        const response = await client.post('/auth/2fa/disable', { password, code });
+        return response.data;
+    },
+
+    getSessions: async (): Promise<{ data: Array<{ id: number; device_info?: string | null; ip_address?: string | null; expires_at: string; created_at: string }> }> => {
+        const response = await client.get('/auth/sessions');
+        return response.data;
+    },
+
+    revokeSession: async (sessionId: number): Promise<{ success: boolean; message: string }> => {
+        const response = await client.delete(`/auth/sessions/${sessionId}`);
+        return response.data;
+    },
 };

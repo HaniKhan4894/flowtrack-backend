@@ -128,7 +128,7 @@ class PermissionService
     {
         // Check if system role
         $role = $this->roleModel->find($roleId);
-        if ($role['is_system']) {
+        if ((bool) ($role['is_system'] ?? false)) {
             throw new \Exception('Cannot modify system role permissions');
         }
 
@@ -176,12 +176,80 @@ class PermissionService
      */
     public function getOrganizationRoles(int $organizationId): array
     {
-        // Get system roles + organization custom roles
-        return $this->roleModel
+        $roles = $this->roleModel
             ->groupStart()
                 ->where('organization_id', null)
                 ->orWhere('organization_id', $organizationId)
             ->groupEnd()
             ->findAll();
+
+        return array_map(function (array $role) {
+            $role['is_system'] = (bool) ($role['is_system'] ?? false);
+            $role['permission_ids'] = array_map(
+                fn (array $p) => (int) $p['id'],
+                $this->roleModel->getPermissions((int) $role['id'])
+            );
+            return $role;
+        }, $roles);
+    }
+
+    /**
+     * Update custom role metadata
+     */
+    public function updateRole(int $roleId, int $organizationId, array $data): array
+    {
+        $role = $this->roleModel->find($roleId);
+        if (!$role || (bool) ($role['is_system'] ?? false) || (int) ($role['organization_id'] ?? 0) !== $organizationId) {
+            throw new \Exception('Role not found or cannot be modified');
+        }
+
+        $update = [];
+        if (isset($data['name'])) {
+            $name = trim((string) $data['name']);
+            if ($name === '') {
+                throw new \Exception('Role name cannot be empty');
+            }
+            $update['name'] = $name;
+            $update['slug'] = url_title($name, '-', true);
+        }
+        if (array_key_exists('description', $data)) {
+            $update['description'] = $data['description'];
+        }
+
+        if (!empty($update)) {
+            $this->roleModel->update($roleId, $update);
+        }
+
+        return $this->roleModel->find($roleId);
+    }
+
+    /**
+     * Delete custom role (reassign members to member role)
+     */
+    public function deleteRole(int $roleId, int $organizationId): bool
+    {
+        $role = $this->roleModel->find($roleId);
+        if (!$role || (bool) ($role['is_system'] ?? false) || (int) ($role['organization_id'] ?? 0) !== $organizationId) {
+            throw new \Exception('Role not found or cannot be deleted');
+        }
+
+        $memberRole = $this->roleModel->where('slug', 'member')->where('organization_id', null)->first();
+        $fallbackRoleId = $memberRole ? (int) $memberRole['id'] : null;
+
+        $this->db->transStart();
+
+        if ($fallbackRoleId) {
+            $this->db->table('organization_members')
+                ->where('organization_id', $organizationId)
+                ->where('role_id', $roleId)
+                ->update(['role_id' => $fallbackRoleId, 'role' => 'member']);
+        }
+
+        $this->db->table('role_permissions')->where('role_id', $roleId)->delete();
+        $this->roleModel->delete($roleId);
+
+        $this->db->transComplete();
+
+        return $this->db->transStatus();
     }
 }

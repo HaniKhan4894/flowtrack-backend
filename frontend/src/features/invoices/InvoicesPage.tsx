@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { FileText, Plus, Download, Mail, MoreVertical, Search, Filter, CheckCircle2, Clock, X } from 'lucide-react';
+import { FileText, Plus, Download, Mail, MoreVertical, Search, Filter, CheckCircle2, Clock, X, ExternalLink } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { Button } from '../../components/ui';
 
 import { invoiceService, type Invoice } from '../../api/invoiceService';
@@ -158,7 +159,9 @@ const InvoicesPage = () => {
                 return (
                   <tr key={inv.id} className="hover:bg-white/5 transition-colors group">
                     <td className="px-6 py-4">
-                      <span className="text-sm font-bold text-white">#{inv.invoice_number}</span>
+                      <Link to={`/invoices/${inv.id}`} className="text-sm font-bold text-white hover:text-primary-400">
+                        #{inv.invoice_number}
+                      </Link>
                       <p className="text-[10px] text-slate-500 mt-0.5">{new Date(inv.issue_date).toLocaleDateString()}</p>
                     </td>
                     <td className="px-6 py-4 text-sm text-slate-300 font-medium">{inv.client_name}</td>
@@ -172,6 +175,12 @@ const InvoicesPage = () => {
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-2">
+                        <Link
+                          to={`/invoices/${inv.id}`}
+                          className="p-2 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition-all opacity-0 group-hover:opacity-100"
+                        >
+                          <ExternalLink size={16} />
+                        </Link>
                         <button className="p-2 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition-all opacity-0 group-hover:opacity-100">
                           <Download size={16} />
                         </button>

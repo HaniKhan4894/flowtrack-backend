@@ -10,7 +10,7 @@ interface TimerState {
     elapsed: number;
     isRunning: boolean;
     isPaused: boolean;
-    start: (projectId: number, description?: string) => Promise<void>;
+    start: (projectId: number, description?: string, taskId?: number) => Promise<void>;
     stop: () => Promise<void>;
     pause: () => Promise<void>;
     resume: () => Promise<void>;
@@ -44,9 +44,13 @@ export const useTimerStore = create<TimerState>((set, get) => ({
     isRunning: false,
     isPaused: false,
 
-    start: async (projectId, description) => {
+    start: async (projectId, description, taskId) => {
         try {
-            const response = await timeService.startTimer({ project_id: projectId, description });
+            const response = await timeService.startTimer({
+                project_id: projectId,
+                task_id: taskId,
+                description,
+            });
             const entry = response.data;
             set({
                 activeEntry: entry,

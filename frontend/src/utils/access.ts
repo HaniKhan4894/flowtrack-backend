@@ -10,7 +10,11 @@ import {
   Camera,
   Activity,
   FileText,
+  Wallet,
   Shield,
+  Building2,
+  CalendarDays,
+  ClipboardList,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -19,31 +23,45 @@ export interface NavItem {
   label: string;
   path: string;
   permission?: string;
+  showIf?: (user: User | null | undefined) => boolean;
 }
 
 const ALL_NAV_ITEMS: NavItem[] = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/app' },
   { icon: Clock, label: 'Time Tracking', path: '/time', permission: 'time.view_own' },
+  { icon: ClipboardList, label: 'Timesheets', path: '/timesheets', permission: 'timesheet.submit' },
   { icon: Briefcase, label: 'Projects', path: '/projects', permission: 'projects.view' },
+  { icon: Building2, label: 'Clients', path: '/clients', permission: 'invoices.view' },
+  { icon: CalendarDays, label: 'Leave', path: '/leave' },
   { icon: Camera, label: 'Screenshots', path: '/screenshots', permission: 'screenshots.view_own' },
   { icon: Activity, label: 'Activity', path: '/activity', permission: 'activity.view_own' },
   { icon: FileText, label: 'Invoices', path: '/invoices', permission: 'invoices.view' },
-  { icon: Users, label: 'Team', path: '/team', permission: 'users.view' },
+  { icon: Wallet, label: 'Payroll', path: '/payroll', permission: 'payroll.view' },
+  {
+    icon: Users,
+    label: 'Team',
+    path: '/team',
+    showIf: (user) => canViewTeam(user),
+  },
   { icon: Sparkles, label: 'Analytics', path: '/analytics', permission: 'reports.view_own' },
   { icon: CreditCard, label: 'Billing', path: '/billing', permission: 'settings.billing' },
-  { icon: Settings, label: 'Settings', path: '/settings', permission: 'settings.view' },
 ];
 
-const ADMIN_NAV_ITEM: NavItem = { icon: Shield, label: 'Platform Admin', path: '/admin' };
+export const SETTINGS_NAV_ITEM: NavItem = { icon: Settings, label: 'Settings', path: '/settings', permission: 'settings.view' };
+export const ADMIN_NAV_ITEM: NavItem = { icon: Shield, label: 'Platform Admin', path: '/admin' };
 
 const PATH_PERMISSIONS: Record<string, string | string[]> = {
   '/app': [],
   '/time': 'time.view_own',
+  '/timesheets': 'timesheet.submit',
   '/projects': 'projects.view',
+  '/clients': 'invoices.view',
+  '/leave': [],
   '/screenshots': 'screenshots.view_own',
   '/activity': 'activity.view_own',
   '/invoices': 'invoices.view',
-  '/team': 'users.view',
+  '/payroll': 'payroll.view',
+  '/team': '__team_nav__',
   '/analytics': ['reports.view_own', 'reports.view_team'],
   '/billing': 'settings.billing',
   '/settings': 'settings.view',
@@ -56,6 +74,19 @@ export function isOrgAdmin(user: User | null | undefined): boolean {
   if (user.is_org_admin) return true;
   const role = user.organization_role ?? user.role;
   return role === 'owner' || role === 'admin' || role === 'manager';
+}
+
+export function isTeamLead(user: User | null | undefined): boolean {
+  if (!user) return false;
+  if (user.is_team_lead) return true;
+  const role = user.organization_role ?? user.role;
+  return role === 'team_lead';
+}
+
+export function canViewTeam(user: User | null | undefined): boolean {
+  if (!user) return false;
+  if (hasPermission(user, 'users.view')) return true;
+  return !!user.can_view_team;
 }
 
 export function isSuperAdmin(user: User | null | undefined): boolean {
@@ -89,20 +120,20 @@ export function canAccessPath(user: User | null | undefined, path: string): bool
     return hasAnyPermission(user, rule);
   }
   if (rule === '__super_admin__') return isSuperAdmin(user);
+  if (rule === '__team_nav__') return canViewTeam(user);
   return hasPermission(user, rule);
 }
 
 export function getNavItemsForUser(user: User | null | undefined): NavItem[] {
-  const items = ALL_NAV_ITEMS.filter((item) => {
+  return ALL_NAV_ITEMS.filter((item) => {
+    if (item.showIf) return item.showIf(user);
     if (!item.permission) return true;
     return hasPermission(user, item.permission);
   });
+}
 
-  if (isSuperAdmin(user)) {
-    items.push(ADMIN_NAV_ITEM);
-  }
-
-  return items;
+export function canAccessSettings(user: User | null | undefined): boolean {
+  return hasPermission(user, 'settings.view');
 }
 
 export function canManageTeam(user: User | null | undefined): boolean {

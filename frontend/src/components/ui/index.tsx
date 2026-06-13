@@ -78,3 +78,6 @@ export const Input = ({ label, error, className, ...props }: InputProps) => {
     </div>
   );
 };
+
+export { SearchableSelect } from './SearchableSelect';
+export type { SearchableSelectOption } from './SearchableSelect';

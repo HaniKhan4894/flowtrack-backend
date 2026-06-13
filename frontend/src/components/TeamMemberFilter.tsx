@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Users } from 'lucide-react';
 import { teamService, type TeamMember } from '../api/teamService';
 import { useAuthStore } from '../store/authStore';
-import { isOrgAdmin } from '../utils/access';
+import { canViewMemberTracking } from '../utils/access';
 
 interface TeamMemberFilterProps {
   selectedUserId: number | null;
@@ -12,7 +12,7 @@ interface TeamMemberFilterProps {
 export function TeamMemberFilter({ selectedUserId, onChange }: TeamMemberFilterProps) {
   const { user } = useAuthStore();
   const [members, setMembers] = useState<TeamMember[]>([]);
-  const canPickMember = isOrgAdmin(user);
+  const canPickMember = canViewMemberTracking(user);
 
   useEffect(() => {
     if (!canPickMember || !user?.organization_id) return;

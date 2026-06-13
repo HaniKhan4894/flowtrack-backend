@@ -180,6 +180,32 @@ class EmailService
         );
     }
 
+    public function sendSimpleEmail(string $to, string $subject, string $bodyHtml): bool
+    {
+        return $this->sendMail($to, $subject, $this->wrapTemplate($subject, $bodyHtml));
+    }
+
+    public function sendScheduledReportEmail(string $to, string $reportType, string $filepath, string $filename): bool
+    {
+        $title = 'Scheduled Report: ' . ucfirst(str_replace('_', ' ', $reportType));
+        $body = '<p>Your scheduled <strong>' . htmlspecialchars($reportType) . '</strong> report is attached.</p>';
+
+        try {
+            $this->email->clear(true);
+            $this->email->setFrom($this->config->fromEmail, $this->config->fromName);
+            $this->email->setTo($to);
+            $this->email->setSubject($title);
+            $this->email->setMailType('html');
+            $this->email->setMessage($this->wrapTemplate($title, $body));
+            $this->email->attach($filepath, 'attachment', $filename);
+
+            return $this->email->send();
+        } catch (\Exception $e) {
+            log_message('error', 'Failed to send scheduled report: ' . $e->getMessage());
+            return false;
+        }
+    }
+
     private function wrapTemplate(string $title, string $bodyHtml): string
     {
         return "

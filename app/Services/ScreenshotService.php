@@ -56,6 +56,13 @@ class ScreenshotService
         // Move file
         $file->move($fullPath, $filename);
 
+        $relativePath = $datePath . $filename;
+        $absolutePath = $fullPath . $filename;
+
+        if (!empty($data['apply_blur'])) {
+            $this->blurImage($absolutePath);
+        }
+
         // Generate UUID manually since we bypass Model callbacks
         $uuid = sprintf('%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
             mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff),
@@ -67,9 +74,9 @@ class ScreenshotService
             'uuid'            => $uuid,
             'time_entry_id'   => (int)$timeEntryId,
             'user_id'         => (int)$userId,
-            'file_path'       => $datePath . $filename,
+            'file_path'       => $relativePath,
             'thumbnail_path'  => null,
-            'is_blurred'      => (bool)($data['is_blurred'] ?? false),
+            'is_blurred'      => (bool)($data['is_blurred'] ?? $data['apply_blur'] ?? false),
             'activity_level'  => (int)($data['activity_level'] ?? 0),
             'captured_at'     => date('Y-m-d H:i:s'),
             'created_at'      => date('Y-m-d H:i:s'),
@@ -153,5 +160,40 @@ class ScreenshotService
                 'total_pages' => ceil($total / $perPage)
             ]
         ];
+    }
+
+    public function blurImage(string $absolutePath): bool
+    {
+        if (!file_exists($absolutePath) || !function_exists('imagecreatefromstring')) {
+            return false;
+        }
+
+        $contents = file_get_contents($absolutePath);
+        if ($contents === false) {
+            return false;
+        }
+
+        $image = @imagecreatefromstring($contents);
+        if (!$image) {
+            return false;
+        }
+
+        $width = imagesx($image);
+        $height = imagesy($image);
+
+        for ($i = 0; $i < 3; $i++) {
+            imagefilter($image, IMG_FILTER_GAUSSIAN_BLUR);
+        }
+
+        $mime = mime_content_type($absolutePath) ?: 'image/jpeg';
+        $saved = match ($mime) {
+            'image/png' => imagepng($image, $absolutePath),
+            'image/webp' => function_exists('imagewebp') ? imagewebp($image, $absolutePath, 80) : imagejpeg($image, $absolutePath, 85),
+            default => imagejpeg($image, $absolutePath, 85),
+        };
+
+        imagedestroy($image);
+
+        return (bool) $saved;
     }
 }

@@ -10,6 +10,7 @@ export interface Project {
     is_active?: number;
     is_billable?: number;
     client_name?: string;
+    client_id?: number;
     budget_hours?: number;
     budget_amount?: number;
     total_time_seconds?: number;

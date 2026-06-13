@@ -4,15 +4,19 @@ namespace App\Controllers\API\V1;
 
 use CodeIgniter\RESTful\ResourceController;
 use App\Services\TimeEntryService;
+use App\Services\TeamScopeService;
+use App\Services\PermissionService;
 
 class TimeEntryController extends ResourceController
 {
     protected $timeEntryService;
+    protected TeamScopeService $teamScopeService;
     protected $format = 'json';
 
     public function __construct()
     {
         $this->timeEntryService = new TimeEntryService();
+        $this->teamScopeService = new TeamScopeService();
     }
 
     private function requireAuthContext(): ?\CodeIgniter\HTTP\ResponseInterface
@@ -39,10 +43,20 @@ class TimeEntryController extends ResourceController
                 return $this->fail('Unauthorized', 401);
             }
 
-            $permissionService = new \App\Services\PermissionService();
+            $permissionService = new PermissionService();
             $canViewTeam = $permissionService->userHasPermission($currentUserId, $organizationId, 'time.view_team');
             $requestedUserId = $this->request->getGet('user_id');
-            $targetUserId = $canViewTeam && $requestedUserId ? (int) $requestedUserId : $currentUserId;
+
+            if (!$canViewTeam) {
+                $targetUserId = $currentUserId;
+            } elseif ($requestedUserId) {
+                $targetUserId = (int) $requestedUserId;
+                if (!$this->teamScopeService->canViewUser($currentUserId, $organizationId, $targetUserId)) {
+                    return $this->fail('Forbidden', 403);
+                }
+            } else {
+                $targetUserId = $currentUserId;
+            }
 
             // Get query parameters
             $filters = [
@@ -243,6 +257,60 @@ class TimeEntryController extends ResourceController
                 'data' => $entry
             ]);
 
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+
+    /**
+     * PUT /api/v1/time-entries/{id}
+     */
+    public function update($id = null)
+    {
+        try {
+            if ($authError = $this->requireAuthContext()) {
+                return $authError;
+            }
+
+            $userId = (int) ($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
+            $organizationId = (int) ($this->request->getServer('FLOWTRACK_ORGANIZATION_ID') ?? 0);
+            $data = $this->request->getJSON(true);
+
+            $entry = $this->timeEntryService->updateEntry((int) $id, $userId, $organizationId, $data);
+
+            return $this->respond([
+                'success' => true,
+                'message' => 'Time entry updated successfully',
+                'data' => $entry,
+            ]);
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+
+    /**
+     * DELETE /api/v1/time-entries/{id}
+     */
+    public function delete($id = null)
+    {
+        try {
+            if ($authError = $this->requireAuthContext()) {
+                return $authError;
+            }
+
+            $userId = (int) ($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
+            $organizationId = (int) ($this->request->getServer('FLOWTRACK_ORGANIZATION_ID') ?? 0);
+
+            $deleted = $this->timeEntryService->deleteEntry((int) $id, $userId, $organizationId);
+
+            if (!$deleted) {
+                return $this->fail('Failed to delete time entry', 400);
+            }
+
+            return $this->respondDeleted([
+                'success' => true,
+                'message' => 'Time entry deleted successfully',
+            ]);
         } catch (\Exception $e) {
             return $this->fail($e->getMessage(), 400);
         }

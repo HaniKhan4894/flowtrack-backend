@@ -225,6 +225,25 @@ class OrganizationController extends ResourceController
     }
 
     /**
+     * PUT /api/v1/organizations/{id}/members/{userId}
+     */
+    public function updateMember($id = null, $userId = null)
+    {
+        try {
+            $data = $this->request->getJSON(true) ?? [];
+            $member = $this->organizationService->updateMember((int) $id, (int) $userId, $data);
+
+            return $this->respond([
+                'success' => true,
+                'message' => 'Member updated successfully',
+                'data' => $member,
+            ]);
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+
+    /**
      * GET /api/v1/organizations/{id}/members/{userId}/monitoring
      */
     public function getMemberMonitoring($id = null, $userId = null)

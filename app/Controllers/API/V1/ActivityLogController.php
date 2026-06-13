@@ -4,16 +4,20 @@ namespace App\Controllers\API\V1;
 
 use CodeIgniter\RESTful\ResourceController;
 use App\Services\ActivityLogService;
+use App\Services\TeamScopeService;
+use App\Services\PermissionService;
 
 class ActivityLogController extends ResourceController
 {
     /** @var \App\Services\ActivityLogService */
     protected $activityLogService;
+    protected TeamScopeService $teamScopeService;
     protected $format = 'json';
 
     public function __construct()
     {
         $this->activityLogService = new \App\Services\ActivityLogService();
+        $this->teamScopeService = new TeamScopeService();
     }
 
     /**
@@ -28,11 +32,20 @@ class ActivityLogController extends ResourceController
                 return $this->fail('Unauthorized', 401);
             }
             
-            $permissionService = new \App\Services\PermissionService();
+            $permissionService = new PermissionService();
             $canViewTeam = $permissionService->userHasPermission($userId, $organizationId, 'activity.view_team');
 
             $requestedUserId = $this->request->getGet('user_id');
-            $targetUserId = $canViewTeam && $requestedUserId ? (int) $requestedUserId : $userId;
+            if (!$canViewTeam) {
+                $targetUserId = $userId;
+            } elseif ($requestedUserId) {
+                $targetUserId = (int) $requestedUserId;
+                if (!$this->teamScopeService->canViewUser($userId, $organizationId, $targetUserId)) {
+                    return $this->fail('Forbidden', 403);
+                }
+            } else {
+                $targetUserId = $userId;
+            }
 
             $filters = [
                 'user_id' => $targetUserId,
@@ -84,6 +97,19 @@ class ActivityLogController extends ResourceController
             $results = [];
             foreach ($logs as $log) {
                 $results[] = $this->activityLogService->logActivity($data['time_entry_id'], $userId, $log);
+            }
+
+            if (isset($data['idle_seconds']) || isset($data['active_seconds'])) {
+                $entry = (new \App\Models\TimeEntryModel())->find($data['time_entry_id']);
+                if ($entry) {
+                    $this->activityLogService->recordIdleStats(
+                        $userId,
+                        (int) $entry['organization_id'],
+                        date('Y-m-d H:i:s'),
+                        (int) ($data['idle_seconds'] ?? 0),
+                        (int) ($data['active_seconds'] ?? 0)
+                    );
+                }
             }
 
             return $this->respondCreated([
@@ -142,13 +168,18 @@ class ActivityLogController extends ResourceController
                 return $this->fail('Unauthorized', 401);
             }
             
-            $permissionService = new \App\Services\PermissionService();
+            $permissionService = new PermissionService();
             $canViewTeam = $permissionService->userHasPermission($currentUserId, $organizationId, 'activity.view_team');
 
             $requestedUserId = $this->request->getGet('user_id') ?? $currentUserId;
-            
-            // Enforce ownership
-            $targetUserId = $canViewTeam ? $requestedUserId : $currentUserId;
+            if (!$canViewTeam) {
+                $targetUserId = $currentUserId;
+            } else {
+                $targetUserId = (int) $requestedUserId;
+                if (!$this->teamScopeService->canViewUser($currentUserId, $organizationId, $targetUserId)) {
+                    return $this->fail('Forbidden', 403);
+                }
+            }
 
             $startDate = $this->request->getGet('start_date');
             $endDate = $this->request->getGet('end_date');
@@ -181,11 +212,20 @@ class ActivityLogController extends ResourceController
                 return $this->fail('Unauthorized', 401);
             }
 
-            $permissionService = new \App\Services\PermissionService();
+            $permissionService = new PermissionService();
             $canViewTeam = $permissionService->userHasPermission($currentUserId, $organizationId, 'activity.view_team');
 
             $requestedUserId = $this->request->getGet('user_id');
-            $targetUserId = $canViewTeam && $requestedUserId ? (int) $requestedUserId : $currentUserId;
+            if (!$canViewTeam) {
+                $targetUserId = $currentUserId;
+            } elseif ($requestedUserId) {
+                $targetUserId = (int) $requestedUserId;
+                if (!$this->teamScopeService->canViewUser($currentUserId, $organizationId, $targetUserId)) {
+                    return $this->fail('Forbidden', 403);
+                }
+            } else {
+                $targetUserId = $currentUserId;
+            }
 
             $startDate = $this->request->getGet('start_date');
             $endDate = $this->request->getGet('end_date');

@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\UserModel;
+use App\Models\RefreshTokenModel;
 use App\Libraries\JWTHandler;
 use App\Services\EmailVerificationService;
 use App\Models\SubscriptionModel;
@@ -12,6 +13,7 @@ use App\Models\OrganizationModel;
 class AuthService
 {
     protected $userModel;
+    protected $refreshTokenModel;
     protected $userService;
     protected $organizationService;
     protected $jwtHandler;
@@ -20,6 +22,7 @@ class AuthService
     public function __construct()
     {
         $this->userModel = new UserModel();
+        $this->refreshTokenModel = new RefreshTokenModel();
         $this->userService = new UserService();
         $this->organizationService = new OrganizationService();
         $this->jwtHandler = new JWTHandler();
@@ -129,7 +132,7 @@ class AuthService
     /**
      * Login user
      */
-    public function login(string $email, string $password): array
+    public function login(string $email, string $password, ?string $totpCode = null, ?string $deviceInfo = null, ?string $ipAddress = null): array
     {
         $user = $this->userModel->where('email', $email)->first();
 
@@ -149,8 +152,16 @@ class AuthService
             throw new \Exception('Please verify your email before signing in. Check your inbox for the verification link.');
         }
 
-        // Generate tokens
-        $tokens = $this->generateTokens($user);
+        if (!empty($user['two_factor_enabled'])) {
+            if (!$totpCode) {
+                throw new \Exception('Two-factor authentication code is required');
+            }
+            if (!$this->verifyTotpCode($user, $totpCode)) {
+                throw new \Exception('Invalid two-factor authentication code');
+            }
+        }
+
+        $tokens = $this->generateTokens($user, $deviceInfo, $ipAddress);
 
         return [
             'user' => $this->buildAuthProfile((int) $user['id']) ?? $this->sanitizeUser($user),
@@ -161,11 +172,22 @@ class AuthService
     /**
      * Refresh access token using refresh token
      */
-    public function refreshToken(string $refreshToken): array
+    public function refreshToken(string $refreshToken, ?string $deviceInfo = null, ?string $ipAddress = null): array
     {
         $decoded = $this->jwtHandler->verifyToken($refreshToken);
         if (!$decoded || (($decoded->type ?? null) !== 'refresh')) {
             throw new \Exception('Invalid refresh token');
+        }
+
+        $tokenHash = hash('sha256', $refreshToken);
+        $stored = $this->refreshTokenModel
+            ->where('token_hash', $tokenHash)
+            ->where('revoked_at', null)
+            ->where('expires_at >=', date('Y-m-d H:i:s'))
+            ->first();
+
+        if (!$stored) {
+            throw new \Exception('Invalid or expired refresh token');
         }
 
         $userData = $this->jwtHandler->getUserFromToken($refreshToken);
@@ -174,34 +196,46 @@ class AuthService
             throw new \Exception('Invalid refresh token');
         }
 
-        // Get fresh user data
         $user = $this->userModel->find($userData['user_id']);
 
         if (!$user || !$user['is_active']) {
             throw new \Exception('User not found or inactive');
         }
 
-        // Get user's primary organization
+        $this->refreshTokenModel->update($stored['id'], ['revoked_at' => date('Y-m-d H:i:s')]);
+
         $orgMember = $this->db->table('organization_members')
             ->where('user_id', $user['id'])
             ->orderBy('joined_at', 'ASC')
             ->get()
             ->getRowArray();
 
-        // Generate new access token
-        $accessToken = $this->jwtHandler->generateAccessToken([
-            'user_id' => $user['id'],
-            'email' => $user['email'],
-            'role' => $user['role'],
-            'organization_id' => $orgMember ? (int) $orgMember['organization_id'] : null
-        ]);
+        $tokens = $this->generateTokens($user, $deviceInfo, $ipAddress);
 
         return [
-            'access_token' => $accessToken,
+            'access_token' => $tokens['access_token'],
+            'refresh_token' => $tokens['refresh_token'],
             'token_type' => 'Bearer',
             'expires_in' => 900,
             'organization_id' => $orgMember ? (int)$orgMember['organization_id'] : null,
         ];
+    }
+
+    /**
+     * Revoke refresh token on logout
+     */
+    public function logout(?string $refreshToken = null): void
+    {
+        if (!$refreshToken) {
+            return;
+        }
+
+        $tokenHash = hash('sha256', $refreshToken);
+        $this->refreshTokenModel
+            ->where('token_hash', $tokenHash)
+            ->where('revoked_at', null)
+            ->set(['revoked_at' => date('Y-m-d H:i:s')])
+            ->update();
     }
 
     /**
@@ -221,11 +255,10 @@ class AuthService
     }
 
     /**
-     * Generate JWT tokens
+     * Generate JWT tokens and persist refresh token session
      */
-    private function generateTokens(array $user): array
+    private function generateTokens(array $user, ?string $deviceInfo = null, ?string $ipAddress = null): array
     {
-        // Get user's primary organization
         $orgMember = $this->db->table('organization_members')
             ->where('user_id', $user['id'])
             ->orderBy('joined_at', 'ASC')
@@ -239,8 +272,18 @@ class AuthService
             'organization_id' => $orgMember ? (int) $orgMember['organization_id'] : null
         ];
 
-        $accessToken = $this->jwtHandler->generateAccessToken($payload, 900); // 15 minutes
-        $refreshToken = $this->jwtHandler->generateRefreshToken(['user_id' => $user['id']], 2592000); // 30 days
+        $accessToken = $this->jwtHandler->generateAccessToken($payload, 900);
+        $refreshToken = $this->jwtHandler->generateRefreshToken(['user_id' => $user['id']], 2592000);
+
+        $expiresAt = date('Y-m-d H:i:s', time() + 2592000);
+        $this->refreshTokenModel->insert([
+            'user_id' => (int) $user['id'],
+            'token_hash' => hash('sha256', $refreshToken),
+            'device_info' => $deviceInfo ? substr($deviceInfo, 0, 500) : null,
+            'ip_address' => $ipAddress,
+            'expires_at' => $expiresAt,
+            'created_at' => date('Y-m-d H:i:s'),
+        ]);
 
         return [
             'access_token' => $accessToken,
@@ -249,6 +292,115 @@ class AuthService
             'expires_in' => 900,
             'organization_id' => $orgMember ? (int)$orgMember['organization_id'] : null,
         ];
+    }
+
+    public function setupTwoFactor(int $userId): array
+    {
+        $user = $this->userModel->find($userId);
+        if (!$user) {
+            throw new \Exception('User not found');
+        }
+
+        $google2fa = new \PragmaRX\Google2FA\Google2FA();
+        $secret = $google2fa->generateSecretKey();
+
+        $this->db->table('users')->where('id', $userId)->update([
+            'two_factor_secret' => $secret,
+            'two_factor_enabled' => 0,
+        ]);
+
+        $appName = 'FlowTrack';
+        $otpauthUrl = $google2fa->getQRCodeUrl($appName, $user['email'], $secret);
+
+        return [
+            'secret' => $secret,
+            'otpauth_url' => $otpauthUrl,
+        ];
+    }
+
+    public function verifyTwoFactor(int $userId, string $code): bool
+    {
+        $user = $this->userModel->find($userId);
+        if (!$user || empty($user['two_factor_secret'])) {
+            throw new \Exception('Two-factor setup not initiated');
+        }
+
+        if (!$this->verifyTotpCode($user, $code)) {
+            throw new \Exception('Invalid verification code');
+        }
+
+        $this->db->table('users')->where('id', $userId)->update(['two_factor_enabled' => 1]);
+
+        return true;
+    }
+
+    public function disableTwoFactor(int $userId, string $password, string $code): bool
+    {
+        $user = $this->userModel->find($userId);
+        if (!$user) {
+            throw new \Exception('User not found');
+        }
+
+        if (!password_verify($password, $user['password_hash'])) {
+            throw new \Exception('Invalid password');
+        }
+
+        if (!empty($user['two_factor_enabled']) && !$this->verifyTotpCode($user, $code)) {
+            throw new \Exception('Invalid verification code');
+        }
+
+        $this->db->table('users')->where('id', $userId)->update([
+            'two_factor_secret' => null,
+            'two_factor_enabled' => 0,
+        ]);
+
+        return true;
+    }
+
+    public function listSessions(int $userId): array
+    {
+        $rows = $this->refreshTokenModel
+            ->where('user_id', $userId)
+            ->where('revoked_at', null)
+            ->where('expires_at >=', date('Y-m-d H:i:s'))
+            ->orderBy('created_at', 'DESC')
+            ->findAll();
+
+        return array_map(fn ($r) => [
+            'id' => (int) $r['id'],
+            'device_info' => $r['device_info'] ?? null,
+            'ip_address' => $r['ip_address'] ?? null,
+            'expires_at' => $r['expires_at'],
+            'created_at' => $r['created_at'],
+        ], $rows);
+    }
+
+    public function revokeSession(int $userId, int $sessionId): bool
+    {
+        $session = $this->refreshTokenModel
+            ->where('id', $sessionId)
+            ->where('user_id', $userId)
+            ->where('revoked_at', null)
+            ->first();
+
+        if (!$session) {
+            throw new \Exception('Session not found');
+        }
+
+        return (bool) $this->refreshTokenModel->update($sessionId, [
+            'revoked_at' => date('Y-m-d H:i:s'),
+        ]);
+    }
+
+    private function verifyTotpCode(array $user, string $code): bool
+    {
+        if (empty($user['two_factor_secret'])) {
+            return false;
+        }
+
+        $google2fa = new \PragmaRX\Google2FA\Google2FA();
+
+        return $google2fa->verifyKey($user['two_factor_secret'], $code);
     }
 
     /**
@@ -308,6 +460,20 @@ class AuthService
         $user['monitoring'] = $monitoring;
         $user['is_super_admin'] = !empty($user['is_super_admin']);
 
+        $teamScopeService = new TeamScopeService();
+        $onboardingService = new OnboardingService();
+        $viewTeamSlugs = ['time.view_team', 'screenshots.view_team', 'activity.view_team', 'reports.view_team'];
+        $hasViewTeamPermission = !empty(array_intersect($permissionSlugs, $viewTeamSlugs));
+        $visibleUserIds = $organizationId > 0
+            ? $teamScopeService->getVisibleUserIds($userId, $organizationId)
+            : [$userId];
+
+        $user['is_team_lead'] = $organizationId > 0 && $teamScopeService->isTeamLead($userId, $organizationId);
+        $user['can_view_team'] = $hasViewTeamPermission && count($visibleUserIds) > 1;
+        $user['onboarding'] = $organizationId > 0
+            ? $onboardingService->getProgress($userId, $organizationId)
+            : null;
+
         if ($organizationId > 0) {
             $org = (new OrganizationModel())->find($organizationId);
             if ($org) {
@@ -315,6 +481,7 @@ class AuthService
                     'id' => (int) $org['id'],
                     'name' => $org['name'],
                     'php_timezone' => $org['php_timezone'] ?? 'UTC',
+                    'currency' => $org['currency'] ?? 'USD',
                     'country_id' => $org['country_id'] ?? null,
                     'state_id' => $org['state_id'] ?? null,
                     'city_id' => $org['city_id'] ?? null,
@@ -375,7 +542,7 @@ class AuthService
 
     private function sanitizeUser(array $user): array
     {
-        unset($user['password_hash'], $user['deleted_at']);
+        unset($user['password_hash'], $user['deleted_at'], $user['two_factor_secret']);
 
         // Normalize organization_id for frontend context-dependent calls (team invite, etc.)
         if (!array_key_exists('organization_id', $user) || empty($user['organization_id'])) {

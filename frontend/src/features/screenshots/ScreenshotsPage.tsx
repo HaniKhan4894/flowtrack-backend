@@ -6,7 +6,7 @@ import { screenshotService } from '../../api/screenshotService';
 import { monitoringService } from '../../api/monitoringService';
 import { TeamMemberFilter } from '../../components/TeamMemberFilter';
 import { useAuthStore } from '../../store/authStore';
-import { isOrgAdmin } from '../../utils/access';
+import { canViewMemberTracking } from '../../utils/access';
 import { Link } from 'react-router-dom';
 
 const ScreenshotsPage = () => {
@@ -33,7 +33,7 @@ const ScreenshotsPage = () => {
         filters.start_date = `${selectedDate} 00:00:00`;
         filters.end_date = `${selectedDate} 23:59:59`;
       }
-      if (isOrgAdmin(user) && selectedUserId) {
+      if (canViewMemberTracking(user) && selectedUserId) {
         filters.user_id = selectedUserId;
       }
       
@@ -130,7 +130,7 @@ const ScreenshotsPage = () => {
             Screenshots
           </h1>
           <p className="text-slate-400">
-            {viewingMemberName && isOrgAdmin(user)
+            {viewingMemberName && canViewMemberTracking(user)
               ? `Screenshots for ${viewingMemberName}.`
               : 'Monitor work progress with periodic desktop captures.'}
           </p>

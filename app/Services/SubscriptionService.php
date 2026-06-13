@@ -113,34 +113,45 @@ class SubscriptionService
             throw new \Exception('Plan not found');
         }
 
-        $amount = $this->calculatePrice($planId, $userCount, $billingCycle);
-        $currency = 'usd';
-        $frontendUrl = rtrim((string)(env('app.frontendURL') ?? 'http://localhost:5173'), '/');
+        $priceId = $billingCycle === 'yearly'
+            ? ($plan['stripe_price_id_yearly'] ?? null)
+            : ($plan['stripe_price_id_monthly'] ?? null);
 
-        $session = $this->getStripeClient()->checkout->sessions->create([
-            'mode' => 'payment',
+        if (!$priceId) {
+            throw new \Exception('Stripe price is not configured for this plan');
+        }
+
+        $frontendUrl = rtrim((string) (env('app.frontendURL') ?? 'http://localhost:5173'), '/');
+        $subscription = $this->subscriptionModel->getActiveSubscription($organizationId);
+
+        $sessionParams = [
+            'mode' => 'subscription',
             'success_url' => $frontendUrl . '/billing?checkout=success&session_id={CHECKOUT_SESSION_ID}',
             'cancel_url' => $frontendUrl . '/billing?checkout=cancelled',
             'payment_method_types' => ['card'],
             'line_items' => [[
-                'quantity' => 1,
-                'price_data' => [
-                    'currency' => $currency,
-                    'unit_amount' => (int) round($amount * 100),
-                    'product_data' => [
-                        'name' => sprintf('FlowTrack %s (%s)', $plan['name'], ucfirst($billingCycle)),
-                        'description' => (string) ($plan['description'] ?? 'FlowTrack subscription'),
-                    ],
-                ],
+                'price' => $priceId,
+                'quantity' => max(1, $userCount),
             ]],
             'metadata' => [
-                'organization_id' => (string)$organizationId,
-                'plan_id' => (string)$planId,
+                'organization_id' => (string) $organizationId,
+                'plan_id' => (string) $planId,
                 'billing_cycle' => $billingCycle,
-                'user_count' => (string)$userCount,
-                'amount' => (string)$amount,
+                'user_count' => (string) $userCount,
             ],
-        ]);
+            'subscription_data' => [
+                'metadata' => [
+                    'organization_id' => (string) $organizationId,
+                    'plan_id' => (string) $planId,
+                ],
+            ],
+        ];
+
+        if (!empty($subscription['stripe_customer_id'])) {
+            $sessionParams['customer'] = $subscription['stripe_customer_id'];
+        }
+
+        $session = $this->getStripeClient()->checkout->sessions->create($sessionParams);
 
         return [
             'id' => $session->id,
@@ -152,8 +163,8 @@ class SubscriptionService
     {
         $session = $this->getStripeClient()->checkout->sessions->retrieve($sessionId, []);
 
-        if (($session->status ?? '') !== 'complete' || ($session->payment_status ?? '') !== 'paid') {
-            throw new \Exception('Payment not completed');
+        if (($session->status ?? '') !== 'complete') {
+            throw new \Exception('Checkout not completed');
         }
 
         $metadata = $session->metadata ?? null;
@@ -161,13 +172,18 @@ class SubscriptionService
             throw new \Exception('Missing checkout metadata');
         }
 
-        $organizationId = (int)($metadata['organization_id'] ?? 0);
-        $planId = (int)($metadata['plan_id'] ?? 0);
-        $billingCycle = (string)($metadata['billing_cycle'] ?? 'monthly');
-        $userCount = (int)($metadata['user_count'] ?? 1);
+        $organizationId = (int) ($metadata['organization_id'] ?? 0);
+        $planId = (int) ($metadata['plan_id'] ?? 0);
+        $billingCycle = (string) ($metadata['billing_cycle'] ?? 'monthly');
+        $userCount = (int) ($metadata['user_count'] ?? 1);
 
         if (!$organizationId || !$planId) {
             throw new \Exception('Invalid checkout metadata');
+        }
+
+        $stripeSubscriptionId = is_string($session->subscription ?? null) ? $session->subscription : null;
+        if ($stripeSubscriptionId) {
+            return $this->syncStripeSubscription($organizationId, $stripeSubscriptionId, $planId, $billingCycle, $userCount);
         }
 
         $plan = $this->planModel->find($planId);
@@ -195,7 +211,7 @@ class SubscriptionService
                     'current_period_end' => $periodEnd,
                     'cancel_at_period_end' => false,
                     'stripe_customer_id' => $session->customer ?: null,
-                    'stripe_subscription_id' => $session->payment_intent ?: $session->id,
+                    'stripe_subscription_id' => $stripeSubscriptionId ?: ($session->subscription ?? $session->id),
                 ]);
                 $subscriptionId = $current['id'];
             } else {
@@ -210,7 +226,7 @@ class SubscriptionService
                     'current_period_start' => date('Y-m-d H:i:s'),
                     'current_period_end' => $periodEnd,
                     'stripe_customer_id' => $session->customer ?: null,
-                    'stripe_subscription_id' => $session->payment_intent ?: $session->id,
+                    'stripe_subscription_id' => $stripeSubscriptionId ?: ($session->subscription ?? $session->id),
                 ]);
                 if (!$subscriptionId) {
                     throw new \RuntimeException('Failed to create subscription: ' . json_encode($this->subscriptionModel->errors()));
@@ -233,40 +249,60 @@ class SubscriptionService
     public function upgrade(int $organizationId, int $newPlanId): array
     {
         $currentSubscription = $this->subscriptionModel->getActiveSubscription($organizationId);
-        
+
         if (!$currentSubscription) {
             throw new \Exception('No active subscription found');
         }
 
         $newPlan = $this->planModel->find($newPlanId);
-        
         if (!$newPlan) {
             throw new \Exception('Plan not found');
         }
 
+        $billingCycle = $currentSubscription['billing_cycle'] ?? 'monthly';
+        $priceId = $billingCycle === 'yearly'
+            ? ($newPlan['stripe_price_id_yearly'] ?? null)
+            : ($newPlan['stripe_price_id_monthly'] ?? null);
+
         $this->db->transStart();
 
         try {
-            // Update subscription
+            if (!empty($currentSubscription['stripe_subscription_id']) && $priceId) {
+                $stripeSub = $this->getStripeClient()->subscriptions->retrieve($currentSubscription['stripe_subscription_id']);
+                $itemId = $stripeSub->items->data[0]->id ?? null;
+                if ($itemId) {
+                    $this->getStripeClient()->subscriptions->update($currentSubscription['stripe_subscription_id'], [
+                        'items' => [['id' => $itemId, 'price' => $priceId]],
+                        'proration_behavior' => 'create_prorations',
+                        'metadata' => [
+                            'organization_id' => (string) $organizationId,
+                            'plan_id' => (string) $newPlanId,
+                        ],
+                    ]);
+                }
+            }
+
+            $amount = $this->calculatePrice($newPlanId, (int) $currentSubscription['user_count'], $billingCycle);
+
             $this->subscriptionModel->update($currentSubscription['id'], [
                 'plan_id' => $newPlanId,
+                'amount' => $amount,
                 'status' => 'active',
+                'cancel_at_period_end' => false,
             ]);
 
-            // Log history
             $this->logHistory(
                 $organizationId,
                 $currentSubscription['plan_id'],
                 $newPlanId,
                 'upgrade',
-                $newPlan['price_' . $currentSubscription['billing_cycle']],
-                $currentSubscription['billing_cycle']
+                $amount,
+                $billingCycle
             );
 
             $this->db->transComplete();
 
             return $this->subscriptionModel->find($currentSubscription['id']);
-
         } catch (\Exception $e) {
             $this->db->transRollback();
             throw $e;
@@ -279,44 +315,63 @@ class SubscriptionService
     public function downgrade(int $organizationId, int $newPlanId): array
     {
         $currentSubscription = $this->subscriptionModel->getActiveSubscription($organizationId);
-        
+
         if (!$currentSubscription) {
             throw new \Exception('No active subscription found');
         }
 
-        // Schedule downgrade at period end
+        $newPlan = $this->planModel->find($newPlanId);
+        if (!$newPlan) {
+            throw new \Exception('Plan not found');
+        }
+
+        $billingCycle = $currentSubscription['billing_cycle'] ?? 'monthly';
+        $priceId = $billingCycle === 'yearly'
+            ? ($newPlan['stripe_price_id_yearly'] ?? null)
+            : ($newPlan['stripe_price_id_monthly'] ?? null);
+
         $this->db->transStart();
 
         try {
-            // Update to downgrade at period end
+            if (!empty($currentSubscription['stripe_subscription_id']) && $priceId) {
+                $this->getStripeClient()->subscriptions->update($currentSubscription['stripe_subscription_id'], [
+                    'cancel_at_period_end' => false,
+                    'proration_behavior' => 'none',
+                    'items' => [[
+                        'id' => $this->getStripeClient()->subscriptions->retrieve($currentSubscription['stripe_subscription_id'])->items->data[0]->id,
+                        'price' => $priceId,
+                    ]],
+                    'metadata' => [
+                        'organization_id' => (string) $organizationId,
+                        'plan_id' => (string) $newPlanId,
+                        'scheduled_downgrade' => 'true',
+                    ],
+                ]);
+            } else {
+                $this->subscriptionModel->update($currentSubscription['id'], [
+                    'cancel_at_period_end' => true,
+                ]);
+            }
+
+            $amount = $this->calculatePrice($newPlanId, (int) $currentSubscription['user_count'], $billingCycle);
+
             $this->subscriptionModel->update($currentSubscription['id'], [
-                'cancel_at_period_end' => true,
-            ]);
-
-            // Create new subscription starting at period end
-            $this->subscriptionModel->insert([
-                'organization_id' => $organizationId,
                 'plan_id' => $newPlanId,
-                'billing_cycle' => $currentSubscription['billing_cycle'],
-                'status' => 'active',
-                'current_period_start' => $currentSubscription['current_period_end'],
-                'current_period_end' => date('Y-m-d H:i:s', strtotime($currentSubscription['current_period_end'] . ' +1 month')),
+                'amount' => $amount,
             ]);
 
-            // Log history
             $this->logHistory(
                 $organizationId,
                 $currentSubscription['plan_id'],
                 $newPlanId,
                 'downgrade',
-                0,
-                $currentSubscription['billing_cycle']
+                $amount,
+                $billingCycle
             );
 
             $this->db->transComplete();
 
             return $this->subscriptionModel->getActiveSubscription($organizationId);
-
         } catch (\Exception $e) {
             $this->db->transRollback();
             throw $e;
@@ -329,7 +384,7 @@ class SubscriptionService
     public function cancel(int $organizationId, bool $immediately = false): bool
     {
         $subscription = $this->subscriptionModel->getActiveSubscription($organizationId);
-        
+
         if (!$subscription) {
             throw new \Exception('No active subscription found');
         }
@@ -337,10 +392,21 @@ class SubscriptionService
         $this->db->transStart();
 
         try {
+            if (!empty($subscription['stripe_subscription_id'])) {
+                if ($immediately) {
+                    $this->getStripeClient()->subscriptions->cancel($subscription['stripe_subscription_id']);
+                } else {
+                    $this->getStripeClient()->subscriptions->update($subscription['stripe_subscription_id'], [
+                        'cancel_at_period_end' => true,
+                    ]);
+                }
+            }
+
             if ($immediately) {
                 $this->subscriptionModel->update($subscription['id'], [
                     'status' => 'cancelled',
                     'cancelled_at' => date('Y-m-d H:i:s'),
+                    'cancel_at_period_end' => false,
                 ]);
             } else {
                 $this->subscriptionModel->update($subscription['id'], [
@@ -348,13 +414,11 @@ class SubscriptionService
                 ]);
             }
 
-            // Log history
             $this->logHistory($organizationId, $subscription['plan_id'], null, 'cancel', 0);
 
             $this->db->transComplete();
 
             return true;
-
         } catch (\Exception $e) {
             $this->db->transRollback();
             throw $e;
@@ -506,5 +570,118 @@ class SubscriptionService
 
         $this->stripeClient = new StripeClient($secretKey);
         return $this->stripeClient;
+    }
+
+    public function syncStripeSubscription(
+        int $organizationId,
+        string $stripeSubscriptionId,
+        ?int $planId = null,
+        ?string $billingCycle = null,
+        ?int $userCount = null
+    ): array {
+        $stripeSub = $this->getStripeClient()->subscriptions->retrieve($stripeSubscriptionId);
+        $metadata = $stripeSub->metadata ?? new \stdClass();
+        $planId = $planId ?: (int) ($metadata->plan_id ?? 0);
+        $billingCycle = $billingCycle ?: (($stripeSub->items->data[0]->price->recurring->interval ?? 'month') === 'year' ? 'yearly' : 'monthly');
+        $userCount = $userCount ?: (int) ($stripeSub->items->data[0]->quantity ?? 1);
+
+        if (!$planId) {
+            throw new \Exception('Plan ID missing from Stripe subscription');
+        }
+
+        $amount = $this->calculatePrice($planId, $userCount, $billingCycle);
+        $periodStart = date('Y-m-d H:i:s', (int) $stripeSub->current_period_start);
+        $periodEnd = date('Y-m-d H:i:s', (int) $stripeSub->current_period_end);
+        $status = in_array($stripeSub->status, ['active', 'trialing'], true)
+            ? ($stripeSub->status === 'trialing' ? 'trial' : 'active')
+            : 'cancelled';
+
+        $current = $this->subscriptionModel->getActiveSubscription($organizationId);
+        $payload = [
+            'plan_id' => $planId,
+            'user_count' => $userCount,
+            'amount' => $amount,
+            'billing_cycle' => $billingCycle,
+            'status' => $status,
+            'current_period_start' => $periodStart,
+            'current_period_end' => $periodEnd,
+            'cancel_at_period_end' => (bool) $stripeSub->cancel_at_period_end,
+            'stripe_customer_id' => is_string($stripeSub->customer) ? $stripeSub->customer : null,
+            'stripe_subscription_id' => $stripeSubscriptionId,
+        ];
+
+        if ($current) {
+            $this->subscriptionModel->update($current['id'], $payload);
+            return $this->subscriptionModel->find($current['id']);
+        }
+
+        $payload['organization_id'] = $organizationId;
+        $subscriptionId = $this->subscriptionModel->insert($payload);
+        return $this->subscriptionModel->find($subscriptionId);
+    }
+
+    public function handleStripeWebhookEvent(object $event): void
+    {
+        switch ($event->type) {
+            case 'checkout.session.completed':
+                $session = $event->data->object;
+                if (($session->mode ?? '') === 'subscription' && !empty($session->subscription)) {
+                    $orgId = (int) ($session->metadata->organization_id ?? 0);
+                    $planId = (int) ($session->metadata->plan_id ?? 0);
+                    if ($orgId && $planId) {
+                        $this->syncStripeSubscription(
+                            $orgId,
+                            (string) $session->subscription,
+                            $planId,
+                            (string) ($session->metadata->billing_cycle ?? 'monthly'),
+                            (int) ($session->metadata->user_count ?? 1)
+                        );
+                        $this->logHistory($orgId, null, $planId, 'stripe_checkout', 0, (string) ($session->metadata->billing_cycle ?? 'monthly'));
+                    }
+                }
+                break;
+
+            case 'invoice.paid':
+                $invoice = $event->data->object;
+                if (!empty($invoice->subscription)) {
+                    $stripeSub = $this->getStripeClient()->subscriptions->retrieve((string) $invoice->subscription);
+                    $orgId = (int) ($stripeSub->metadata->organization_id ?? 0);
+                    if ($orgId) {
+                        $this->syncStripeSubscription($orgId, (string) $invoice->subscription);
+                    }
+                }
+                break;
+
+            case 'invoice.payment_failed':
+                $invoice = $event->data->object;
+                if (!empty($invoice->subscription)) {
+                    $local = $this->subscriptionModel->where('stripe_subscription_id', (string) $invoice->subscription)->first();
+                    if ($local) {
+                        $this->subscriptionModel->update($local['id'], ['status' => 'past_due']);
+                    }
+                }
+                break;
+
+            case 'customer.subscription.updated':
+                $stripeSub = $event->data->object;
+                $orgId = (int) ($stripeSub->metadata->organization_id ?? 0);
+                if ($orgId) {
+                    $this->syncStripeSubscription($orgId, (string) $stripeSub->id);
+                }
+                break;
+
+            case 'customer.subscription.deleted':
+                $stripeSub = $event->data->object;
+                $local = $this->subscriptionModel->where('stripe_subscription_id', (string) $stripeSub->id)->first();
+                if ($local) {
+                    $this->subscriptionModel->update($local['id'], [
+                        'status' => 'cancelled',
+                        'cancelled_at' => date('Y-m-d H:i:s'),
+                        'cancel_at_period_end' => false,
+                    ]);
+                    $this->logHistory((int) $local['organization_id'], $local['plan_id'], null, 'cancel', 0);
+                }
+                break;
+        }
     }
 }

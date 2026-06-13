@@ -43,7 +43,7 @@ class ActivityLogService
             'app_name'         => $data['app_name'] ?? 'Unknown',
             'window_title'     => $data['window_title'] ?? '',
             'url'              => $data['url'] ?? '',
-            'category'         => $data['category'] ?? $this->categorizeActivity($data),
+            'category'         => $data['category'] ?? $this->categorizeActivity($data, (int) $entry['organization_id']),
             'duration_seconds' => (int)($data['duration_seconds'] ?? 0) ?: 60,
             'keyboard_strokes' => (int)($data['keyboard_strokes'] ?? 0),
             'mouse_clicks'     => (int)($data['mouse_clicks'] ?? 0),
@@ -55,13 +55,56 @@ class ActivityLogService
         $this->db->table('activity_logs')->insert($insertData);
         $logId = $this->db->insertID();
 
+        if (isset($data['idle_seconds']) || isset($data['active_seconds'])) {
+            $this->recordIdleStats(
+                $userId,
+                (int) $entry['organization_id'],
+                $loggedAt,
+                (int) ($data['idle_seconds'] ?? 0),
+                (int) ($data['active_seconds'] ?? 0)
+            );
+        }
+
         return $this->activityLogModel->find($logId);
     }
 
-    private function categorizeActivity(array $data): string
+    public function recordIdleStats(int $userId, int $organizationId, string $loggedAt, int $idleSeconds, int $activeSeconds): void
     {
-        // Get productivity rules (simplified - should cache this)
+        if ($idleSeconds <= 0 && $activeSeconds <= 0) {
+            return;
+        }
+
+        $date = date('Y-m-d', strtotime($loggedAt));
+
+        $existing = $this->db->table('daily_idle_stats')
+            ->where('user_id', $userId)
+            ->where('organization_id', $organizationId)
+            ->where('date', $date)
+            ->get()
+            ->getRowArray();
+
+        if ($existing) {
+            $this->db->table('daily_idle_stats')->where('id', $existing['id'])->update([
+                'idle_seconds' => (int) $existing['idle_seconds'] + $idleSeconds,
+                'active_seconds' => (int) $existing['active_seconds'] + $activeSeconds,
+                'updated_at' => date('Y-m-d H:i:s'),
+            ]);
+        } else {
+            $this->db->table('daily_idle_stats')->insert([
+                'user_id' => $userId,
+                'organization_id' => $organizationId,
+                'date' => $date,
+                'idle_seconds' => $idleSeconds,
+                'active_seconds' => $activeSeconds,
+                'updated_at' => date('Y-m-d H:i:s'),
+            ]);
+        }
+    }
+
+    private function categorizeActivity(array $data, int $organizationId): string
+    {
         $rules = $this->productivityRuleModel
+            ->where('organization_id', $organizationId)
             ->where('is_active', true)
             ->findAll();
 

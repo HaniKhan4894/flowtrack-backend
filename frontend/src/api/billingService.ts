@@ -3,10 +3,15 @@ import client from './client';
 export interface Subscription {
     id: number;
     plan_id: number;
-    status: 'active' | 'trial' | 'cancelled';
+    status: 'active' | 'trial' | 'cancelled' | 'expired' | 'past_due';
     billing_cycle: 'monthly' | 'yearly';
     amount: number;
+    current_period_start?: string;
     current_period_end: string;
+    cancel_at_period_end?: boolean;
+    stripe_subscription_id?: string | null;
+    stripe_customer_id?: string | null;
+    user_count?: number;
 }
 
 export const billingService = {

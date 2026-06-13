@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check, Sparkles, Shield, Loader2, PartyPopper } from 'lucide-react';
+import { Check, Sparkles, Shield, Loader2, PartyPopper, AlertTriangle, Calendar, CreditCard } from 'lucide-react';
 import { Button } from '../../components/ui';
 import { billingService, type Subscription } from '../../api/billingService';
 import { useSearchParams } from 'react-router-dom';
@@ -146,6 +146,58 @@ const BillingPage = () => {
         )}
       </AnimatePresence>
 
+      {currentSub?.status === 'past_due' && (
+        <div className="flex items-start gap-4 bg-rose-500/10 border border-rose-500/30 rounded-2xl px-6 py-4">
+          <AlertTriangle className="text-rose-400 shrink-0 mt-0.5" size={22} />
+          <div>
+            <p className="font-bold text-rose-200">Payment failed</p>
+            <p className="text-sm text-rose-100/80 mt-1">
+              Your last payment did not succeed. Update your billing details to avoid service interruption.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {currentSub && currentSub.status !== 'past_due' && currentSub.cancel_at_period_end && (
+        <div className="flex items-start gap-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl px-6 py-4">
+          <Calendar className="text-amber-400 shrink-0 mt-0.5" size={22} />
+          <div>
+            <p className="font-bold text-amber-200">Subscription ends soon</p>
+            <p className="text-sm text-amber-100/80 mt-1">
+              Your plan will cancel on {new Date(currentSub.current_period_end).toLocaleDateString()}.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {currentSub && (
+        <div className="glass-card flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-primary-500/10 flex items-center justify-center text-primary-400">
+              <CreditCard size={24} />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Current subscription</p>
+              <p className="text-xl font-bold text-white capitalize">{currentSub.status.replace('_', ' ')}</p>
+              <p className="text-sm text-slate-400 mt-1">
+                Renews {new Date(currentSub.current_period_end).toLocaleDateString()}
+                · {currentSub.billing_cycle}
+                · ${currentSub.amount}
+              </p>
+            </div>
+          </div>
+          <div className="text-sm text-slate-400 space-y-1">
+            {currentSub.stripe_subscription_id ? (
+              <p>
+                Stripe: <span className="text-slate-300 font-mono text-xs">{currentSub.stripe_subscription_id}</span>
+              </p>
+            ) : (
+              <p>No Stripe subscription linked (free or manual plan)</p>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="text-center max-w-2xl mx-auto">
         <h1 className="text-4xl font-extrabold text-white mb-4">Choose Your <span className="gradient-text">Power Level</span></h1>
         <p className="text-slate-400">Select the plan that fits your team today. Your active package is always highlighted below.</p>
@@ -182,12 +234,6 @@ const BillingPage = () => {
                 </div>
               )}
               
-              {isCurrent && (
-                <div className="absolute -top-3 right-4 bg-emerald-500 text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-widest shadow-ai flex items-center gap-1">
-                   Selected Package
-                </div>
-              )}
-
               <div className="mb-8">
                 <h3 className="text-xl font-bold text-white mb-2">{plan.name}</h3>
                 <div className="flex items-baseline gap-1 mb-4">

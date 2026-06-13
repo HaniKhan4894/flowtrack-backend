@@ -16,6 +16,7 @@ class OrganizationMemberModel extends Model
         'organization_id', 'user_id', 'role_id', 'role', 'hourly_rate', 'joined_at',
         'tracking_enabled', 'screenshots_enabled', 'screenshot_disabled_until',
         'screenshot_disabled_from', 'screenshot_disabled_to',
+        'team_id', 'onboarding_state', 'daily_hours_target',
     ];
 
     protected bool $allowEmptyInserts = false;

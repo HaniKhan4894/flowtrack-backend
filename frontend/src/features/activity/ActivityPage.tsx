@@ -2,11 +2,14 @@ import { motion } from 'framer-motion';
 import { Activity, AppWindow, Search, RefreshCw, ChevronLeft, ChevronRight, Calendar, BarChart3, Keyboard, MousePointer } from 'lucide-react';
 import { Button } from '../../components/ui';
 import { activityService } from '../../api/activityService';
+import { reportService } from '../../api/reportService';
+import { HourlyTimeline } from './HourlyTimeline';
+import type { HourlyTimelineData } from '../../types';
 import { TeamMemberFilter } from '../../components/TeamMemberFilter';
 import { AppIcon } from '../../components/AppIcon';
 import { getAppDisplayName } from '../../utils/appIcons';
 import { useAuthStore } from '../../store/authStore';
-import { isOrgAdmin } from '../../utils/access';
+import { canViewMemberTracking } from '../../utils/access';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 
 const formatDuration = (seconds: number) => {
@@ -28,6 +31,9 @@ const ActivityPage = () => {
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
   const [viewingMemberName, setViewingMemberName] = useState('');
+  const [activeView, setActiveView] = useState<'summary' | 'timesheet'>('summary');
+  const [timelineData, setTimelineData] = useState<HourlyTimelineData | null>(null);
+  const [timelineLoading, setTimelineLoading] = useState(false);
 
   const effectiveUserId = selectedUserId ?? user?.id ?? null;
   const isToday = selectedDate === new Date().toISOString().split('T')[0];
@@ -39,7 +45,7 @@ const ActivityPage = () => {
       const range = {
         start_date: `${selectedDate} 00:00:00`,
         end_date: `${selectedDate} 23:59:59`,
-        user_id: isOrgAdmin(user) && selectedUserId ? selectedUserId : undefined,
+        user_id: canViewMemberTracking(user) && selectedUserId ? selectedUserId : undefined,
       };
 
       const [logsResp, topAppsResp] = await Promise.all([
@@ -66,6 +72,29 @@ const ActivityPage = () => {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  const fetchTimeline = useCallback(async () => {
+    if (!effectiveUserId) return;
+    try {
+      setTimelineLoading(true);
+      const resp = await reportService.getHourlyTimeline({
+        date: selectedDate,
+        user_id: canViewMemberTracking(user) && selectedUserId ? selectedUserId : undefined,
+      });
+      setTimelineData(resp.data);
+    } catch (error) {
+      console.error('Failed to fetch hourly timeline', error);
+      setTimelineData(null);
+    } finally {
+      setTimelineLoading(false);
+    }
+  }, [selectedDate, effectiveUserId, selectedUserId, user]);
+
+  useEffect(() => {
+    if (activeView === 'timesheet') {
+      fetchTimeline();
+    }
+  }, [activeView, fetchTimeline]);
 
   const changeDate = (days: number) => {
     const d = new Date(selectedDate);
@@ -124,7 +153,7 @@ const ActivityPage = () => {
             Activity Logs
           </h1>
           <p className="text-slate-400">
-            {viewingMemberName && isOrgAdmin(user)
+            {viewingMemberName && canViewMemberTracking(user)
               ? `Viewing activity for ${viewingMemberName}.`
               : 'Deep dive into application and website usage patterns.'}
           </p>
@@ -172,7 +201,7 @@ const ActivityPage = () => {
             </button>
           )}
 
-          <Button variant="secondary" size="sm" onClick={fetchData} isLoading={isLoading}>
+          <Button variant="secondary" size="sm" onClick={() => { fetchData(); if (activeView === 'timesheet') fetchTimeline(); }} isLoading={isLoading}>
             <RefreshCw className="w-4 h-4 mr-2" />
             Refresh
           </Button>
@@ -190,6 +219,32 @@ const ActivityPage = () => {
         </div>
       </div>
 
+      {/* Summary / Timesheet tabs */}
+      <div className="flex gap-2 border-b border-white/10 pb-0">
+        {(['summary', 'timesheet'] as const).map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveView(tab)}
+            className={`px-6 py-3 text-sm font-bold capitalize transition-all border-b-2 -mb-px ${
+              activeView === tab
+                ? 'text-primary-400 border-primary-500'
+                : 'text-slate-500 border-transparent hover:text-white'
+            }`}
+          >
+            {tab === 'summary' ? 'Summary' : 'Timesheet'}
+          </button>
+        ))}
+      </div>
+
+      {activeView === 'timesheet' ? (
+        <HourlyTimeline
+          data={timelineData}
+          isLoading={timelineLoading}
+          selectedDate={selectedDate}
+          topApps={topApps}
+        />
+      ) : (
+        <>
       {/* Trackabi-style top active apps strip */}
       {!isLoading && topApps.length > 0 && (
         <div className="overlay-panel p-5">
@@ -370,6 +425,8 @@ const ActivityPage = () => {
             </div>
           </motion.div>
         </div>
+      )}
+        </>
       )}
     </div>
   );

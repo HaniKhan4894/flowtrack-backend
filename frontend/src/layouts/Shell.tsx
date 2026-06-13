@@ -6,6 +6,8 @@ import {
   ChevronRight,
   Sparkles,
   Bell,
+  Settings,
+  Shield,
 } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
@@ -13,7 +15,7 @@ import { TimerWidget } from '../components/TimerWidget';
 import { notificationService } from '../api/notificationService';
 import { useTimerStore } from '../store/timerStore';
 import { timeService } from '../api/timeService';
-import { getNavItemsForUser } from '../utils/access';
+import { canAccessSettings, getNavItemsForUser, isSuperAdmin } from '../utils/access';
 import { hardRedirectToLogin, isDesktopApp } from '../utils/electronAuth';
 
 const SidebarItem = ({ icon: Icon, label, path, isCollapsed }: any) => {
@@ -41,11 +43,13 @@ const SidebarItem = ({ icon: Icon, label, path, isCollapsed }: any) => {
 export const Shell = ({ children }: { children: React.ReactNode }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
   const location = useLocation();
   const { resetLocal } = useTimerStore();
   const [notifications, setNotifications] = useState<any[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const navItems = getNavItemsForUser(user);
 
@@ -72,7 +76,19 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
   };
 
   useEffect(() => {
-    notificationService.list().then((res) => setNotifications(res.data ?? [])).catch(() => setNotifications([]));
+    const loadNotifications = () => {
+      notificationService.list().then((res) => setNotifications(res.data ?? [])).catch(() => setNotifications([]));
+    };
+    const loadUnread = () => {
+      notificationService.unreadCount()
+        .then((res) => setUnreadCount(Number(res.data?.count ?? res.count ?? 0)))
+        .catch(() => setUnreadCount(0));
+    };
+
+    loadNotifications();
+    loadUnread();
+    const interval = setInterval(loadUnread, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   return (
@@ -112,19 +128,6 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
             <SidebarItem key={item.path} {...item} isCollapsed={isCollapsed} />
           ))}
         </nav>
-
-        <div className="p-4 mt-auto border-t border-white/5 pt-6 no-drag">
-          <motion.button
-            type="button"
-            whileHover={{ x: 4 }}
-            onClick={handleLogout}
-            disabled={isLoggingOut}
-            className="flex items-center gap-3 w-full px-4 py-3 rounded-2xl text-slate-400 hover:text-accent hover:bg-accent/10 transition-all border border-transparent hover:border-accent/20 disabled:opacity-50 cursor-pointer"
-          >
-            <LogOut className="w-5 h-5" />
-            {!isCollapsed && <span className="font-medium">{isLoggingOut ? 'Signing out…' : 'Sign Out'}</span>}
-          </motion.button>
-        </div>
       </motion.aside>
 
       {/* Main Content Area */}
@@ -135,7 +138,12 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
         >
           <div className="flex items-center gap-4 text-slate-400">
             <h2 className="text-xl font-semibold text-white">
-              {navItems.find(item => item.path === location.pathname)?.label || 'Dashboard'}
+              {navItems.find(item => item.path === location.pathname)?.label
+                || (location.pathname.startsWith('/invoices/') ? 'Invoice Detail' : null)
+                || (location.pathname === '/timesheets' ? 'Timesheets' : null)
+                || (location.pathname === '/settings' ? 'Settings' : null)
+                || (location.pathname === '/admin' ? 'Platform Admin' : null)
+                || 'Dashboard'}
             </h2>
             {user?.plan && (
               <span className="text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-primary-500/10 text-primary-400 border border-primary-500/20">
@@ -150,11 +158,18 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
             <TimerWidget />
             <div className="flex items-center gap-4 relative">
               <button 
-                onClick={() => setShowNotifications(!showNotifications)}
+                onClick={() => {
+                  setShowNotifications(!showNotifications);
+                  setShowUserMenu(false);
+                }}
                 className={`p-2.5 rounded-xl hover:bg-white/10 text-slate-400 relative group transition-all ${showNotifications ? 'bg-white/10 text-white' : ''}`}
               >
                 <Bell size={20} />
-                <span className="absolute top-2.5 right-2.5 w-2 h-2 bg-accent rounded-full border-2 border-[#12141C]"></span>
+                {unreadCount > 0 && (
+                  <span className="absolute top-1.5 right-1.5 min-w-[18px] h-[18px] px-1 bg-accent rounded-full border-2 border-[#12141C] text-[10px] font-bold text-white flex items-center justify-center">
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
               </button>
 
               <AnimatePresence>
@@ -176,7 +191,10 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
                       <div className="flex items-center justify-between mb-4 px-2">
                         <h4 className="font-bold text-white">Notifications</h4>
                         <button
-                          onClick={() => notificationService.markAllRead().then(() => notificationService.list().then((res) => setNotifications(res.data ?? [])))}
+                          onClick={() => notificationService.markAllRead().then(() => {
+                            notificationService.list().then((res) => setNotifications(res.data ?? []));
+                            setUnreadCount(0);
+                          })}
                           className="text-[10px] font-bold text-primary-400 uppercase tracking-widest hover:underline"
                         >
                           Mark all as read
@@ -206,11 +224,77 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
                 )}
               </AnimatePresence>
 
-              <div 
-                className="w-10 h-10 rounded-xl bg-surface-200 border border-white/10 flex items-center justify-center text-primary-400 font-bold uppercase transition-transform hover:scale-110 cursor-pointer"
-                title={`${user?.first_name} ${user?.last_name}`}
-              >
-                {user?.first_name?.[0]}{user?.last_name?.[0]}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowUserMenu((v) => !v);
+                    setShowNotifications(false);
+                  }}
+                  className="w-10 h-10 rounded-xl bg-surface-200 border border-white/10 flex items-center justify-center text-primary-400 font-bold uppercase transition-transform hover:scale-110 cursor-pointer"
+                  title={`${user?.first_name} ${user?.last_name}`}
+                >
+                  {user?.first_name?.[0]}{user?.last_name?.[0]}
+                </button>
+
+                <AnimatePresence>
+                  {showUserMenu && (
+                    <>
+                      <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[90]"
+                        onClick={() => setShowUserMenu(false)}
+                      />
+                      <motion.div
+                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                        className="absolute right-0 top-full mt-2 w-56 dropdown-panel p-2 z-[100]"
+                      >
+                        <div className="px-3 py-2 border-b border-white/10 mb-1">
+                          <p className="text-sm font-semibold text-white truncate">{user?.first_name} {user?.last_name}</p>
+                          <p className="text-xs text-slate-500 truncate">{user?.email}</p>
+                        </div>
+
+                        {canAccessSettings(user) && (
+                          <button
+                            type="button"
+                            onClick={() => { setShowUserMenu(false); navigate('/settings'); }}
+                            className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-slate-300 hover:text-white hover:bg-white/5 transition-colors text-sm"
+                          >
+                            <Settings size={16} />
+                            Settings
+                          </button>
+                        )}
+
+                        {isSuperAdmin(user) && (
+                          <button
+                            type="button"
+                            onClick={() => { setShowUserMenu(false); navigate('/admin'); }}
+                            className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-slate-300 hover:text-white hover:bg-white/5 transition-colors text-sm"
+                          >
+                            <Shield size={16} />
+                            Platform Admin
+                          </button>
+                        )}
+
+                        <div className="my-1 border-t border-white/10" />
+
+                        <button
+                          type="button"
+                          onClick={() => { setShowUserMenu(false); handleLogout(); }}
+                          disabled={isLoggingOut}
+                          className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-slate-400 hover:text-accent hover:bg-accent/10 transition-colors text-sm disabled:opacity-50"
+                        >
+                          <LogOut size={16} />
+                          {isLoggingOut ? 'Signing out…' : 'Sign Out'}
+                        </button>
+                      </motion.div>
+                    </>
+                  )}
+                </AnimatePresence>
               </div>
 
             </div>
