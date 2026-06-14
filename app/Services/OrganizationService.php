@@ -203,6 +203,8 @@ class OrganizationService
 
         $this->assignFreePlan((int) $orgId);
 
+        (new LeaveService())->seedDefaultLeaveTypes((int) $orgId);
+
         return $this->getOrganizationById((int) $orgId);
     }
 

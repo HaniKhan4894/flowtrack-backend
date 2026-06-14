@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { User, Building, Bell, Shield, Cloud, Save, Camera, Loader2, CheckCircle2, Lock, CreditCard, ExternalLink, Gauge, Users, Plus, X, Pencil, Trash2 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -80,6 +80,7 @@ const SettingsPage = () => {
   const [billingLoading, setBillingLoading] = useState(false);
 
   const canEditOrg = hasPermission(user, 'settings.edit');
+  const canViewOrg = hasPermission(user, 'settings.view') || canEditOrg;
   const canManageBilling = hasPermission(user, 'settings.billing');
   const canManageProductivityRules = hasPermission(user, 'productivity_rules.manage');
 
@@ -117,18 +118,24 @@ const SettingsPage = () => {
   const [reportForm, setReportForm] = useState({ report_type: 'time_summary', cadence: 'weekly' as ScheduledReport['cadence'], recipients: '', format: 'csv' as ScheduledReport['format'] });
   const [taxForm, setTaxForm] = useState({ name: '', type: 'percentage' as 'percentage' | 'fixed', rate: '', amount: '' });
 
-  const tabs = [
+  const tabs = useMemo(() => [
     { id: 'profile', label: 'Profile Settings', icon: User },
-    { id: 'organization', label: 'Organization', icon: Building },
+    ...(canViewOrg ? [{ id: 'organization', label: 'Organization', icon: Building }] : []),
     ...(canManageProductivityRules ? [{ id: 'productivity-rules', label: 'Productivity Rules', icon: Gauge }] : []),
     ...(canEditOrg ? [{ id: 'roles-permissions', label: 'Roles & Permissions', icon: Users }] : []),
     { id: 'notifications', label: 'Notifications', icon: Bell },
     { id: 'security', label: 'Security', icon: Shield },
-    { id: 'billing', label: 'Billing & Plans', icon: Cloud },
-  ];
+    ...(canManageBilling ? [{ id: 'billing', label: 'Billing & Plans', icon: Cloud }] : []),
+  ], [canViewOrg, canManageProductivityRules, canEditOrg, canManageBilling]);
+
+  useEffect(() => {
+    if (!tabs.some((tab) => tab.id === activeTab)) {
+      setActiveTab('profile');
+    }
+  }, [activeTab, tabs]);
 
   const loadOrg = useCallback(async () => {
-    if (!user?.organization_id) return;
+    if (!user?.organization_id || !canViewOrg) return;
     try {
       const resp = await organizationService.get(user.organization_id);
       const org = resp.data;
@@ -152,7 +159,7 @@ const SettingsPage = () => {
     } catch (e) {
       console.error(e);
     }
-  }, [user?.organization_id]);
+  }, [user?.organization_id, canViewOrg]);
 
   useEffect(() => {
     locationService.getCountries().then((r) => setCountries(r.data)).catch(() => undefined);

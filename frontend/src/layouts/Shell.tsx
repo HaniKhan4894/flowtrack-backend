@@ -15,7 +15,7 @@ import { TimerWidget } from '../components/TimerWidget';
 import { notificationService } from '../api/notificationService';
 import { useTimerStore } from '../store/timerStore';
 import { timeService } from '../api/timeService';
-import { canAccessSettings, getNavItemsForUser, isSuperAdmin } from '../utils/access';
+import { getNavItemsForUser, isSuperAdmin } from '../utils/access';
 import { hardRedirectToLogin, isDesktopApp } from '../utils/electronAuth';
 
 const SidebarItem = ({ icon: Icon, label, path, isCollapsed }: any) => {
@@ -258,16 +258,14 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
                           <p className="text-xs text-slate-500 truncate">{user?.email}</p>
                         </div>
 
-                        {canAccessSettings(user) && (
-                          <button
-                            type="button"
-                            onClick={() => { setShowUserMenu(false); navigate('/settings'); }}
-                            className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-slate-300 hover:text-white hover:bg-white/5 transition-colors text-sm"
-                          >
-                            <Settings size={16} />
-                            Settings
-                          </button>
-                        )}
+                        <button
+                          type="button"
+                          onClick={() => { setShowUserMenu(false); navigate('/settings'); }}
+                          className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-slate-300 hover:text-white hover:bg-white/5 transition-colors text-sm"
+                        >
+                          <Settings size={16} />
+                          Settings
+                        </button>
 
                         {isSuperAdmin(user) && (
                           <button

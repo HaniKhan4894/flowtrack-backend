@@ -64,7 +64,7 @@ const PATH_PERMISSIONS: Record<string, string | string[]> = {
   '/team': '__team_nav__',
   '/analytics': ['reports.view_own', 'reports.view_team'],
   '/billing': 'settings.billing',
-  '/settings': 'settings.view',
+  '/settings': [],
   '/admin': '__super_admin__',
   '/team/member': ['time.view_team', 'screenshots.view_team', 'activity.view_team'],
 };
@@ -132,8 +132,8 @@ export function getNavItemsForUser(user: User | null | undefined): NavItem[] {
   });
 }
 
-export function canAccessSettings(user: User | null | undefined): boolean {
-  return hasPermission(user, 'settings.view');
+export function canAccessSettings(_user: User | null | undefined): boolean {
+  return !!_user;
 }
 
 export function canManageTeam(user: User | null | undefined): boolean {

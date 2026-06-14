@@ -20,6 +20,41 @@ class LeaveService
             ->getResultArray();
     }
 
+    public function seedDefaultLeaveTypes(int $organizationId): void
+    {
+        $defaults = [
+            ['name' => 'Annual Leave', 'days_per_year' => 20, 'is_paid' => 1],
+            ['name' => 'Casual Leave', 'days_per_year' => 10, 'is_paid' => 1],
+            ['name' => 'Sick Leave', 'days_per_year' => 10, 'is_paid' => 1],
+            ['name' => 'Unpaid Leave', 'days_per_year' => 0, 'is_paid' => 0],
+        ];
+
+        $existing = $this->db->table('leave_types')
+            ->select('name')
+            ->where('organization_id', $organizationId)
+            ->get()
+            ->getResultArray();
+
+        $existingNames = array_map(
+            static fn (array $row) => strtolower(trim((string) ($row['name'] ?? ''))),
+            $existing
+        );
+
+        foreach ($defaults as $type) {
+            if (in_array(strtolower($type['name']), $existingNames, true)) {
+                continue;
+            }
+
+            $this->db->table('leave_types')->insert([
+                'organization_id' => $organizationId,
+                'name' => $type['name'],
+                'days_per_year' => $type['days_per_year'],
+                'is_paid' => $type['is_paid'],
+                'created_at' => date('Y-m-d H:i:s'),
+            ]);
+        }
+    }
+
     public function createLeaveType(int $organizationId, array $data): array
     {
         $payload = [
