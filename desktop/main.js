@@ -439,10 +439,7 @@ function showDesktopNotification(title, body) {
 
 function isInternalTrackerApp(appName, windowTitle = '') {
     const hay = `${appName} ${windowTitle}`.toLowerCase();
-    return hay.includes('flowtrack')
-        || (hay.includes('electron') && hay.includes('flowtrack'))
-        || hay.includes('localhost:5173')
-        || hay.includes('vite');
+    return hay.includes('localhost:5173') || hay.includes('vite');
 }
 
 function getDistractionLabel(appName, windowTitle = '') {
@@ -519,6 +516,15 @@ function extractUrlFromTitle(windowTitle, appName) {
     const title = (windowTitle || '').trim();
     if (!title) return '';
 
+    if (/^localhost\b/i.test(title) || /\blocalhost\b/i.test(title)) {
+        return 'http://localhost';
+    }
+
+    const domainMatch = title.match(/^([a-z0-9][-a-z0-9.]+)(?:\/[^\s|–—-]+)?/i);
+    if (domainMatch && domainMatch[1].includes('.')) {
+        return `https://${domainMatch[1]}`;
+    }
+
     const directUrl = title.match(/https?:\/\/[^\s|–—-]+/i);
     if (directUrl) return directUrl[0].replace(/[|–—-]+$/, '');
 
@@ -534,6 +540,13 @@ function extractUrlFromTitle(windowTitle, appName) {
     if (!candidate) return '';
 
     if (/^https?:\/\//i.test(candidate)) return candidate;
+
+    if (/^localhost\b/i.test(candidate)) return 'http://localhost';
+
+    const pathDomain = candidate.match(/^([a-z0-9][-a-z0-9.]+)(?:\/[^\s|]*)?/i);
+    if (pathDomain && pathDomain[1].includes('.')) {
+        return `https://${pathDomain[1]}`;
+    }
 
     const domainMatch = candidate.match(/^([a-z0-9][-a-z0-9]*(?:\.[a-z0-9][-a-z0-9]*)+(?:\/[^\s]*)?)/i);
     if (domainMatch) {

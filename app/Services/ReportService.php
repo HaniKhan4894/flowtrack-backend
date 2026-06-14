@@ -518,7 +518,7 @@ class ReportService
 
         foreach ($rows as $row) {
             $appName = trim((string) ($row['app_name'] ?? ''));
-            if ($this->isInternalTrackerApp($appName)) {
+            if ($appName === '') {
                 continue;
             }
 
@@ -604,18 +604,6 @@ class ReportService
                 'focus_score' => $dayTotal > 0 ? (int) round(($dayProductive / $dayTotal) * 100) : 0,
             ],
         ];
-    }
-
-    private function isInternalTrackerApp(string $appName): bool
-    {
-        $name = strtolower(trim($appName));
-        if ($name === '') {
-            return true;
-        }
-
-        return str_contains($name, 'flowtrack')
-            || $name === 'electron'
-            || str_contains($name, 'flowtrack-desktop');
     }
 
     /**

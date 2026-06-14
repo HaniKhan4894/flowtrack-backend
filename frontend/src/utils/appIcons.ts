@@ -1,11 +1,6 @@
-/** Apps/processes that belong to FlowTrack itself — excluded from top-apps stats. */
+/** @deprecated FlowTrack is tracked like any other app; only empty names are skipped. */
 export function isInternalTrackerApp(appName: string): boolean {
-  const name = (appName || '').toLowerCase().trim();
-  return (
-    name.includes('flowtrack') ||
-    name === 'electron' ||
-    name.includes('flowtrack-desktop')
-  );
+  return !(appName || '').trim();
 }
 
 type AppIconEntry = { match: RegExp; slug: string; color: string };

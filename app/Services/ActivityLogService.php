@@ -191,18 +191,6 @@ class ActivityLogService
         return $stats;
     }
 
-    private function isInternalTrackerApp(string $appName): bool
-    {
-        $name = strtolower(trim($appName));
-        if ($name === '') {
-            return true;
-        }
-
-        return str_contains($name, 'flowtrack')
-            || $name === 'electron'
-            || str_contains($name, 'flowtrack-desktop');
-    }
-
     private function isBrowserApp(string $appName): bool
     {
         return (bool) preg_match('/chrome|firefox|edge|msedge|brave|opera|safari/i', $appName);
@@ -220,7 +208,7 @@ class ActivityLogService
             ->get()
             ->getResultArray();
 
-        $rows = array_values(array_filter($rows, fn ($row) => !$this->isInternalTrackerApp((string) ($row['app_name'] ?? ''))));
+        $rows = array_values(array_filter($rows, fn ($row) => trim((string) ($row['app_name'] ?? '')) !== ''));
         usort($rows, fn ($a, $b) => ((int) $b['duration_seconds']) <=> ((int) $a['duration_seconds']));
         $rows = array_slice($rows, 0, $limit);
 
@@ -265,29 +253,184 @@ class ActivityLogService
         $rows = array_values(array_filter($rows, function ($row) {
             $title = (string) ($row['window_title'] ?? '');
             $app = (string) ($row['app_name'] ?? '');
-            if ($title === '' || str_contains(strtolower($title), 'flowtrack')) {
+            if ($title === '') {
                 return false;
             }
             return $this->isBrowserApp($app) || !empty($row['url']);
         }));
 
         usort($rows, fn ($a, $b) => ((int) $b['duration_seconds']) <=> ((int) $a['duration_seconds']));
-        $browserRows = array_slice($rows, 0, $limit);
+
+        $merged = [];
+        foreach ($rows as $row) {
+            $title = (string) ($row['window_title'] ?? '');
+            $url = (string) ($row['url'] ?? '');
+            $displayName = $this->resolveBrowserTabDisplayName($title, $url);
+            $seconds = (int) ($row['duration_seconds'] ?? 0);
+
+            if (!isset($merged[$displayName])) {
+                $merged[$displayName] = [
+                    'display_name' => $displayName,
+                    'window_title' => $title,
+                    'url' => $url,
+                    'category' => $row['category'] ?? 'uncategorized',
+                    'duration_seconds' => 0,
+                ];
+            }
+
+            $merged[$displayName]['duration_seconds'] += $seconds;
+
+            $categories = ['productive' => 3, 'unproductive' => 2, 'neutral' => 1, 'uncategorized' => 0];
+            $current = $categories[$merged[$displayName]['category']] ?? 0;
+            $incoming = $categories[$row['category'] ?? 'uncategorized'] ?? 0;
+            if ($incoming > $current) {
+                $merged[$displayName]['category'] = $row['category'] ?? 'uncategorized';
+            }
+        }
+
+        $browserRows = array_values($merged);
+        usort($browserRows, fn ($a, $b) => ((int) $b['duration_seconds']) <=> ((int) $a['duration_seconds']));
+        $browserRows = array_slice($browserRows, 0, $limit);
 
         $totalSeconds = (int) array_sum(array_map(fn ($r) => (int) $r['duration_seconds'], $browserRows));
 
         return array_map(function ($row) use ($totalSeconds) {
             $seconds = (int) $row['duration_seconds'];
-            $title = (string) ($row['window_title'] ?? 'Untitled tab');
-            $title = preg_replace('/\s*[-–—]\s*(Google Chrome|Mozilla Firefox|Microsoft Edge).*$/i', '', $title) ?? $title;
 
             return [
-                'window_title' => trim($title) ?: 'Untitled tab',
+                'display_name' => $row['display_name'],
+                'window_title' => $row['window_title'],
                 'url' => $row['url'] ?? '',
                 'category' => $row['category'] ?? 'uncategorized',
                 'duration_seconds' => $seconds,
                 'percentage' => $totalSeconds > 0 ? round(($seconds / $totalSeconds) * 100, 1) : 0,
             ];
         }, $browserRows);
+    }
+
+    private function resolveBrowserTabDisplayName(string $windowTitle, string $url = ''): string
+    {
+        $title = trim($windowTitle);
+        $urlHost = $this->hostnameFromUrl($url);
+
+        if ($urlHost !== null) {
+            return $this->formatHostnameLabel($urlHost);
+        }
+
+        if ($title === '') {
+            return 'Unknown';
+        }
+
+        if (preg_match('/^localhost\b/i', $title) || preg_match('/\blocalhost\b/i', $title) || preg_match('/\bphpmyadmin\b/i', $title)) {
+            return 'Localhost';
+        }
+
+        if (preg_match('/\s[-–—]\s*YouTube\s*$/i', $title)) {
+            return 'YouTube';
+        }
+
+        $cleaned = preg_replace('/\s*[-–—]\s*(Google Chrome|Mozilla Firefox|Microsoft(?:\s*Edge)?)\s*$/i', '', $title) ?? $title;
+        $cleaned = trim(preg_replace('/^\(\d+\)\s*/', '', $cleaned) ?? $cleaned);
+
+        if (strcasecmp($cleaned, 'YouTube') === 0) {
+            return 'YouTube';
+        }
+
+        if (preg_match('/^([a-z0-9][-a-z0-9]*(?:\.[a-z0-9][-a-z0-9]*)+)(?:\/[^\s]*)?/i', $cleaned, $domainMatch)) {
+            return $this->formatHostnameLabel(strtolower($domainMatch[1]));
+        }
+
+        $brands = [
+            ['pattern' => '/\btiktok\b/i', 'label' => 'TikTok'],
+            ['pattern' => '/\byoutube\b/i', 'label' => 'YouTube'],
+            ['pattern' => '/\bgithub\b/i', 'label' => 'GitHub'],
+            ['pattern' => '/\bgitlab\b/i', 'label' => 'GitLab'],
+            ['pattern' => '/\bstackoverflow\b/i', 'label' => 'Stack Overflow'],
+            ['pattern' => '/\bfacebook\b/i', 'label' => 'Facebook'],
+            ['pattern' => '/\binstagram\b/i', 'label' => 'Instagram'],
+            ['pattern' => '/\blinkedin\b/i', 'label' => 'LinkedIn'],
+            ['pattern' => '/\bnetflix\b/i', 'label' => 'Netflix'],
+            ['pattern' => '/\breddit\b/i', 'label' => 'Reddit'],
+        ];
+
+        foreach ($brands as $brand) {
+            if (preg_match($brand['pattern'], $cleaned)) {
+                return $brand['label'];
+            }
+        }
+
+        $beforeDash = trim(explode(' - ', str_replace(['–', '—'], '-', $cleaned))[0] ?? $cleaned);
+        foreach ($brands as $brand) {
+            if (preg_match($brand['pattern'], $beforeDash)) {
+                return $brand['label'];
+            }
+        }
+
+        if (strcasecmp($beforeDash, 'New Tab') === 0) {
+            return 'New Tab';
+        }
+
+        return mb_strlen($beforeDash) > 32 ? mb_substr($beforeDash, 0, 32) . '…' : $beforeDash;
+    }
+
+    private function hostnameFromUrl(string $url): ?string
+    {
+        $raw = trim($url);
+        if ($raw === '') {
+            return null;
+        }
+
+        if (preg_match('/^https?:\/\/([^\/?#]+)/i', $raw, $match)) {
+            return strtolower($match[1]);
+        }
+
+        if (preg_match('/^([a-z0-9][-a-z0-9]*(?:\.[a-z0-9][-a-z0-9]*)+)/i', $raw, $match)) {
+            return strtolower($match[1]);
+        }
+
+        return null;
+    }
+
+    private function formatHostnameLabel(string $host): string
+    {
+        $h = strtolower(trim($host));
+        if (in_array($h, ['localhost', '127.0.0.1', '::1'], true)) {
+            return 'Localhost';
+        }
+
+        $known = [
+            'tiktok.com' => 'TikTok',
+            'www.tiktok.com' => 'TikTok',
+            'youtube.com' => 'YouTube',
+            'www.youtube.com' => 'YouTube',
+            'm.youtube.com' => 'YouTube',
+            'github.com' => 'GitHub',
+            'www.github.com' => 'GitHub',
+            'gitlab.com' => 'GitLab',
+            'stackoverflow.com' => 'Stack Overflow',
+            'www.stackoverflow.com' => 'Stack Overflow',
+        ];
+
+        if (isset($known[$h])) {
+            return $known[$h];
+        }
+
+        $parts = array_values(array_filter(explode('.', $h)));
+        if (count($parts) >= 2) {
+            $name = $parts[0];
+            $tld = $parts[count($parts) - 1];
+            $cap = ucfirst($name);
+            if ($tld === 'com') {
+                return $cap . '.com';
+            }
+            if (in_array($tld, ['app', 'io', 'dev'], true)) {
+                return $cap . '.' . $tld;
+            }
+            if (count($parts) === 3 && $parts[1] === 'vercel') {
+                return $cap . '.com';
+            }
+        }
+
+        return $host;
     }
 }
