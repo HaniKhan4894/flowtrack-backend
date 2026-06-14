@@ -4,7 +4,7 @@ import { syncElectronAuthToken } from '../utils/electronAuth';
 
 const apiBaseUrl =
     import.meta.env.VITE_API_URL ||
-    'https://8b8a-124-109-46-74.ngrok-free.app/flowtrack-backend/public/api/v1';
+    'https://2310-154-192-119-80.ngrok-free.app/flowtrack-backend/public/api/v1';
 
 const usesNgrok = apiBaseUrl.includes('ngrok');
 
