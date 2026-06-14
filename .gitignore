@@ -93,6 +93,7 @@ node_modules/
 
 # Desktop build artifacts
 desktop/dist/
+desktop/dist-build/
 desktop/.env.build
 desktop/build/icon.ico
 desktop/build/icon-512.png
