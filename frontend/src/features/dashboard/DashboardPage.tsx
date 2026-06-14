@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { dashboardService, type DashboardStats } from '../../api/dashboardService';
 import { reportService, type ActiveSession } from '../../api/reportService';
 import { useAuthStore } from '../../store/authStore';
+import { useTimerStore } from '../../store/timerStore';
 import { canViewMemberTracking } from '../../utils/access';
 import { OnboardingChecklist } from './OnboardingChecklist';
 
@@ -33,6 +34,7 @@ const StatCard = ({ icon: Icon, label, value, trend, delay }: any) => (
 const DashboardPage = () => {
   const navigate = useNavigate();
   const user = useAuthStore((state) => state.user);
+  const timerRunning = useTimerStore((state) => state.isRunning);
   const teamView = canViewMemberTracking(user);
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [activeSessions, setActiveSessions] = useState<ActiveSession[]>([]);
@@ -102,7 +104,7 @@ const DashboardPage = () => {
     : [
         { icon: Clock, label: 'My Hours', value: `${stats.total_hours}h`, trend: 0, delay: 0.1 },
         { icon: TrendingUp, label: 'Productivity', value: `${stats.productivity_score}%`, trend: 0, delay: 0.2 },
-        { icon: Timer, label: 'My Active Timer', value: stats.active_timers > 0 ? 'Running' : 'None', trend: 0, delay: 0.3 },
+        { icon: Timer, label: 'My Active Timer', value: timerRunning ? 'Running' : 'None', trend: 0, delay: 0.3 },
       ];
 
   const showOnboarding = Boolean(user?.onboarding && !user.onboarding.is_complete);

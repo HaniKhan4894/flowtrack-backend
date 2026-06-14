@@ -103,7 +103,11 @@ class TimeEntryService
 
             $entry = $this->formatTimeEntry($this->timeEntryModel->find($entryId));
             $entry = $this->attachProjectName($entry);
-            $this->notificationService->notifyTimeEntryStarted($userId, $entry);
+            try {
+                $this->notificationService->notifyTimeEntryStarted($userId, $entry);
+            } catch (\Throwable $e) {
+                log_message('error', 'Timer started notification failed: ' . $e->getMessage());
+            }
 
             return $entry;
 
@@ -154,7 +158,11 @@ class TimeEntryService
 
         $entry = $this->formatTimeEntry($this->timeEntryModel->find($entryId));
         $entry = $this->attachProjectName($entry);
-        $this->notificationService->notifyTimeEntryStopped($userId, $entry);
+        try {
+            $this->notificationService->notifyTimeEntryStopped($userId, $entry);
+        } catch (\Throwable $e) {
+            log_message('error', 'Timer stopped notification failed: ' . $e->getMessage());
+        }
 
         return $entry;
     }

@@ -64,6 +64,10 @@ export const useTimerStore = create<TimerState>((set, get) => ({
             startResync();
         } catch (error) {
             console.error('Failed to start timer', error);
+            await get().loadActive();
+            if (get().isRunning) {
+                return;
+            }
             throw error;
         }
     },
@@ -77,8 +81,21 @@ export const useTimerStore = create<TimerState>((set, get) => ({
             set({ activeEntry: null, isRunning: false, isPaused: false, elapsed: 0 });
             monitoringService.stopMonitoring();
             stopResync();
-        } catch (error) {
+        } catch (error: unknown) {
             console.error('Failed to stop timer', error);
+            const message = (error as { response?: { data?: { message?: string } } })?.response?.data?.message ?? '';
+            if (message.toLowerCase().includes('already stopped')) {
+                set({ activeEntry: null, isRunning: false, isPaused: false, elapsed: 0 });
+                monitoringService.stopMonitoring();
+                stopResync();
+                return;
+            }
+            await get().loadActive();
+            if (!get().isRunning) {
+                monitoringService.stopMonitoring();
+                stopResync();
+                return;
+            }
             throw error;
         }
     },

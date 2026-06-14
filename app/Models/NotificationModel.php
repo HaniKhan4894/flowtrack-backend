@@ -12,12 +12,14 @@ class NotificationModel extends Model
     protected $returnType       = 'array';
     protected $useSoftDeletes   = false;
     protected $protectFields    = true;
-    protected $allowedFields    = ['user_id', 'type', 'title', 'message', 'data', 'is_read', 'read_at'];
+    protected $allowedFields = [
+        'user_id', 'type', 'title', 'message', 'data', 'is_read', 'read_at', 'created_at',
+    ];
 
     protected $useTimestamps = true;
     protected $dateFormat    = 'datetime';
     protected $createdField  = 'created_at';
-    protected $updatedField  = null;
+    protected $updatedField  = '';
 
     protected $validationRules = [
         'user_id' => 'required|is_natural_no_zero',
