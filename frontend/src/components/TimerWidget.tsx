@@ -23,6 +23,19 @@ export const TimerWidget = () => {
   const [showProjectSelect, setShowProjectSelect] = useState(false);
   const [showTaskSelect, setShowTaskSelect] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [idleNotice, setIdleNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    const onIdleNotice = (event: Event) => {
+      const detail = (event as CustomEvent<{ message?: string }>).detail;
+      if (detail?.message) {
+        setIdleNotice(detail.message);
+        window.setTimeout(() => setIdleNotice(null), 12000);
+      }
+    };
+    window.addEventListener('flowtrack-idle-notice', onIdleNotice);
+    return () => window.removeEventListener('flowtrack-idle-notice', onIdleNotice);
+  }, []);
 
   const fetchTasks = useCallback(async (projectId: number) => {
     try {
@@ -136,6 +149,11 @@ export const TimerWidget = () => {
 
   return (
     <div className="flex items-center gap-4 bg-white/5 border border-white/10 rounded-2xl px-4 py-2 glass shadow-ai">
+      {idleNotice && (
+        <span className="text-xs text-amber-300 max-w-[240px] border border-amber-500/30 bg-amber-500/10 px-2 py-1 rounded-lg">
+          {idleNotice}
+        </span>
+      )}
       {error && <span className="text-xs text-rose-400 max-w-[200px]">{error}</span>}
       {!isRunning ? (
         <div className="flex items-center gap-3">

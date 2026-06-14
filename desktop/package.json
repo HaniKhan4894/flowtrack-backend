@@ -41,6 +41,8 @@
         },
         "files": [
             "main.js",
+            "activityTracker.js",
+            "systemInput.js",
             "preload.js",
             "config.js",
             "icon.png",

@@ -20,6 +20,13 @@ interface TimerState {
 }
 
 let resyncInterval: ReturnType<typeof setInterval> | null = null;
+let pausedBySystemIdle = false;
+
+function setTrackingSessionActive(active: boolean) {
+    if (typeof window !== 'undefined') {
+        (window as Window & { __flowtrackTrackingActive?: boolean }).__flowtrackTrackingActive = active;
+    }
+}
 
 function startResync() {
     if (resyncInterval) return;
@@ -58,6 +65,7 @@ export const useTimerStore = create<TimerState>((set, get) => ({
                 isPaused: false,
                 elapsed: entry.elapsed_seconds ?? 0,
             });
+            setTrackingSessionActive(true);
             const token = useAuthStore.getState().accessToken ?? undefined;
             monitoringService.startMonitoring(response.data.id, token);
             syncElectronAuthToken(token ?? localStorage.getItem('access_token'));
@@ -79,6 +87,8 @@ export const useTimerStore = create<TimerState>((set, get) => ({
         try {
             await timeService.stopTimer(activeEntry.id);
             set({ activeEntry: null, isRunning: false, isPaused: false, elapsed: 0 });
+            setTrackingSessionActive(false);
+            pausedBySystemIdle = false;
             monitoringService.stopMonitoring();
             stopResync();
         } catch (error: unknown) {
@@ -86,6 +96,8 @@ export const useTimerStore = create<TimerState>((set, get) => ({
             const message = (error as { response?: { data?: { message?: string } } })?.response?.data?.message ?? '';
             if (message.toLowerCase().includes('already stopped')) {
                 set({ activeEntry: null, isRunning: false, isPaused: false, elapsed: 0 });
+                setTrackingSessionActive(false);
+                pausedBySystemIdle = false;
                 monitoringService.stopMonitoring();
                 stopResync();
                 return;
@@ -102,6 +114,8 @@ export const useTimerStore = create<TimerState>((set, get) => ({
 
     resetLocal: () => {
         set({ activeEntry: null, isRunning: false, isPaused: false, elapsed: 0 });
+        setTrackingSessionActive(false);
+        pausedBySystemIdle = false;
         monitoringService.stopMonitoring();
         stopResync();
     },
@@ -158,10 +172,13 @@ export const useTimerStore = create<TimerState>((set, get) => ({
                 if (!isPaused) {
                     const token = useAuthStore.getState().accessToken ?? undefined;
                     monitoringService.startMonitoring(response.data.id, token);
-                    startResync();
                 }
+                startResync();
+                setTrackingSessionActive(true);
             } else {
                 set({ activeEntry: null, isRunning: false, isPaused: false });
+                setTrackingSessionActive(false);
+                pausedBySystemIdle = false;
                 stopResync();
             }
         } catch (error) {
@@ -187,8 +204,42 @@ if (typeof window !== 'undefined') {
             const store = useTimerStore.getState();
             if (locked && store.isRunning && !store.isPaused) {
                 store.pause().catch(() => undefined);
-            } else if (!locked && store.isRunning) {
+            } else if (!locked && store.isRunning && store.isPaused && !pausedBySystemIdle) {
                 store.resume().catch(() => undefined);
+            }
+        });
+    }
+
+    if ('electronAPI' in window && window.electronAPI?.onTimerIdleChange) {
+        window.electronAPI.onTimerIdleChange((state, data) => {
+            const store = useTimerStore.getState();
+            const idleMinutes = data?.idleMinutes ?? 5;
+
+            if (state === 'paused') {
+                pausedBySystemIdle = true;
+                if (store.isRunning && !store.isPaused) {
+                    store.pause().catch(() => undefined);
+                }
+                window.dispatchEvent(new CustomEvent('flowtrack-idle-notice', {
+                    detail: {
+                        type: 'paused',
+                        message: `Timer paused — you were idle for ${idleMinutes} minutes.`,
+                    },
+                }));
+                return;
+            }
+
+            if (state === 'resumed' && pausedBySystemIdle) {
+                pausedBySystemIdle = false;
+                if (store.isRunning && store.isPaused) {
+                    store.resume().catch(() => undefined);
+                }
+                window.dispatchEvent(new CustomEvent('flowtrack-idle-notice', {
+                    detail: {
+                        type: 'resumed',
+                        message: `Timer resumed. Your previous ${idleMinutes} minutes were idle/unproductive.`,
+                    },
+                }));
             }
         });
     }

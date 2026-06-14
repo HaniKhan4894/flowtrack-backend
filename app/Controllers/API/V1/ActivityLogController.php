@@ -93,21 +93,24 @@ class ActivityLogController extends ResourceController
 
             // If it's a single log, wrap in array
             $logs = isset($data['logs']) ? $data['logs'] : [$data];
+            $batchIdleSeconds = (int) ($data['idle_seconds'] ?? 0);
+            $batchActiveSeconds = (int) ($data['active_seconds'] ?? 0);
 
             $results = [];
             foreach ($logs as $log) {
+                unset($log['idle_seconds'], $log['active_seconds']);
                 $results[] = $this->activityLogService->logActivity($data['time_entry_id'], $userId, $log);
             }
 
-            if (isset($data['idle_seconds']) || isset($data['active_seconds'])) {
+            if ($batchIdleSeconds > 0 || $batchActiveSeconds > 0) {
                 $entry = (new \App\Models\TimeEntryModel())->find($data['time_entry_id']);
                 if ($entry) {
                     $this->activityLogService->recordIdleStats(
                         $userId,
                         (int) $entry['organization_id'],
                         date('Y-m-d H:i:s'),
-                        (int) ($data['idle_seconds'] ?? 0),
-                        (int) ($data['active_seconds'] ?? 0)
+                        (int) $batchIdleSeconds,
+                        (int) $batchActiveSeconds
                     );
                 }
             }

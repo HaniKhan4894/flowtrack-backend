@@ -48,4 +48,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
             ipcRenderer.removeListener('system-unlocked', onUnlock);
         };
     },
+
+    onTimerIdleChange: (callback) => {
+        const onPaused = (_event, data) => callback('paused', data);
+        const onResumed = (_event, data) => callback('resumed', data);
+        ipcRenderer.on('timer-idle-paused', onPaused);
+        ipcRenderer.on('timer-idle-resumed', onResumed);
+        return () => {
+            ipcRenderer.removeListener('timer-idle-paused', onPaused);
+            ipcRenderer.removeListener('timer-idle-resumed', onResumed);
+        };
+    },
 });

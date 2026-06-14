@@ -55,16 +55,6 @@ class ActivityLogService
         $this->db->table('activity_logs')->insert($insertData);
         $logId = $this->db->insertID();
 
-        if (isset($data['idle_seconds']) || isset($data['active_seconds'])) {
-            $this->recordIdleStats(
-                $userId,
-                (int) $entry['organization_id'],
-                $loggedAt,
-                (int) ($data['idle_seconds'] ?? 0),
-                (int) ($data['active_seconds'] ?? 0)
-            );
-        }
-
         return $this->activityLogModel->find($logId);
     }
 
@@ -213,6 +203,11 @@ class ActivityLogService
             || str_contains($name, 'flowtrack-desktop');
     }
 
+    private function isBrowserApp(string $appName): bool
+    {
+        return (bool) preg_match('/chrome|firefox|edge|msedge|brave|opera|safari/i', $appName);
+    }
+
     public function getTopApps(int $userId, string $startDate, string $endDate, int $limit = 10): array
     {
         $rows = $this->db->table('activity_logs')
@@ -244,6 +239,7 @@ class ActivityLogService
 
         return [
             'apps' => $apps,
+            'tabs' => $this->getTopBrowserTabs($userId, $startDate, $endDate),
             'total_seconds' => $totalSeconds,
             'total_events' => (int) $this->db->table('activity_logs')
                 ->where('user_id', $userId)
@@ -251,5 +247,47 @@ class ActivityLogService
                 ->where('logged_at <=', $endDate)
                 ->countAllResults(),
         ];
+    }
+
+    private function getTopBrowserTabs(int $userId, string $startDate, string $endDate, int $limit = 10): array
+    {
+        $rows = $this->db->table('activity_logs')
+            ->select('app_name, window_title, url, category, SUM(CASE WHEN duration_seconds > 0 THEN duration_seconds ELSE 60 END) as duration_seconds')
+            ->where('user_id', $userId)
+            ->where('logged_at >=', $startDate)
+            ->where('logged_at <=', $endDate)
+            ->where('window_title !=', '')
+            ->groupBy('app_name, window_title, url, category')
+            ->orderBy('duration_seconds', 'DESC')
+            ->get()
+            ->getResultArray();
+
+        $rows = array_values(array_filter($rows, function ($row) {
+            $title = (string) ($row['window_title'] ?? '');
+            $app = (string) ($row['app_name'] ?? '');
+            if ($title === '' || str_contains(strtolower($title), 'flowtrack')) {
+                return false;
+            }
+            return $this->isBrowserApp($app) || !empty($row['url']);
+        }));
+
+        usort($rows, fn ($a, $b) => ((int) $b['duration_seconds']) <=> ((int) $a['duration_seconds']));
+        $browserRows = array_slice($rows, 0, $limit);
+
+        $totalSeconds = (int) array_sum(array_map(fn ($r) => (int) $r['duration_seconds'], $browserRows));
+
+        return array_map(function ($row) use ($totalSeconds) {
+            $seconds = (int) $row['duration_seconds'];
+            $title = (string) ($row['window_title'] ?? 'Untitled tab');
+            $title = preg_replace('/\s*[-–—]\s*(Google Chrome|Mozilla Firefox|Microsoft Edge).*$/i', '', $title) ?? $title;
+
+            return [
+                'window_title' => trim($title) ?: 'Untitled tab',
+                'url' => $row['url'] ?? '',
+                'category' => $row['category'] ?? 'uncategorized',
+                'duration_seconds' => $seconds,
+                'percentage' => $totalSeconds > 0 ? round(($seconds / $totalSeconds) * 100, 1) : 0,
+            ];
+        }, $browserRows);
     }
 }

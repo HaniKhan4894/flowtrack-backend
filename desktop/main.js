@@ -5,14 +5,16 @@ const https = require('https');
 const http = require('http');
 const FormData = require('form-data');
 const { API_BASE_URL, FRONTEND_URL, getApiHeaders } = require('./config');
+const activityTracker = require('./activityTracker');
+const systemInput = require('./systemInput');
 
 // ──────────────────────────────────────────────
 //  Config
 // ──────────────────────────────────────────────
 const SCREENSHOT_MIN_MS = 1 * 60 * 1000; // fallback minimum
 const SCREENSHOT_MAX_MS = 4 * 60 * 1000; // fallback maximum
-const ACTIVITY_SYNC_INTERVAL_MS = 60 * 1000;  // 1 minute
 let planScreenshotIntervalMinutes = 0;
+let idleGuardTimer = null;
 
 // ──────────────────────────────────────────────
 //  State
@@ -20,14 +22,15 @@ let planScreenshotIntervalMinutes = 0;
 let mainWindow = null;
 let appIsQuitting = false;
 let screenshotTimer = null;   // holds the current setTimeout handle
-let activitySyncTimer = null;
 let tokenRefreshTimer = null;
 let distractionTimer = null;
 let isPaused = false;
 let pausedByLock = false;
+let pausedByIdle = false;
 let tray = null;
-let lastInputActivityTs = Date.now();
-const IDLE_THRESHOLD_MS = 5 * 60 * 1000;
+const IDLE_THRESHOLD_SEC = 5 * 60;
+const IDLE_RESUME_SEC = 12;
+const IDLE_CHECK_MS = 5 * 1000;
 const DISTRACTION_ALERT_MS = 5 * 1000;
 const DISTRACTION_CHECK_MS = 2 * 1000;
 
@@ -57,16 +60,15 @@ let currentSession = {
     token: null,
     timeEntryId: null,
     isTracking: false,
-    activityBuffer: { mouseMovements: 0, clicks: 0, keystrokes: 0 }
 };
 
 function clearDesktopSession() {
     currentSession.token = null;
     currentSession.timeEntryId = null;
     currentSession.isTracking = false;
-    currentSession.activityBuffer = { mouseMovements: 0, clicks: 0, keystrokes: 0 };
     isPaused = false;
     pausedByLock = false;
+    pausedByIdle = false;
     stopMonitoringLoop();
 }
 
@@ -305,10 +307,8 @@ async function captureAllScreens() {
     }
 }
 
-function calculateActivityLevel(activity) {
-    const total = activity.mouseMovements + (activity.clicks * 5) + (activity.keystrokes * 3);
-    // Cap at 100%
-    return Math.min(100, Math.round(total / 10));
+function getScreenshotActivityLevel() {
+    return activityTracker.getScreenshotActivityLevel();
 }
 
 async function uploadScreenshot(jpegBuffer, activityLevel, screenIndex = 0, retried = false) {
@@ -419,13 +419,12 @@ async function scheduleNextScreenshot() {
 
         const shots = await captureAllScreens();
         if (shots.length > 0) {
-            const activityLevel = calculateActivityLevel(currentSession.activityBuffer);
+            const activityLevel = getScreenshotActivityLevel();
             for (const shot of shots) {
                 await uploadScreenshot(shot.buffer, activityLevel, shot.index);
             }
         }
-        // Reset activity counters after each shot
-        currentSession.activityBuffer = { mouseMovements: 0, clicks: 0, keystrokes: 0 };
+        systemInput.resetActivityCounters();
 
         // Schedule next screenshot with a new random delay
         scheduleNextScreenshot();
@@ -557,11 +556,6 @@ function detectSensitiveApp(appName, windowTitle = '') {
     return { sensitive: false };
 }
 
-function computeIdleSeconds(syncIntervalSec) {
-    const idleMs = Math.max(0, Date.now() - lastInputActivityTs);
-    return Math.min(syncIntervalSec, Math.round(idleMs / 1000));
-}
-
 async function getForegroundApp() {
     try {
         const activeWin = require('active-win');
@@ -588,32 +582,12 @@ async function syncActivityToBackend(retried = false) {
     }
 
     try {
-        const { appName, windowTitle } = await getForegroundApp();
-
-        if (isInternalTrackerApp(appName, windowTitle)) {
+        const payload = activityTracker.buildSyncPayload(currentSession.timeEntryId);
+        if (!payload.logs.length && payload.idle_seconds <= 0 && payload.active_seconds <= 0) {
             return;
         }
 
-        const url = extractUrlFromTitle(windowTitle, appName);
-        const sensitiveMeta = detectSensitiveApp(appName, windowTitle);
-        const syncIntervalSec = Math.round(ACTIVITY_SYNC_INTERVAL_MS / 1000);
-        const idleSeconds = computeIdleSeconds(syncIntervalSec);
-        const activeSeconds = Math.max(0, syncIntervalSec - idleSeconds);
-
-        const body = JSON.stringify({
-            time_entry_id: currentSession.timeEntryId,
-            app_name: appName,
-            window_title: windowTitle,
-            url,
-            mouse_movement: currentSession.activityBuffer.mouseMovements,
-            mouse_clicks: currentSession.activityBuffer.clicks,
-            keyboard_strokes: currentSession.activityBuffer.keystrokes,
-            duration_seconds: syncIntervalSec,
-            idle_seconds: idleSeconds,
-            active_seconds: activeSeconds,
-            logged_at: new Date().toISOString(),
-            metadata: sensitiveMeta,
-        });
+        const body = JSON.stringify(payload);
 
         const urlParts = new URL(`${API_BASE_URL}/activity-logs/sync`);
         const isHttps = urlParts.protocol === 'https:';
@@ -649,7 +623,7 @@ async function syncActivityToBackend(retried = false) {
             req.write(body);
             req.end();
         });
-        console.log('[Activity] Synced to backend.');
+        console.log(`[Activity] Synced ${payload.logs.length} segment(s) to backend.`);
     } catch (err) {
         if (err.statusCode === 401 && !retried) {
             console.log('[Activity] Token expired — refreshing and retrying sync...');
@@ -662,47 +636,117 @@ async function syncActivityToBackend(retried = false) {
     }
 }
 
-function startMonitoringLoop() {
-    if (screenshotTimer || isPaused) return; // already running or paused
+function stopMonitoringCapture() {
+    if (screenshotTimer) { clearTimeout(screenshotTimer); screenshotTimer = null; }
+    activityTracker.stop();
+    stopDistractionMonitor();
+}
 
-    console.log(`[Monitoring] Starting screenshot loop (interval: ${planScreenshotIntervalMinutes || 'random 1-4'} min)...`);
+function stopTokenRefreshLoop() {
+    if (tokenRefreshTimer) { clearInterval(tokenRefreshTimer); tokenRefreshTimer = null; }
+}
 
-    // Kick off the first random screenshot
-    scheduleNextScreenshot();
-
-    // Activity sync every 1 minute
-    activitySyncTimer = setInterval(syncActivityToBackend, ACTIVITY_SYNC_INTERVAL_MS);
-    startTokenRefreshLoop();
-    startDistractionMonitor();
-
-    // Idle guard: auto-pause capture when no local activity for threshold
-    setInterval(() => {
-        if (!currentSession.isTracking || isPaused) return;
-        const idleFor = Date.now() - lastInputActivityTs;
-        if (idleFor >= IDLE_THRESHOLD_MS) {
-            isPaused = true;
-            stopMonitoringLoop();
-            console.log('[Monitoring] Auto-paused due to idle inactivity.');
-        }
-    }, 30_000);
+function stopIdleGuard() {
+    if (idleGuardTimer) { clearInterval(idleGuardTimer); idleGuardTimer = null; }
 }
 
 function stopMonitoringLoop() {
-    if (screenshotTimer) { clearTimeout(screenshotTimer); screenshotTimer = null; }
-    if (activitySyncTimer) { clearInterval(activitySyncTimer); activitySyncTimer = null; }
-    if (tokenRefreshTimer) { clearInterval(tokenRefreshTimer); tokenRefreshTimer = null; }
-    stopDistractionMonitor();
+    stopMonitoringCapture();
+    stopTokenRefreshLoop();
+    stopIdleGuard();
     console.log('[Monitoring] Stopped.');
+}
+
+function handleIdlePause() {
+    if (!currentSession.isTracking || isPaused || pausedByIdle || pausedByLock) return;
+
+    pausedByIdle = true;
+    isPaused = true;
+    stopMonitoringCapture();
+
+    showDesktopNotification(
+        'FlowTrack — Timer Paused',
+        'You were idle for 5 minutes. Timer will resume automatically when you return.'
+    );
+
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('timer-idle-paused', { idleMinutes: 5 });
+    }
+
+    console.log('[Monitoring] Auto-paused after 5 minutes of system idle.');
+}
+
+function handleIdleResume() {
+    if (!currentSession.isTracking || !pausedByIdle) return;
+
+    pausedByIdle = false;
+    isPaused = false;
+    startMonitoringLoop();
+
+    showDesktopNotification(
+        'FlowTrack — Timer Resumed',
+        'Welcome back! Your previous 5 minutes were idle/unproductive.'
+    );
+
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('timer-idle-resumed', { idleMinutes: 5 });
+    }
+
+    console.log('[Monitoring] Auto-resumed after user returned from idle.');
+}
+
+function startIdleGuard() {
+    if (idleGuardTimer) return;
+
+    idleGuardTimer = setInterval(() => {
+        if (!currentSession.isTracking) return;
+
+        const systemIdleSec = powerMonitor.getSystemIdleTime();
+
+        if (pausedByIdle) {
+            if (systemIdleSec < IDLE_RESUME_SEC) {
+                handleIdleResume();
+            }
+            return;
+        }
+
+        if (isPaused) return;
+
+        if (systemIdleSec >= IDLE_THRESHOLD_SEC) {
+            handleIdlePause();
+        }
+    }, IDLE_CHECK_MS);
+}
+
+function startMonitoringLoop() {
+    if (!currentSession.isTracking || isPaused) return;
+    if (screenshotTimer) return;
+
+    console.log(`[Monitoring] Starting screenshot loop (interval: ${planScreenshotIntervalMinutes || 'random 1-4'} min)...`);
+
+    scheduleNextScreenshot();
+
+    activityTracker.start({
+        getForegroundApp,
+        extractUrlFromTitle,
+        detectSensitiveApp,
+        isInternalTrackerApp,
+        onSync: syncActivityToBackend,
+    });
+
+    startTokenRefreshLoop();
+    startDistractionMonitor();
+    startIdleGuard();
 }
 
 function startTokenRefreshLoop() {
     if (tokenRefreshTimer) return;
-    // Refresh access token every 10 min while tracking (JWT expires in 15 min)
+    // Refresh access token every 8 min while tracking (JWT expires in 15 min)
     tokenRefreshTimer = setInterval(async () => {
         if (currentSession.isTracking) {
             await refreshTokenViaRenderer();
         }
-    }, 10 * 60 * 1000);
+    }, 8 * 60 * 1000);
 }
 
 // ──────────────────────────────────────────────
@@ -736,8 +780,10 @@ ipcMain.handle('start-tracking', (_event, { timeEntryId, token, screenshotInterv
     planScreenshotIntervalMinutes = Number(screenshotIntervalMinutes) || 0;
     isPaused = false;
     pausedByLock = false;
-    currentSession.activityBuffer = { mouseMovements: 0, clicks: 0, keystrokes: 0 };
+    pausedByIdle = false;
     startMonitoringLoop();
+    startTokenRefreshLoop();
+    startIdleGuard();
     console.log(`[IPC] Tracking started for time entry: ${timeEntryId}`);
     return { success: true };
 });
@@ -748,6 +794,7 @@ ipcMain.handle('stop-tracking', () => {
     currentSession.timeEntryId = null;
     isPaused = false;
     pausedByLock = false;
+    pausedByIdle = false;
     stopMonitoringLoop();
     console.log('[IPC] Tracking stopped.');
     return { success: true };
@@ -758,8 +805,11 @@ ipcMain.handle('pause-tracking', () => {
         return { success: false, error: 'No active tracking session' };
     }
     pausedByLock = false;
+    pausedByIdle = false;
     isPaused = true;
-    stopMonitoringLoop();
+    stopMonitoringCapture();
+    startTokenRefreshLoop();
+    startIdleGuard();
     return { success: true };
 });
 
@@ -768,6 +818,7 @@ ipcMain.handle('resume-tracking', () => {
         return { success: false, error: 'No active tracking session' };
     }
     pausedByLock = false;
+    pausedByIdle = false;
     isPaused = false;
     startMonitoringLoop();
     return { success: true };
@@ -776,17 +827,14 @@ ipcMain.handle('resume-tracking', () => {
 // Called from renderer to record activity events
 ipcMain.on('activity-event', (_event, type) => {
     if (!currentSession.isTracking) return;
-    lastInputActivityTs = Date.now();
-    if (type === 'mousemove') currentSession.activityBuffer.mouseMovements++;
-    else if (type === 'click') currentSession.activityBuffer.clicks++;
-    else if (type === 'keydown') currentSession.activityBuffer.keystrokes++;
+    systemInput.bumpActivity(type);
 });
 
 // Capture a screenshot on demand (for testing / manual trigger)
 ipcMain.handle('capture-screenshot-now', async () => {
     const shots = await captureAllScreens();
     if (!shots.length) return { success: false, error: 'Capture failed' };
-    const activityLevel = calculateActivityLevel(currentSession.activityBuffer);
+    const activityLevel = getScreenshotActivityLevel();
     for (const shot of shots) {
         await uploadScreenshot(shot.buffer, activityLevel, shot.index);
     }
@@ -846,7 +894,9 @@ app.whenReady().then(() => {
         if (!currentSession.isTracking || isPaused) return;
         pausedByLock = true;
         isPaused = true;
-        stopMonitoringLoop();
+        stopMonitoringCapture();
+        startTokenRefreshLoop();
+        startIdleGuard();
         if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.webContents.send('system-locked');
         }

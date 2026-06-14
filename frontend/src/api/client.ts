@@ -74,13 +74,19 @@ client.interceptors.response.use(
                     return client(originalRequest);
                 } catch (refreshError) {
                     flushPendingRequests(null);
-                    localStorage.removeItem('access_token');
-                    localStorage.removeItem('refresh_token');
-                    localStorage.removeItem('organization_id');
-                    localStorage.removeItem('user');
-                    syncElectronAuthToken('');
-                    if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
-                        window.location.href = '/login';
+                    const trackingActive =
+                        typeof window !== 'undefined' &&
+                        Boolean((window as Window & { __flowtrackTrackingActive?: boolean }).__flowtrackTrackingActive);
+
+                    if (!trackingActive) {
+                        localStorage.removeItem('access_token');
+                        localStorage.removeItem('refresh_token');
+                        localStorage.removeItem('organization_id');
+                        localStorage.removeItem('user');
+                        syncElectronAuthToken('');
+                        if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+                            window.location.href = '/login';
+                        }
                     }
                     return Promise.reject(refreshError);
                 } finally {

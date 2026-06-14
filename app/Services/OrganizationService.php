@@ -204,6 +204,7 @@ class OrganizationService
         $this->assignFreePlan((int) $orgId);
 
         (new LeaveService())->seedDefaultLeaveTypes((int) $orgId);
+        (new ProductivityRuleService())->seedDefaultRules((int) $orgId, $ownerId);
 
         return $this->getOrganizationById((int) $orgId);
     }

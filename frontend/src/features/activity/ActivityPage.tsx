@@ -25,6 +25,7 @@ const ActivityPage = () => {
   const { user } = useAuthStore();
   const [logs, setLogs] = useState<any[]>([]);
   const [topApps, setTopApps] = useState<any[]>([]);
+  const [browserTabs, setBrowserTabs] = useState<any[]>([]);
   const [summary, setSummary] = useState({ total_seconds: 0, total_events: 0 });
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -55,6 +56,7 @@ const ActivityPage = () => {
 
       setLogs(logsResp.data ?? []);
       setTopApps(topAppsResp.data?.apps ?? []);
+      setBrowserTabs(topAppsResp.data?.tabs ?? []);
       setSummary({
         total_seconds: topAppsResp.data?.total_seconds ?? 0,
         total_events: topAppsResp.data?.total_events ?? 0,
@@ -63,6 +65,7 @@ const ActivityPage = () => {
       console.error('Failed to fetch activity logs', error);
       setLogs([]);
       setTopApps([]);
+      setBrowserTabs([]);
       setSummary({ total_seconds: 0, total_events: 0 });
     } finally {
       setIsLoading(false);
@@ -263,6 +266,31 @@ const ActivityPage = () => {
                       : getAppDisplayName(app.app_name)}
                   </p>
                   <p className="text-sm font-bold text-primary-400">{app.percentage}%</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {!isLoading && browserTabs.length > 0 && (
+        <div className="overlay-panel p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Browser Tabs</h3>
+            <span className="text-xs text-slate-500">{browserTabs.length} tabs tracked</span>
+          </div>
+          <div className="space-y-2">
+            {browserTabs.slice(0, 8).map((tab) => (
+              <div key={`${tab.window_title}-${tab.url}`} className="flex items-center justify-between gap-4 py-2 border-b border-white/5 last:border-0">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-white truncate" title={tab.window_title}>{tab.window_title}</p>
+                  {tab.url && (
+                    <p className="text-xs text-slate-500 truncate" title={tab.url}>{tab.url}</p>
+                  )}
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-sm font-bold text-primary-400">{formatDuration(tab.duration_seconds)}</p>
+                  <p className="text-[10px] uppercase tracking-wider text-slate-500">{tab.category}</p>
                 </div>
               </div>
             ))}
