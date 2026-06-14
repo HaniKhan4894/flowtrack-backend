@@ -548,14 +548,6 @@ function extractUrlFromTitle(windowTitle, appName) {
         return `https://${pathDomain[1]}`;
     }
 
-    const domainMatch = candidate.match(/^([a-z0-9][-a-z0-9]*(?:\.[a-z0-9][-a-z0-9]*)+(?:\/[^\s]*)?)/i);
-    if (domainMatch) {
-        const domain = domainMatch[1];
-        if (!domain.includes(' ') && domain.includes('.')) {
-            return domain.startsWith('http') ? domain : `https://${domain}`;
-        }
-    }
-
     return '';
 }
 
