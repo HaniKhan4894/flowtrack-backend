@@ -8,7 +8,7 @@ import { taskService } from '../api/taskService';
 import type { Task } from '../types';
 import { monitoringService } from '../api/monitoringService';
 import { useAuthStore } from '../store/authStore';
-import { isOrgAdmin } from '../utils/access';
+import { isOrgAdmin, canManageProjects } from '../utils/access';
 import { getApiErrorMessage } from '../utils/apiError';
 
 export const TimerWidget = () => {
@@ -138,7 +138,7 @@ export const TimerWidget = () => {
             ? 'Create your first project to start tracking.'
             : 'Ask your admin to create a project.'}
         </span>
-        {isOrgAdmin(user) && (
+        {canManageProjects(user) && (
           <Link to="/projects" className="text-xs font-bold text-amber-300 hover:underline whitespace-nowrap">
             Create project
           </Link>

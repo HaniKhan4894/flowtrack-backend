@@ -4,12 +4,13 @@ import { CheckCircle2, Circle, Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 import { authService } from '../../api/authService';
+import { canManageProjects } from '../../utils/access';
 import type { OnboardingProgress } from '../../types';
 
 const STEP_LINKS: Record<string, string> = {
   avatar: '/settings',
   project: '/projects',
-  timer: '/time',
+  timer: '/app',
   activity: '/activity',
 };
 
@@ -59,7 +60,10 @@ export function OnboardingChecklist({ compact = false }: OnboardingChecklistProp
 
       <ul className="space-y-3">
         {onboarding.steps.map((step) => {
-          const link = STEP_LINKS[step.key];
+          let link = STEP_LINKS[step.key];
+          if (step.key === 'project' && !canManageProjects(user)) {
+            link = '/app';
+          }
           const content = (
             <div className="flex items-center gap-3">
               {step.completed ? (

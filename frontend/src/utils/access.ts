@@ -31,7 +31,12 @@ const ALL_NAV_ITEMS: NavItem[] = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/app' },
   { icon: Clock, label: 'Time Tracking', path: '/time', permission: 'time.view_own' },
   { icon: ClipboardList, label: 'Timesheets', path: '/timesheets', permission: 'timesheet.submit' },
-  { icon: Briefcase, label: 'Projects', path: '/projects', permission: 'projects.view' },
+  {
+    icon: Briefcase,
+    label: 'Projects',
+    path: '/projects',
+    showIf: (user) => canManageProjects(user),
+  },
   { icon: Building2, label: 'Clients', path: '/clients', permission: 'invoices.view' },
   { icon: CalendarDays, label: 'Leave', path: '/leave' },
   { icon: Camera, label: 'Screenshots', path: '/screenshots', permission: 'screenshots.view_own' },
@@ -56,7 +61,7 @@ const PATH_PERMISSIONS: Record<string, string | string[]> = {
   '/app': [],
   '/time': 'time.view_own',
   '/timesheets': 'timesheet.submit',
-  '/projects': 'projects.view',
+  '/projects': ['projects.create', 'projects.edit'],
   '/clients': 'invoices.view',
   '/leave': [],
   '/screenshots': 'screenshots.view_own',
@@ -143,6 +148,10 @@ export function canViewOrgPackage(user: User | null | undefined): boolean {
 
 export function canAccessSettings(_user: User | null | undefined): boolean {
   return !!_user;
+}
+
+export function canManageProjects(user: User | null | undefined): boolean {
+  return hasAnyPermission(user, ['projects.create', 'projects.edit']);
 }
 
 export function canManageTeam(user: User | null | undefined): boolean {

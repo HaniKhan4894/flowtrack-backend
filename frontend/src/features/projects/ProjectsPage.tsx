@@ -20,6 +20,7 @@ function formatDuration(seconds: number): string {
 export const ProjectsPage = () => {
   const { user } = useAuthStore();
   const canEditProjects = hasPermission(user, 'projects.edit');
+  const canCreateProjects = hasPermission(user, 'projects.create');
   const [projects, setProjects] = useState<Project[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -195,9 +196,11 @@ export const ProjectsPage = () => {
           <h1 className="text-3xl font-bold text-white mb-2">Projects</h1>
           <p className="text-slate-400">Manage your work and team assignments.</p>
         </div>
-        <Button className="w-fit" onClick={() => setShowCreateModal(true)}>
-          <Plus className="w-5 h-5 mr-2" /> New Project
-        </Button>
+        {canCreateProjects && (
+          <Button className="w-fit" onClick={() => setShowCreateModal(true)}>
+            <Plus className="w-5 h-5 mr-2" /> New Project
+          </Button>
+        )}
       </div>
 
       {/* Filters */}

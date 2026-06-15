@@ -7,7 +7,7 @@ import { projectService, type Project } from '../../api/projectService';
 import { taskService } from '../../api/taskService';
 import { reportService } from '../../api/reportService';
 import { useAuthStore } from '../../store/authStore';
-import { hasPermission, isOrgAdmin } from '../../utils/access';
+import { hasPermission, isOrgAdmin, canManageProjects } from '../../utils/access';
 import { getApiErrorMessage } from '../../utils/apiError';
 import { Button, Input } from '../../components/ui';
 import type { Task, TimeEntry } from '../../types';
@@ -192,7 +192,7 @@ const TimeTrackingPage = () => {
               ? 'No projects yet. Create your first project to start tracking time.'
               : 'No projects available. Ask your admin to create a project.'}
           </p>
-          {isOrgAdmin(user) && (
+          {canManageProjects(user) && (
             <Link to="/projects" className="text-xs font-bold text-amber-300 hover:underline whitespace-nowrap ml-auto">
               Create project
             </Link>
