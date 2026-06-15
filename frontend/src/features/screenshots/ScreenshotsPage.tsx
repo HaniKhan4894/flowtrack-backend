@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Camera, Calendar, ZoomIn, Trash2, Download, RefreshCw, X, Zap, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '../../components/ui';
@@ -6,13 +7,14 @@ import { screenshotService } from '../../api/screenshotService';
 import { monitoringService } from '../../api/monitoringService';
 import { TeamMemberFilter } from '../../components/TeamMemberFilter';
 import { useAuthStore } from '../../store/authStore';
-import { canViewMemberTracking, hasPermission } from '../../utils/access';
+import { canViewMemberTracking, canViewOrgPackage, hasPermission } from '../../utils/access';
 import { Link } from 'react-router-dom';
 
 const PER_PAGE = 12;
 
 const ScreenshotsPage = () => {
   const { user } = useAuthStore();
+  const [searchParams] = useSearchParams();
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
   const [viewingMemberName, setViewingMemberName] = useState('');
   const [screenshots, setScreenshots] = useState<any[]>([]);
@@ -30,6 +32,13 @@ const ScreenshotsPage = () => {
 
   const isDesktop = monitoringService.isDesktop;
   const canDeleteScreenshots = hasPermission(user, 'screenshots.delete');
+
+  useEffect(() => {
+    const uid = searchParams.get('user');
+    if (uid && canViewMemberTracking(user)) {
+      setSelectedUserId(Number(uid));
+    }
+  }, [searchParams, user]);
 
   const revokeUrls = useCallback((urls: Record<number, string>) => {
     Object.values(urls).forEach((url) => {
@@ -160,7 +169,7 @@ const ScreenshotsPage = () => {
 
   return (
     <div className="space-y-8">
-      {user?.features?.screenshots === false && (
+      {canViewOrgPackage(user) && user?.features?.screenshots === false && (
         <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 flex items-center justify-between gap-4">
           <p className="text-sm text-amber-200">Screenshots are not available on the Free plan — time tracking only.</p>
           <Link to="/billing" className="text-xs font-bold text-amber-300 hover:underline whitespace-nowrap">Upgrade plan</Link>

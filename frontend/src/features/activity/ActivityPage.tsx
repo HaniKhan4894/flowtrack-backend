@@ -12,6 +12,7 @@ import { getBrowserTabDisplayName } from '../../utils/browserTabName';
 import { useAuthStore } from '../../store/authStore';
 import { canViewMemberTracking } from '../../utils/access';
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 
 const formatDuration = (seconds: number) => {
   const h = Math.floor(seconds / 3600);
@@ -24,6 +25,7 @@ const formatDuration = (seconds: number) => {
 
 const ActivityPage = () => {
   const { user } = useAuthStore();
+  const [searchParams] = useSearchParams();
   const [logs, setLogs] = useState<any[]>([]);
   const [topApps, setTopApps] = useState<any[]>([]);
   const [browserTabs, setBrowserTabs] = useState<any[]>([]);
@@ -39,6 +41,13 @@ const ActivityPage = () => {
 
   const effectiveUserId = selectedUserId ?? user?.id ?? null;
   const isToday = selectedDate === new Date().toISOString().split('T')[0];
+
+  useEffect(() => {
+    const uid = searchParams.get('user');
+    if (uid && canViewMemberTracking(user)) {
+      setSelectedUserId(Number(uid));
+    }
+  }, [searchParams, user]);
 
   const fetchData = useCallback(async () => {
     if (!effectiveUserId) return;

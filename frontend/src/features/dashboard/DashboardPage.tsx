@@ -6,7 +6,7 @@ import { dashboardService, type DashboardStats } from '../../api/dashboardServic
 import { reportService, type ActiveSession } from '../../api/reportService';
 import { useAuthStore } from '../../store/authStore';
 import { useTimerStore } from '../../store/timerStore';
-import { canViewMemberTracking } from '../../utils/access';
+import { canViewMemberTracking, canViewOrgPackage } from '../../utils/access';
 import { OnboardingChecklist } from './OnboardingChecklist';
 
 const StatCard = ({ icon: Icon, label, value, trend, delay }: any) => (
@@ -111,7 +111,7 @@ const DashboardPage = () => {
 
   return (
     <div className="space-y-8">
-      {user?.plan?.slug === 'free' && user?.features?.screenshots === false && (
+      {canViewOrgPackage(user) && user?.plan?.slug === 'free' && user?.features?.screenshots === false && (
         <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 flex items-center justify-between gap-4">
           <p className="text-sm text-amber-200">
             Screenshots are not available on the Free plan — time tracking only.

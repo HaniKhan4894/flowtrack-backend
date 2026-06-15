@@ -132,6 +132,12 @@ export function getNavItemsForUser(user: User | null | undefined): NavItem[] {
   });
 }
 
+export function canViewOrgPackage(user: User | null | undefined): boolean {
+  if (!user) return false;
+  const role = (user.organization_role ?? user.role ?? '').toLowerCase();
+  return role === 'owner' || role === 'admin';
+}
+
 export function canAccessSettings(_user: User | null | undefined): boolean {
   return !!_user;
 }

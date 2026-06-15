@@ -14,6 +14,10 @@ import {
   Zap,
   Star,
   Quote,
+  Wallet,
+  ClipboardList,
+  Gauge,
+  Globe,
 } from 'lucide-react';
 import { Button } from '../../components/ui';
 import { useAuthStore } from '../../store/authStore';
@@ -33,41 +37,42 @@ const packageCards = [
     name: 'Free',
     price: '$0',
     subtitle: 'For solo users',
-    features: ['1 project', 'Basic timer', 'Desktop + Web access'],
+    features: ['1 user · 2 projects', 'Basic timer', 'Desktop + Web'],
   },
   {
     name: 'Starter',
     price: '$12',
     subtitle: 'Per month',
-    features: ['Unlimited projects', 'Screenshots', 'Client billing'],
+    features: ['Up to 5 members', 'Screenshots every 5 min', 'Activity + productivity rules'],
   },
   {
     name: 'Professional',
     price: '$10 + $5/user',
-    subtitle: 'Scale with team',
-    features: ['Advanced analytics', 'Productivity insights', 'Priority support'],
+    subtitle: 'Growing teams',
+    features: ['Screenshots every 2 min', 'Payroll & timesheets', 'Custom roles & analytics'],
     popular: true,
   },
   {
     name: 'Enterprise',
     price: 'Custom',
     subtitle: 'Large organizations',
-    features: ['Dedicated support', 'Custom integrations', 'Advanced governance'],
+    features: ['Screenshots every 1 min', 'SSO & white-label', 'Dedicated support'],
   },
 ];
 
-const selectedPackageName = 'Professional';
-
 const adoptionBreakdown = [
-  { label: 'IDE-based productivity signals', value: 82, color: 'from-indigo-500 to-blue-500' },
-  { label: 'Desktop app activity intelligence', value: 91, color: 'from-cyan-500 to-sky-500' },
-  { label: 'Browser + tab focus analytics', value: 76, color: 'from-fuchsia-500 to-violet-500' },
+  { label: 'IDE & dev tools (Cursor, VS Code)', value: 88, color: 'from-indigo-500 to-blue-500' },
+  { label: 'Desktop foreground app tracking', value: 94, color: 'from-cyan-500 to-sky-500' },
+  { label: 'Browser tab focus (Chrome, Edge)', value: 82, color: 'from-fuchsia-500 to-violet-500' },
 ];
 
 const currentHighlights = [
-  'Live timer with pause/resume and activity sync',
-  'Multi-screen screenshot capture and timeline view',
-  'Project analytics, team insights, and billing workflows',
+  'System-wide activity % with 5-second foreground app polling',
+  'Browser tab names (TikTok, GitHub, YouTube) with productivity rules',
+  'Screenshot thumbnails, pagination, and plan-based capture intervals',
+  'Idle auto-pause (5 min) with auto-resume and notifications',
+  'Timesheets, leave management, payroll, and team member tracking',
+  'Default + custom productivity rules (productive / unproductive / neutral)',
 ];
 
 const upcomingHighlights = [
@@ -86,15 +91,17 @@ const desktopWinUrl = import.meta.env.VITE_DESKTOP_WIN_URL;
 const desktopMacUrl = import.meta.env.VITE_DESKTOP_MAC_URL;
 
 const desktopFeatures = [
-  'Screenshot capture & activity sync',
-  'Timer controls in the system tray',
-  'Works with your FlowTrack account',
+  'Multi-screen screenshots with fast thumbnail previews',
+  '5s app polling + 60s activity batch sync to cloud',
+  'Idle detection: auto-pause timer after 5 minutes away',
+  'Distraction alerts for social / entertainment apps',
+  'System tray timer + lock-screen pause/resume',
 ];
 
 const heroStats = [
-  { value: 'Real-time', label: 'Activity sync' },
-  { value: 'Desktop + Web', label: 'One platform' },
-  { value: 'Secure', label: 'Team visibility' },
+  { value: '5 sec', label: 'App polling' },
+  { value: '2 min', label: 'Pro screenshots' },
+  { value: 'Secure', label: 'Role-based access' },
 ];
 
 const happyClients = [
@@ -131,30 +138,58 @@ const coreFeatures = [
   {
     icon: Clock3,
     title: 'Smart Time Tracking',
-    description: 'Start, pause, and resume timers with automatic activity logging across projects and tasks.',
+    description: 'Start, pause, resume, and auto-pause on idle. Syncs across desktop and web in real time.',
     accent: 'text-primary-400',
     glow: 'from-primary-500/20 to-transparent',
   },
   {
     icon: Monitor,
-    title: 'Screenshot Evidence',
-    description: 'Capture work context with configurable screenshot intervals and a clean timeline view.',
+    title: 'Screenshot Monitoring',
+    description: 'Plan-based intervals (1–5 min), thumbnail gallery, pagination, and full-size preview on click.',
     accent: 'text-secondary-400',
     glow: 'from-secondary-500/20 to-transparent',
   },
   {
-    icon: BarChart3,
-    title: 'Team Analytics',
-    description: 'Understand productivity patterns, project health, and delivery trends at a glance.',
+    icon: Globe,
+    title: 'App & Browser Tracking',
+    description: 'Foreground apps every 5 seconds. Chrome tabs shown as TikTok, GitHub, YouTube — not raw titles.',
     accent: 'text-cyan-400',
     glow: 'from-cyan-500/20 to-transparent',
   },
   {
-    icon: Users,
-    title: 'Billing & Invoices',
-    description: 'Turn tracked hours into professional invoices and subscription-ready billing workflows.',
+    icon: Gauge,
+    title: 'Productivity Rules',
+    description: 'Built-in rules for Cursor, Chrome, TikTok, and more. Admins add custom rules per organization.',
+    accent: 'text-amber-400',
+    glow: 'from-amber-500/20 to-transparent',
+  },
+  {
+    icon: ClipboardList,
+    title: 'Timesheets & Leave',
+    description: 'Submit timesheets, approve hours, and manage annual, casual, sick, and unpaid leave types.',
+    accent: 'text-violet-400',
+    glow: 'from-violet-500/20 to-transparent',
+  },
+  {
+    icon: Wallet,
+    title: 'Payroll & Invoicing',
+    description: 'Run payroll cycles, compensate teams, and turn tracked hours into client-ready invoices.',
     accent: 'text-emerald-400',
     glow: 'from-emerald-500/20 to-transparent',
+  },
+  {
+    icon: BarChart3,
+    title: 'Team Analytics',
+    description: 'Hourly timeline, top apps, browser tabs, idle breakdown, and focus scores for managers.',
+    accent: 'text-sky-400',
+    glow: 'from-sky-500/20 to-transparent',
+  },
+  {
+    icon: Users,
+    title: 'Roles & Permissions',
+    description: 'Owner, admin, manager, team lead, and member roles with granular permission control.',
+    accent: 'text-rose-400',
+    glow: 'from-rose-500/20 to-transparent',
   },
 ];
 
@@ -317,19 +352,19 @@ const LandingPage = () => {
             <div className="space-y-4 text-slate-200">
               <div className="flex gap-3 rounded-xl border border-white/5 bg-white/[0.02] p-3">
                 <Clock3 className="w-5 h-5 text-primary-400 mt-0.5 shrink-0" />
-                <p className="text-sm">Real-time timer with pause/resume and reliable activity timeline.</p>
+                <p className="text-sm">5-second app polling with idle auto-pause and productivity categorization.</p>
               </div>
               <div className="flex gap-3 rounded-xl border border-white/5 bg-white/[0.02] p-3">
                 <Monitor className="w-5 h-5 text-secondary-400 mt-0.5 shrink-0" />
-                <p className="text-sm">Smart screenshot capture for transparent remote work visibility.</p>
+                <p className="text-sm">Fast screenshot thumbnails with full-size preview — intervals from 1–5 min by plan.</p>
               </div>
               <div className="flex gap-3 rounded-xl border border-white/5 bg-white/[0.02] p-3">
-                <BarChart3 className="w-5 h-5 text-primary-400 mt-0.5 shrink-0" />
-                <p className="text-sm">Powerful team and project analytics for better decisions.</p>
+                <Globe className="w-5 h-5 text-cyan-400 mt-0.5 shrink-0" />
+                <p className="text-sm">Browser tabs tracked as clean names: TikTok, GitHub, YouTube, and more.</p>
               </div>
               <div className="flex gap-3 rounded-xl border border-white/5 bg-white/[0.02] p-3">
-                <CheckCircle2 className="w-5 h-5 text-emerald-400 mt-0.5 shrink-0" />
-                <p className="text-sm">Professional invoices and subscription billing in one flow.</p>
+                <Wallet className="w-5 h-5 text-emerald-400 mt-0.5 shrink-0" />
+                <p className="text-sm">Payroll, timesheets, leave, invoices, and role-based team visibility.</p>
               </div>
             </div>
           </motion.div>
@@ -440,13 +475,10 @@ const LandingPage = () => {
         />
         <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-6">
           {packageCards.map((pkg) => (
-            <div key={pkg.name} className={`glass-card h-full flex flex-col ${pkg.popular ? 'border-primary-500/40 bg-primary-500/5' : ''} ${pkg.name === selectedPackageName ? 'ring-2 ring-emerald-500/40' : ''}`}>
+            <div key={pkg.name} className={`glass-card h-full flex flex-col ${pkg.popular ? 'border-primary-500/40 bg-primary-500/5' : ''}`}>
               <div className="min-h-7 flex items-center gap-2 mb-3">
                 {pkg.popular && (
                   <span className="inline-flex items-center text-[10px] uppercase tracking-wider px-2 py-1 rounded-full bg-primary-500 text-white">Most Popular</span>
-                )}
-                {pkg.name === selectedPackageName && (
-                  <span className="inline-flex items-center text-[10px] uppercase tracking-wider px-2 py-1 rounded-full bg-emerald-500 text-white">Selected Package</span>
                 )}
               </div>
 

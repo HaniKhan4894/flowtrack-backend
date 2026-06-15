@@ -39,9 +39,24 @@ export const landingFaq: FaqItem[] = [
       'Yes. FlowTrack turns tracked hours into professional invoices and supports subscription-style billing workflows for agencies and service teams.',
   },
   {
-    question: 'What makes FlowTrack different from other time trackers?',
+    question: 'How does FlowTrack track apps and browser tabs?',
     answer:
-      'FlowTrack unifies timer controls, multi-screen screenshots, team analytics, and billing in one platform with both web and desktop apps — designed for accountability without slowing teams down.',
+      'The desktop app polls the foreground application every 5 seconds and syncs activity in batches. Browser tabs appear as clean site names like TikTok or GitHub, categorized with default and custom productivity rules.',
+  },
+  {
+    question: 'What screenshot intervals does FlowTrack support?',
+    answer:
+      'Screenshot frequency depends on your plan: Starter every 5 minutes, Professional every 2 minutes, and Enterprise every 1 minute. The gallery uses fast thumbnails; full resolution opens on click.',
+  },
+  {
+    question: 'Does FlowTrack support payroll and leave management?',
+    answer:
+      'Yes. Professional and Enterprise plans include timesheets, leave types (annual, casual, sick), payroll runs, and team analytics for managers.',
+  },
+  {
+    question: 'What happens when I am idle while the timer is running?',
+    answer:
+      'After 5 minutes of system idle, FlowTrack auto-pauses the timer and notifies you. When you return, the timer resumes automatically and idle time is recorded as unproductive.',
   },
 ];
 

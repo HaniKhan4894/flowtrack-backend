@@ -15,7 +15,7 @@ import { TimerWidget } from '../components/TimerWidget';
 import { notificationService } from '../api/notificationService';
 import { useTimerStore } from '../store/timerStore';
 import { timeService } from '../api/timeService';
-import { getNavItemsForUser, isSuperAdmin } from '../utils/access';
+import { getNavItemsForUser, isSuperAdmin, canViewOrgPackage } from '../utils/access';
 import { hardRedirectToLogin, isDesktopApp } from '../utils/electronAuth';
 
 const SidebarItem = ({ icon: Icon, label, path, isCollapsed }: any) => {
@@ -145,7 +145,7 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
                 || (location.pathname === '/admin' ? 'Platform Admin' : null)
                 || 'Dashboard'}
             </h2>
-            {user?.plan && (
+            {canViewOrgPackage(user) && user?.plan && (
               <span className="text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-primary-500/10 text-primary-400 border border-primary-500/20">
                 {user.plan.name}
               </span>
