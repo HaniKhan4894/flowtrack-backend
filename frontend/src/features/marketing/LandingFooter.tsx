@@ -7,7 +7,7 @@ const productLinks = [
   { label: 'Desktop App', href: '#download' },
   { label: 'Happy Clients', href: '#clients' },
   { label: 'FAQ', href: '#faq' },
-  { label: 'Roadmap', href: '#roadmap' },
+  { label: 'Platform', href: '#platform' },
 ];
 
 const accountLinks = [
@@ -17,7 +17,7 @@ const accountLinks = [
 ];
 
 const resourceLinks: Array<{ label: string; href: string } | { label: string; to: string }> = [
-  { label: 'Product Updates', href: '#roadmap' },
+  { label: 'Product Updates', href: '#platform' },
   { label: 'Privacy Policy', to: '/privacy' },
   { label: 'Terms of Service', to: '/terms' },
   { label: 'Support', href: 'mailto:support@flowtrack.app' },

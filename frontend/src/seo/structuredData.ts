@@ -41,12 +41,12 @@ export const landingFaq: FaqItem[] = [
   {
     question: 'How does FlowTrack track apps and browser tabs?',
     answer:
-      'The desktop app polls the foreground application every 5 seconds and syncs activity in batches. Browser tabs appear as clean site names like TikTok or GitHub, categorized with default and custom productivity rules.',
+      'The desktop app tracks foreground applications and browser tabs in real time. Tabs appear as clean site names like TikTok or GitHub, categorized with default and custom productivity rules.',
   },
   {
     question: 'What screenshot intervals does FlowTrack support?',
     answer:
-      'Screenshot frequency depends on your plan: Starter every 5 minutes, Professional every 2 minutes, and Enterprise every 1 minute. The gallery uses fast thumbnails; full resolution opens on click.',
+      'Screenshot capture frequency depends on your plan tier. The gallery uses fast thumbnails; full resolution opens on click.',
   },
   {
     question: 'Does FlowTrack support payroll and leave management?',
@@ -56,7 +56,7 @@ export const landingFaq: FaqItem[] = [
   {
     question: 'What happens when I am idle while the timer is running?',
     answer:
-      'After 5 minutes of system idle, FlowTrack auto-pauses the timer and notifies you. When you return, the timer resumes automatically and idle time is recorded as unproductive.',
+      'When the system detects extended idle time, FlowTrack auto-pauses the timer and notifies you. When you return, the timer resumes automatically and idle time is recorded as unproductive.',
   },
 ];
 

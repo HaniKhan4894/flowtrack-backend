@@ -398,7 +398,6 @@ class TimeEntryService
             }
             return;
         }
-        }
 
         if (!$this->permissionService->userHasPermission($actorUserId, $organizationId, 'time.edit_team')) {
             throw new \Exception('Unauthorized');

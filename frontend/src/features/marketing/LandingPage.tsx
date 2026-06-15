@@ -43,20 +43,20 @@ const packageCards = [
     name: 'Starter',
     price: '$12',
     subtitle: 'Per month',
-    features: ['Up to 5 members', 'Screenshots every 5 min', 'Activity + productivity rules'],
+    features: ['Up to 5 members', 'Screenshot monitoring', 'Activity + productivity rules'],
   },
   {
     name: 'Professional',
     price: '$10 + $5/user',
     subtitle: 'Growing teams',
-    features: ['Screenshots every 2 min', 'Payroll & timesheets', 'Custom roles & analytics'],
+    features: ['Faster screenshot capture', 'Payroll & timesheets', 'Custom roles & analytics'],
     popular: true,
   },
   {
     name: 'Enterprise',
     price: 'Custom',
     subtitle: 'Large organizations',
-    features: ['Screenshots every 1 min', 'SSO & white-label', 'Dedicated support'],
+    features: ['Priority screenshot capture', 'SSO & white-label', 'Dedicated support'],
   },
 ];
 
@@ -66,19 +66,37 @@ const adoptionBreakdown = [
   { label: 'Browser tab focus (Chrome, Edge)', value: 82, color: 'from-fuchsia-500 to-violet-500' },
 ];
 
-const currentHighlights = [
-  'System-wide activity % with 5-second foreground app polling',
-  'Browser tab names (TikTok, GitHub, YouTube) with productivity rules',
-  'Screenshot thumbnails, pagination, and plan-based capture intervals',
-  'Idle auto-pause (5 min) with auto-resume and notifications',
-  'Timesheets, leave management, payroll, and team member tracking',
-  'Default + custom productivity rules (productive / unproductive / neutral)',
-  'Client portal for invoice approvals and payment tracking',
-  'Auto-generated weekly productivity summaries for managers',
-  'Performance benchmarks by project, role, and sprint cycle',
-  'AI work pattern detection across IDE, app, and browser behavior',
-  'Smart productivity coach with task-focus suggestions',
-  'Predictive delivery risk alerts and team capacity forecasting',
+const platformPillars = [
+  {
+    title: 'Work Visibility',
+    accent: 'text-primary-400',
+    items: [
+      'System-wide activity with foreground app tracking',
+      'Browser tab names (TikTok, GitHub, YouTube) with productivity rules',
+      'Screenshot thumbnails, pagination, and plan-based capture',
+      'Idle auto-pause with auto-resume and notifications',
+    ],
+  },
+  {
+    title: 'Team Operations',
+    accent: 'text-violet-400',
+    items: [
+      'Timesheets, leave management, and approvals',
+      'Payroll runs and member tracking for managers',
+      'Default + custom productivity rules',
+      'Granular roles: owner, admin, manager, team lead, member',
+    ],
+  },
+  {
+    title: 'Business & Intelligence',
+    accent: 'text-cyan-400',
+    items: [
+      'Client portal for invoice approvals and payment tracking',
+      'Weekly productivity summaries for managers',
+      'Performance benchmarks by project, role, and sprint',
+      'AI work patterns, coach tips, and delivery risk alerts',
+    ],
+  },
 ];
 
 const desktopWinUrl = import.meta.env.VITE_DESKTOP_WIN_URL;
@@ -86,15 +104,15 @@ const desktopMacUrl = import.meta.env.VITE_DESKTOP_MAC_URL;
 
 const desktopFeatures = [
   'Multi-screen screenshots with fast thumbnail previews',
-  '5s app polling + 60s activity batch sync to cloud',
-  'Idle detection: auto-pause timer after 5 minutes away',
+  'Continuous foreground app tracking with cloud sync',
+  'Idle detection with auto-pause and resume notifications',
   'Distraction alerts for social / entertainment apps',
   'System tray timer + lock-screen pause/resume',
 ];
 
 const heroStats = [
-  { value: '5 sec', label: 'App polling' },
-  { value: '2 min', label: 'Pro screenshots' },
+  { value: 'Real-time', label: 'Activity sync' },
+  { value: 'Smart', label: 'Screenshot gallery' },
   { value: 'Secure', label: 'Role-based access' },
 ];
 
@@ -139,14 +157,14 @@ const coreFeatures = [
   {
     icon: Monitor,
     title: 'Screenshot Monitoring',
-    description: 'Plan-based intervals (1–5 min), thumbnail gallery, pagination, and full-size preview on click.',
+    description: 'Plan-based capture intervals, thumbnail gallery, pagination, and full-size preview on click.',
     accent: 'text-secondary-400',
     glow: 'from-secondary-500/20 to-transparent',
   },
   {
     icon: Globe,
     title: 'App & Browser Tracking',
-    description: 'Foreground apps every 5 seconds. Chrome tabs shown as TikTok, GitHub, YouTube — not raw titles.',
+    description: 'Foreground apps and browser tabs tracked with clean names — TikTok, GitHub, YouTube, not raw titles.',
     accent: 'text-cyan-400',
     glow: 'from-cyan-500/20 to-transparent',
   },
@@ -284,7 +302,7 @@ const LandingPage = () => {
             )}
             <a href="#clients" className="hover:text-white transition-colors">Clients</a>
             <a href="#faq" className="hover:text-white transition-colors">FAQ</a>
-            <a href="#roadmap" className="hover:text-white transition-colors">Roadmap</a>
+            <a href="#platform" className="hover:text-white transition-colors">Platform</a>
           </nav>
 
           <div className="flex items-center gap-3">
@@ -346,11 +364,11 @@ const LandingPage = () => {
             <div className="space-y-4 text-slate-200">
               <div className="flex gap-3 rounded-xl border border-white/5 bg-white/[0.02] p-3">
                 <Clock3 className="w-5 h-5 text-primary-400 mt-0.5 shrink-0" />
-                <p className="text-sm">5-second app polling with idle auto-pause and productivity categorization.</p>
+                <p className="text-sm">Continuous app tracking with idle auto-pause and productivity categorization.</p>
               </div>
               <div className="flex gap-3 rounded-xl border border-white/5 bg-white/[0.02] p-3">
                 <Monitor className="w-5 h-5 text-secondary-400 mt-0.5 shrink-0" />
-                <p className="text-sm">Fast screenshot thumbnails with full-size preview — intervals from 1–5 min by plan.</p>
+                <p className="text-sm">Fast screenshot thumbnails with full-size preview — capture frequency scales with your plan.</p>
               </div>
               <div className="flex gap-3 rounded-xl border border-white/5 bg-white/[0.02] p-3">
                 <Globe className="w-5 h-5 text-cyan-400 mt-0.5 shrink-0" />
@@ -548,26 +566,28 @@ const LandingPage = () => {
         </div>
       </section>
 
-      <section id="roadmap" className="max-w-7xl mx-auto px-6 pb-10 relative z-10 scroll-mt-24">
+      <section id="platform" className="max-w-7xl mx-auto px-6 pb-10 relative z-10 scroll-mt-24">
         <div className="glass-card p-8 md:p-10 space-y-10">
           <SectionHeading
-            badge="Roadmap"
-            title="FlowTrack product momentum"
-            description="What is live today, what is coming next, and where AI will take FlowTrack."
+            badge="Platform"
+            title="One platform, complete team visibility"
+            description="Everything your team needs for tracking, operations, and intelligence — already built in."
           />
 
-          <div className="grid md:grid-cols-1 gap-6 max-w-3xl">
-            <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-5">
-              <h3 className="text-lg font-bold text-emerald-400 mb-3">Current Features</h3>
-              <ul className="space-y-2">
-                {currentHighlights.map((item) => (
-                  <li key={item} className="text-sm text-slate-200 flex gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 mt-0.5 shrink-0" />
-                    {item}
-                  </li>
-                ))}
-              </ul>
-            </div>
+          <div className="grid md:grid-cols-3 gap-6">
+            {platformPillars.map((pillar) => (
+              <div key={pillar.title} className="rounded-2xl border border-white/10 bg-white/[0.02] p-5">
+                <h3 className={`text-lg font-bold mb-3 ${pillar.accent}`}>{pillar.title}</h3>
+                <ul className="space-y-2">
+                  {pillar.items.map((item) => (
+                    <li key={item} className="text-sm text-slate-200 flex gap-2">
+                      <CheckCircle2 className={`w-4 h-4 mt-0.5 shrink-0 ${pillar.accent}`} />
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
           </div>
 
           <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-6">
