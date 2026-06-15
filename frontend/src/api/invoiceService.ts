@@ -12,11 +12,14 @@ export interface Invoice {
     subtotal?: number;
     tax_amount?: number;
     total?: number;
-    status: 'draft' | 'sent' | 'paid' | 'overdue';
+    status: 'draft' | 'sent' | 'pending_approval' | 'approved' | 'partially_paid' | 'paid' | 'cancelled' | 'overdue';
     issue_date: string;
     due_date: string;
     notes?: string;
     items?: InvoiceItem[];
+    amount_paid?: number;
+    client_approved_at?: string | null;
+    currency?: string;
 }
 
 export const invoiceService = {
@@ -83,5 +86,15 @@ export const invoiceService = {
         link.remove();
         window.URL.revokeObjectURL(url);
         return blob;
+    },
+
+    getPortalLink: async (id: number) => {
+        const response = await client.get<{ data: { token: string; url: string } }>(`/invoices/${id}/portal`);
+        return response.data;
+    },
+
+    getPayments: async (id: number) => {
+        const response = await client.get<{ data: { id: number; amount: number; method: string; reference?: string; paid_at: string }[] }>(`/invoices/${id}/payments`);
+        return response.data;
     },
 };

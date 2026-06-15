@@ -203,9 +203,13 @@ class InvoiceService
         }
         file_put_contents($pdfPath, $pdf);
 
-        $this->emailService->sendInvoiceEmail($invoice, $invoice['client_email']);
+        $portalService = new ClientPortalService();
+        $token = $portalService->createPortalToken($invoiceId);
+        $portalUrl = $portalService->getPortalUrl($token);
 
-        $this->invoiceModel->update($invoiceId, ['status' => 'sent']);
+        $this->emailService->sendInvoiceEmail($invoice, $invoice['client_email'], $portalUrl);
+
+        $this->invoiceModel->update($invoiceId, ['status' => 'pending_approval']);
         $updated = $this->getInvoiceById($invoiceId);
         $this->notificationService->notifyInvoiceSent($sentBy, $updated);
 

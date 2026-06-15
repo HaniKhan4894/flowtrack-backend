@@ -73,15 +73,9 @@ const currentHighlights = [
   'Idle auto-pause (5 min) with auto-resume and notifications',
   'Timesheets, leave management, payroll, and team member tracking',
   'Default + custom productivity rules (productive / unproductive / neutral)',
-];
-
-const upcomingHighlights = [
   'Client portal for invoice approvals and payment tracking',
   'Auto-generated weekly productivity summaries for managers',
   'Performance benchmarks by project, role, and sprint cycle',
-];
-
-const aiRoadmap = [
   'AI work pattern detection across IDE, app, and browser behavior',
   'Smart productivity coach with task-focus suggestions',
   'Predictive delivery risk alerts and team capacity forecasting',
@@ -562,37 +556,13 @@ const LandingPage = () => {
             description="What is live today, what is coming next, and where AI will take FlowTrack."
           />
 
-          <div className="grid md:grid-cols-3 gap-6">
+          <div className="grid md:grid-cols-1 gap-6 max-w-3xl">
             <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-5">
               <h3 className="text-lg font-bold text-emerald-400 mb-3">Current Features</h3>
               <ul className="space-y-2">
                 {currentHighlights.map((item) => (
                   <li key={item} className="text-sm text-slate-200 flex gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 mt-0.5" />
-                    {item}
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-5">
-              <h3 className="text-lg font-bold text-primary-400 mb-3">Upcoming</h3>
-              <ul className="space-y-2">
-                {upcomingHighlights.map((item) => (
-                  <li key={item} className="text-sm text-slate-200 flex gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-primary-400 mt-0.5" />
-                    {item}
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-5">
-              <h3 className="text-lg font-bold text-cyan-400 mb-3">AI Future Roadmap</h3>
-              <ul className="space-y-2">
-                {aiRoadmap.map((item) => (
-                  <li key={item} className="text-sm text-slate-200 flex gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-cyan-400 mt-0.5" />
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 mt-0.5 shrink-0" />
                     {item}
                   </li>
                 ))}

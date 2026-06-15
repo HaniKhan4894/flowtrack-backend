@@ -27,6 +27,8 @@ import PayrollPage from './features/payroll/PayrollPage'
 import PayrollRunDetailPage from './features/payroll/PayrollRunDetailPage'
 import ClientsPage from './features/clients/ClientsPage'
 import LeavePage from './features/leave/LeavePage'
+import InsightsPage from './features/insights/InsightsPage'
+import ClientPortalPage from './features/portal/ClientPortalPage'
 
 import { Shell } from './layouts/Shell'
 import { useAuthStore } from './store/authStore'
@@ -94,6 +96,7 @@ createRoot(document.getElementById('root')!).render(
         <Route path="/" element={<RootPage />} />
         <Route path="/privacy" element={<PrivacyPolicyPage />} />
         <Route path="/terms" element={<TermsOfServicePage />} />
+        <Route path="/portal/:token" element={<ClientPortalPage />} />
 
         {/* Tracker routes — all authenticated users */}
         <Route path="/app" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
@@ -109,6 +112,7 @@ createRoot(document.getElementById('root')!).render(
         <Route path="/team/member/:userId" element={<MemberTrackingRoute><MemberTrackingPage /></MemberTrackingRoute>} />
         <Route path="/settings" element={<RoleRoute path="/settings"><SettingsPage /></RoleRoute>} />
         <Route path="/analytics" element={<RoleRoute path="/analytics"><AnalyticsPage /></RoleRoute>} />
+        <Route path="/insights" element={<RoleRoute path="/insights"><InsightsPage /></RoleRoute>} />
         <Route path="/invoices" element={<RoleRoute path="/invoices"><InvoicesPage /></RoleRoute>} />
         <Route path="/invoices/:id" element={<RoleRoute path="/invoices"><InvoiceDetailPage /></RoleRoute>} />
         <Route path="/clients" element={<RoleRoute path="/clients"><ClientsPage /></RoleRoute>} />

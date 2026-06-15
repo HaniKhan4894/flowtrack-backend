@@ -4,6 +4,7 @@ namespace App\Controllers\API\V1;
 
 use CodeIgniter\RESTful\ResourceController;
 use App\Services\InvoiceService;
+use App\Services\ClientPortalService;
 
 class InvoiceController extends ResourceController
 {
@@ -208,6 +209,49 @@ class InvoiceController extends ResourceController
                 ->setHeader('Content-Type', 'application/pdf')
                 ->setHeader('Content-Disposition', 'attachment; filename="invoice-' . $invoice['invoice_number'] . '.pdf"')
                 ->setBody($pdf);
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+
+    public function portalLink($id = null)
+    {
+        try {
+            $organizationId = (int) ($this->request->getServer('FLOWTRACK_ORGANIZATION_ID') ?? 0);
+            $invoice = $this->invoiceService->getInvoiceById((int) $id);
+            if (!$invoice || (int) $invoice['organization_id'] !== $organizationId) {
+                return $this->failNotFound('Invoice not found');
+            }
+
+            $portalService = new ClientPortalService();
+            $token = $portalService->getOrCreatePortalToken((int) $id);
+
+            return $this->respond([
+                'success' => true,
+                'data' => [
+                    'token' => $token,
+                    'url' => $portalService->getPortalUrl($token),
+                ],
+            ]);
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+
+    public function payments($id = null)
+    {
+        try {
+            $organizationId = (int) ($this->request->getServer('FLOWTRACK_ORGANIZATION_ID') ?? 0);
+            $invoice = $this->invoiceService->getInvoiceById((int) $id);
+            if (!$invoice || (int) $invoice['organization_id'] !== $organizationId) {
+                return $this->failNotFound('Invoice not found');
+            }
+
+            $portalService = new ClientPortalService();
+            return $this->respond([
+                'success' => true,
+                'data' => $portalService->getPaymentsForInvoice((int) $id),
+            ]);
         } catch (\Exception $e) {
             return $this->fail($e->getMessage(), 400);
         }

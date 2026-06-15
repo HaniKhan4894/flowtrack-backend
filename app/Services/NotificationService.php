@@ -216,6 +216,51 @@ class NotificationService
         );
     }
 
+    public function notifyInvoiceClientApproved(int $userId, array $invoice): ?array
+    {
+        return $this->create(
+            $userId,
+            'info',
+            'Invoice Approved by Client',
+            'Invoice #' . $invoice['invoice_number'] . ' was approved via client portal',
+            ['invoice_id' => $invoice['id']]
+        );
+    }
+
+    public function notifyInvoicePaymentReceived(int $userId, array $invoice, float $amount): ?array
+    {
+        return $this->create(
+            $userId,
+            'success',
+            'Payment Received',
+            'Payment of ' . number_format($amount, 2) . ' recorded for invoice #' . $invoice['invoice_number'],
+            ['invoice_id' => $invoice['id'], 'amount' => $amount]
+        );
+    }
+
+    public function notifyWeeklySummary(int $userId, string $orgName, array $summary): ?array
+    {
+        $hours = $summary['total_hours'] ?? 0;
+        return $this->create(
+            $userId,
+            'info',
+            'Weekly Productivity Digest',
+            "Team logged {$hours}h this week in {$orgName}",
+            ['type' => 'weekly_summary', 'summary' => $summary]
+        );
+    }
+
+    public function notifyDeliveryRisk(int $userId, array $risk): ?array
+    {
+        return $this->create(
+            $userId,
+            'warning',
+            'Delivery Risk Alert',
+            ($risk['project_name'] ?? 'Project') . ': ' . ($risk['reason'] ?? 'Risk detected'),
+            ['type' => 'delivery_risk', 'risk' => $risk]
+        );
+    }
+
     public function notifyMemberAdded(int $userId, string $organizationName): array
     {
         $result = $this->create(

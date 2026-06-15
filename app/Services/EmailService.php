@@ -131,8 +131,12 @@ class EmailService
         return $this->sendMail($email, "You're invited to {$organizationName} on FlowTrack", $message);
     }
 
-    public function sendInvoiceEmail(array $invoice, string $clientEmail): bool
+    public function sendInvoiceEmail(array $invoice, string $clientEmail, ?string $portalUrl = null): bool
     {
+        $portalBlock = $portalUrl
+            ? '<p><a href="' . htmlspecialchars($portalUrl) . '" style="display:inline-block;padding:12px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:8px;">Review &amp; approve invoice</a></p>'
+            : '';
+
         $message = $this->wrapTemplate(
             "Invoice #{$invoice['invoice_number']}",
             "
@@ -140,6 +144,8 @@ class EmailService
                 <p>Please find your invoice details below.</p>
                 <p><strong>Total:</strong> {$invoice['currency']} {$invoice['total']}</p>
                 <p><strong>Due Date:</strong> {$invoice['due_date']}</p>
+                {$portalBlock}
+                <p>Use the client portal to approve this invoice and record payments.</p>
                 <p>Thank you for your business.</p>
             "
         );
@@ -177,6 +183,47 @@ class EmailService
             $message,
             $this->config->fromEmail,
             $this->config->fromName . ' Reports'
+        );
+    }
+
+    public function sendWeeklyManagerSummary(array $manager, string $orgName, array $summary): bool
+    {
+        $name = $manager['first_name'] ?? 'there';
+        $hours = $summary['total_hours'] ?? 0;
+        $productive = $summary['productive_percent'] ?? 0;
+        $highlights = $summary['highlights'] ?? [];
+        $highlightHtml = '';
+        foreach ($highlights as $line) {
+            $highlightHtml .= '<li>' . htmlspecialchars((string) $line) . '</li>';
+        }
+        if ($highlightHtml === '') {
+            $highlightHtml = '<li>Steady week — no major shifts detected.</li>';
+        }
+
+        $message = $this->wrapTemplate(
+            'Weekly team productivity digest',
+            "
+                <p>Hi {$name},</p>
+                <p>Your weekly summary for <strong>{$orgName}</strong>:</p>
+                <ul>
+                    <li><strong>Team hours:</strong> {$hours}h</li>
+                    <li><strong>Avg productivity:</strong> {$productive}%</li>
+                    {$highlightHtml}
+                </ul>
+                <p>Open FlowTrack Insights for benchmarks, coach tips, and delivery risks.</p>
+            "
+        );
+
+        if (empty($manager['email'])) {
+            return false;
+        }
+
+        return $this->sendMail(
+            $manager['email'],
+            "Weekly digest — {$orgName}",
+            $message,
+            $this->config->fromEmail,
+            $this->config->fromName . ' Insights'
         );
     }
 

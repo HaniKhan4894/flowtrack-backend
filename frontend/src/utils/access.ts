@@ -12,6 +12,7 @@ import {
   FileText,
   Wallet,
   Shield,
+  Brain,
   Building2,
   CalendarDays,
   ClipboardList,
@@ -44,6 +45,7 @@ const ALL_NAV_ITEMS: NavItem[] = [
     showIf: (user) => canViewTeam(user),
   },
   { icon: Sparkles, label: 'Analytics', path: '/analytics', permission: 'reports.view_own' },
+  { icon: Brain, label: 'Insights', path: '/insights', permission: 'reports.view_own' },
   { icon: CreditCard, label: 'Billing', path: '/billing', permission: 'settings.billing' },
 ];
 
@@ -63,6 +65,7 @@ const PATH_PERMISSIONS: Record<string, string | string[]> = {
   '/payroll': 'payroll.view',
   '/team': '__team_nav__',
   '/analytics': ['reports.view_own', 'reports.view_team'],
+  '/insights': ['reports.view_own', 'reports.view_team'],
   '/billing': 'settings.billing',
   '/settings': [],
   '/admin': '__super_admin__',

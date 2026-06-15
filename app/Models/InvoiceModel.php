@@ -15,7 +15,7 @@ class InvoiceModel extends Model
     protected $allowedFields    = [
         'uuid', 'organization_id', 'invoice_number', 'client_name', 'client_email', 'client_id',
         'project_id', 'status', 'subtotal', 'tax_rate', 'tax_amount', 'total',
-        'currency', 'issue_date', 'due_date', 'paid_at', 'notes', 'created_by'
+        'currency', 'issue_date', 'due_date', 'paid_at', 'client_approved_at', 'amount_paid', 'notes', 'created_by'
     ];
 
     protected bool $allowEmptyInserts = false;

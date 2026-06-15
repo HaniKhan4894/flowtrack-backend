@@ -40,6 +40,11 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\API\V1'], function ($r
     // Public webhook (no auth)
     $routes->post('webhooks/stripe', 'StripeWebhookController::handle');
 
+    // Client portal (public, token-based)
+    $routes->get('portal/invoice/(:segment)', 'ClientPortalController::show/$1');
+    $routes->post('portal/invoice/(:segment)/approve', 'ClientPortalController::approve/$1');
+    $routes->post('portal/invoice/(:segment)/payment', 'ClientPortalController::recordPayment/$1');
+
     // Protected Authentication Routes (Auth Required)
     $routes->get('auth/me', 'AuthController::me', ['filter' => 'auth']);
     $routes->post('auth/change-password', 'AuthController::changePassword', ['filter' => 'auth']);
@@ -155,6 +160,8 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\API\V1'], function ($r
         $routes->post('(:num)/items', 'InvoiceController::addItem/$1', ['filter' => 'permission:invoices.edit']);
         $routes->put('(:num)/status', 'InvoiceController::updateStatus/$1', ['filter' => 'permission:invoices.edit']);
         $routes->post('(:num)/send', 'InvoiceController::send/$1', ['filter' => 'permission:invoices.send']);
+        $routes->get('(:num)/portal', 'InvoiceController::portalLink/$1', ['filter' => 'permission:invoices.view']);
+        $routes->get('(:num)/payments', 'InvoiceController::payments/$1', ['filter' => 'permission:invoices.view']);
     });
 
     $routes->group('payroll', ['filter' => ['auth', 'planFeature:payroll']], function ($routes) {
@@ -228,6 +235,14 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\API\V1'], function ($r
     $routes->get('reports/project-profitability', 'ReportController::projectProfitability', ['filter' => 'permission:reports.view_team']);
     $routes->get('reports/idle-breakdown', 'ReportController::idleBreakdown', ['filter' => 'permission:reports.view_team']);
     $routes->post('reports/export', 'ReportController::export', ['filter' => 'permission:reports.export']);
+
+    $routes->get('insights/weekly-summary', 'InsightsController::weeklySummary', ['filter' => 'permission:reports.view_team']);
+    $routes->get('insights/benchmarks', 'InsightsController::benchmarks', ['filter' => 'permission:reports.view_team']);
+    $routes->get('insights/work-patterns', 'InsightsController::workPatterns', ['filter' => 'auth']);
+    $routes->get('insights/coach', 'InsightsController::coach', ['filter' => 'auth']);
+    $routes->get('insights/delivery-risks', 'InsightsController::deliveryRisks', ['filter' => 'permission:reports.view_team']);
+    $routes->get('insights/sprints', 'InsightsController::sprints', ['filter' => 'permission:reports.view_team']);
+    $routes->post('insights/sprints', 'InsightsController::createSprint', ['filter' => 'permission:reports.view_team']);
 
     // Scheduled Reports
     $routes->get('scheduled-reports', 'ScheduledReportController::index', ['filter' => 'permission:settings.view']);

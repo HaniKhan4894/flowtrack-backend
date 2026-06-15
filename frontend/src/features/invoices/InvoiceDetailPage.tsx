@@ -9,6 +9,8 @@ import {
   Loader2,
   ArrowLeft,
   CheckCircle2,
+  Copy,
+  ExternalLink,
 } from 'lucide-react';
 import { Button } from '../../components/ui';
 import { invoiceService, type Invoice } from '../../api/invoiceService';
@@ -32,6 +34,8 @@ const InvoiceDetailPage = () => {
   const [actionLoading, setActionLoading] = useState(false);
   const [showAddItem, setShowAddItem] = useState(false);
   const [itemForm, setItemForm] = useState({ description: '', quantity: '1', unit_price: '' });
+  const [portalUrl, setPortalUrl] = useState<string | null>(null);
+  const [payments, setPayments] = useState<{ id: number; amount: number; method: string; reference?: string; paid_at: string }[]>([]);
 
   const canEdit = hasPermission(user, 'invoices.edit');
   const canSend = hasPermission(user, 'invoices.send');
@@ -43,6 +47,17 @@ const InvoiceDetailPage = () => {
     try {
       const resp = await invoiceService.getById(invoiceId);
       setInvoice(resp.data);
+      if (resp.data.status !== 'draft' && resp.data.status !== 'cancelled') {
+        try {
+          const portal = await invoiceService.getPortalLink(invoiceId);
+          setPortalUrl(portal.data.url);
+          const payResp = await invoiceService.getPayments(invoiceId);
+          setPayments(payResp.data);
+        } catch {
+          setPortalUrl(null);
+          setPayments([]);
+        }
+      }
     } catch (e) {
       setError(getApiErrorMessage(e, 'Failed to load invoice'));
       setInvoice(null);
@@ -154,7 +169,7 @@ const InvoiceDetailPage = () => {
             <Download size={16} className="mr-2" />
             PDF
           </Button>
-          {canSend && invoice.status !== 'paid' && invoice.status !== 'sent' && (
+          {canSend && !['paid', 'cancelled', 'pending_approval', 'approved', 'partially_paid', 'sent'].includes(invoice.status) && (
             <Button onClick={handleSend} isLoading={actionLoading} className="!rounded-xl">
               <Send size={16} className="mr-2" />
               Send
@@ -243,6 +258,31 @@ const InvoiceDetailPage = () => {
             <div className="pt-4 border-t border-white/10">
               <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Notes</p>
               <p className="text-sm text-slate-300 mt-1">{invoice.notes}</p>
+            </div>
+          )}
+          {portalUrl && (
+            <div className="pt-4 border-t border-white/10 space-y-2">
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Client portal</p>
+              <a href={portalUrl} target="_blank" rel="noreferrer" className="text-sm text-primary-400 hover:underline inline-flex items-center gap-1 break-all">
+                <ExternalLink size={14} /> Open portal
+              </a>
+              <button
+                type="button"
+                className="text-xs text-slate-400 hover:text-white flex items-center gap-1"
+                onClick={() => navigator.clipboard.writeText(portalUrl)}
+              >
+                <Copy size={12} /> Copy link for client
+              </button>
+              {invoice.client_approved_at && (
+                <p className="text-xs text-emerald-400">Client approved {new Date(invoice.client_approved_at).toLocaleDateString()}</p>
+              )}
+              {payments.length > 0 && (
+                <ul className="text-xs text-slate-300 space-y-1 mt-2">
+                  {payments.map((p) => (
+                    <li key={p.id}>{new Date(p.paid_at).toLocaleDateString()} — ${Number(p.amount).toFixed(2)}</li>
+                  ))}
+                </ul>
+              )}
             </div>
           )}
         </motion.div>
