@@ -63,6 +63,8 @@ class ScreenshotService
             $this->blurImage($absolutePath);
         }
 
+        $thumbnailPath = $this->generateThumbnail($absolutePath, $relativePath);
+
         // Generate UUID manually since we bypass Model callbacks
         $uuid = sprintf('%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
             mt_rand(0, 0xffff), mt_rand(0, 0xffff), mt_rand(0, 0xffff),
@@ -75,7 +77,7 @@ class ScreenshotService
             'time_entry_id'   => (int)$timeEntryId,
             'user_id'         => (int)$userId,
             'file_path'       => $relativePath,
-            'thumbnail_path'  => null,
+            'thumbnail_path'  => $thumbnailPath,
             'is_blurred'      => (bool)($data['is_blurred'] ?? $data['apply_blur'] ?? false),
             'activity_level'  => (int)($data['activity_level'] ?? 0),
             'captured_at'     => date('Y-m-d H:i:s'),
@@ -195,5 +197,102 @@ class ScreenshotService
         imagedestroy($image);
 
         return (bool) $saved;
+    }
+
+    public function resolveFilePath(array $screenshot, bool $thumbnail = false): string
+    {
+        if ($thumbnail) {
+            $thumbPath = $this->ensureThumbnail($screenshot);
+            if ($thumbPath !== null) {
+                return $thumbPath;
+            }
+        }
+
+        return (string) ($screenshot['file_path'] ?? '');
+    }
+
+    public function canViewScreenshot(int $viewerId, int $organizationId, array $screenshot): bool
+    {
+        if ((int) ($screenshot['user_id'] ?? 0) === $viewerId) {
+            return true;
+        }
+
+        $permissionService = new PermissionService();
+        if (!$permissionService->userHasPermission($viewerId, $organizationId, 'screenshots.view_team')) {
+            return false;
+        }
+
+        $teamScopeService = new TeamScopeService();
+
+        return $teamScopeService->canViewUser($viewerId, $organizationId, (int) $screenshot['user_id']);
+    }
+
+    private function ensureThumbnail(array $screenshot): ?string
+    {
+        $existing = trim((string) ($screenshot['thumbnail_path'] ?? ''));
+        if ($existing !== '' && file_exists($this->uploadPath . $existing)) {
+            return $existing;
+        }
+
+        $source = $this->uploadPath . ($screenshot['file_path'] ?? '');
+        if (!is_file($source)) {
+            return null;
+        }
+
+        $thumbRelative = $this->generateThumbnail($source, (string) ($screenshot['file_path'] ?? ''));
+        if ($thumbRelative === null) {
+            return null;
+        }
+
+        $this->screenshotModel->update((int) $screenshot['id'], ['thumbnail_path' => $thumbRelative]);
+
+        return $thumbRelative;
+    }
+
+    private function generateThumbnail(string $absolutePath, ?string $relativePath = null): ?string
+    {
+        if (!function_exists('imagecreatefromstring')) {
+            return null;
+        }
+
+        $contents = file_get_contents($absolutePath);
+        if ($contents === false) {
+            return null;
+        }
+
+        $image = @imagecreatefromstring($contents);
+        if (!$image) {
+            return null;
+        }
+
+        $width = imagesx($image);
+        $height = imagesy($image);
+        if ($width <= 0 || $height <= 0) {
+            imagedestroy($image);
+            return null;
+        }
+
+        $thumbWidth = 320;
+        $thumbHeight = max(1, (int) round($height * ($thumbWidth / $width)));
+
+        $thumb = imagecreatetruecolor($thumbWidth, $thumbHeight);
+        imagecopyresampled($thumb, $image, 0, 0, 0, 0, $thumbWidth, $thumbHeight, $width, $height);
+
+        $thumbRelative = $relativePath
+            ? preg_replace('/\.[^.]+$/', '_thumb.jpg', $relativePath)
+            : pathinfo($absolutePath, PATHINFO_FILENAME) . '_thumb.jpg';
+        $thumbAbsolute = $this->uploadPath . $thumbRelative;
+
+        $thumbDir = dirname($thumbAbsolute);
+        if (!is_dir($thumbDir)) {
+            mkdir($thumbDir, 0755, true);
+        }
+
+        $saved = imagejpeg($thumb, $thumbAbsolute, 55);
+
+        imagedestroy($image);
+        imagedestroy($thumb);
+
+        return $saved ? $thumbRelative : null;
     }
 }

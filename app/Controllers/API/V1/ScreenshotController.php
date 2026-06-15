@@ -169,36 +169,46 @@ class ScreenshotController extends ResourceController
         }
     }
 
-    /**
-     * GET /api/v1/screenshots/view/(:num)
-     * Serve screenshot file
-     */
     public function view($id = null)
+    {
+        return $this->serveScreenshotFile((int) $id, false);
+    }
+
+    public function thumbnail($id = null)
+    {
+        return $this->serveScreenshotFile((int) $id, true);
+    }
+
+    private function serveScreenshotFile(int $id, bool $thumbnail)
     {
         try {
             $userId = (int)($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
+            $organizationId = (int)($this->request->getServer('FLOWTRACK_ORGANIZATION_ID') ?? 0);
             if (!$userId) {
                 return $this->fail('Unauthorized', 401);
             }
+
             $screenshot = $this->screenshotService->getScreenshot($id);
             if (!$screenshot) {
                 return $this->fail('Screenshot not found', 404);
             }
-            if ((int)$screenshot['user_id'] !== $userId) {
+
+            if (!$this->screenshotService->canViewScreenshot($userId, $organizationId, $screenshot)) {
                 return $this->fail('Forbidden', 403);
             }
 
-            // Path to file in writable
-            $path = WRITEPATH . 'uploads/screenshots/' . $screenshot['file_path'];
+            $relativePath = $this->screenshotService->resolveFilePath($screenshot, $thumbnail);
+            $path = WRITEPATH . 'uploads/screenshots/' . $relativePath;
 
             if (!file_exists($path)) {
                 return $this->fail('File not found', 404);
             }
 
-            $mimeType = mime_content_type($path);
-            
+            $mimeType = mime_content_type($path) ?: 'image/jpeg';
+
             return $this->response
                 ->setHeader('Content-Type', $mimeType)
+                ->setHeader('Cache-Control', 'private, max-age=3600')
                 ->setBody(file_get_contents($path));
 
         } catch (\Exception $e) {

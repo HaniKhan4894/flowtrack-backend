@@ -65,7 +65,11 @@ class TimezoneService
      */
     public function dayRangeUtc(string $localDate, string $phpTz): array
     {
-        $date = preg_match('/^\d{4}-\d{2}-\d{2}$/', $localDate) ? $localDate : date('Y-m-d');
+        if (preg_match('/^(\d{4}-\d{2}-\d{2})/', trim($localDate), $matches)) {
+            $date = $matches[1];
+        } else {
+            $date = date('Y-m-d');
+        }
 
         try {
             $start = new DateTime($date . ' 00:00:00', new DateTimeZone($phpTz));

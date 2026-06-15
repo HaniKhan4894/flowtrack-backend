@@ -132,6 +132,7 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\API\V1'], function ($r
     $routes->group('screenshots', ['filter' => ['auth', 'planFeature:screenshots']], function ($routes) {
         $routes->get('(:num)', 'ScreenshotController::show/$1', ['filter' => 'permission:screenshots.view_own']);
         $routes->get('view/(:num)', 'ScreenshotController::view/$1', ['filter' => 'permission:screenshots.view_own']);
+        $routes->get('thumb/(:num)', 'ScreenshotController::thumbnail/$1', ['filter' => 'permission:screenshots.view_own']);
         $routes->post('upload', 'ScreenshotController::upload', ['filter' => 'permission:screenshots.create']);
         $routes->delete('(:num)', 'ScreenshotController::delete/$1', ['filter' => 'permission:screenshots.delete']);
         $routes->get('/', 'ScreenshotController::index', ['filter' => 'permission:screenshots.view_own']);

@@ -1,7 +1,7 @@
 import client from './client';
 
 export const screenshotService = {
-    getAll: async (filters: any = {}) => {
+    getAll: async (filters: Record<string, unknown> = {}) => {
         const response = await client.get('/screenshots', { params: filters });
         return response.data;
     },
@@ -23,10 +23,17 @@ export const screenshotService = {
         return response.data;
     },
 
+    getThumbnailBlobUrl: async (id: number): Promise<string> => {
+        const response = await client.get(`/screenshots/thumb/${id}`, {
+            responseType: 'blob',
+        });
+        return URL.createObjectURL(response.data);
+    },
+
     getImageBlobUrl: async (id: number): Promise<string> => {
         const response = await client.get(`/screenshots/view/${id}`, {
             responseType: 'blob',
         });
         return URL.createObjectURL(response.data);
-    }
+    },
 };
