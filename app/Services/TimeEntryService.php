@@ -393,10 +393,11 @@ class TimeEntryService
     {
         $ownerId = (int) $entry['user_id'];
         if ($ownerId === $actorUserId) {
-            if (!$this->permissionService->userHasPermission($actorUserId, $organizationId, 'time.edit_own')) {
-                throw new \Exception('Unauthorized');
+            if (!$this->permissionService->userHasPermission($actorUserId, $organizationId, 'time.manual_entry')) {
+                throw new \Exception('Manual time entry editing is not allowed for your role');
             }
             return;
+        }
         }
 
         if (!$this->permissionService->userHasPermission($actorUserId, $organizationId, 'time.edit_team')) {

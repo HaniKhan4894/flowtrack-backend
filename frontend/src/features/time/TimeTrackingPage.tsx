@@ -7,13 +7,14 @@ import { projectService, type Project } from '../../api/projectService';
 import { taskService } from '../../api/taskService';
 import { reportService } from '../../api/reportService';
 import { useAuthStore } from '../../store/authStore';
-import { isOrgAdmin } from '../../utils/access';
+import { hasPermission, isOrgAdmin } from '../../utils/access';
 import { getApiErrorMessage } from '../../utils/apiError';
 import { Button, Input } from '../../components/ui';
 import type { Task, TimeEntry } from '../../types';
 
 const TimeTrackingPage = () => {
   const { user } = useAuthStore();
+  const canManualEntry = hasPermission(user, 'time.manual_entry');
   const [entries, setEntries] = useState<TimeEntry[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -205,10 +206,12 @@ const TimeTrackingPage = () => {
           <p className="text-slate-400">Review and manage your tracked time entries.</p>
         </div>
         <div className="flex items-center gap-3">
-          <Button onClick={() => openManualModal()} className="!rounded-xl">
-            <Plus size={18} className="mr-2" />
-            Manual Entry
-          </Button>
+          {canManualEntry && (
+            <Button onClick={() => openManualModal()} className="!rounded-xl">
+              <Plus size={18} className="mr-2" />
+              Manual Entry
+            </Button>
+          )}
           <div className="flex bg-white/5 rounded-xl border border-white/10 p-1">
             <button 
               onClick={() => {
@@ -351,7 +354,7 @@ const TimeTrackingPage = () => {
                   </div>
                   <button
                     onClick={() => setMenuEntryId(menuEntryId === entry.id ? null : entry.id)}
-                    className="p-2 text-slate-600 hover:text-white hover:bg-white/5 rounded-lg transition-all opacity-0 group-hover:opacity-100 relative"
+                    className={`p-2 text-slate-600 hover:text-white hover:bg-white/5 rounded-lg transition-all relative ${canManualEntry ? 'opacity-0 group-hover:opacity-100' : 'hidden'}`}
                   >
                     <MoreHorizontal size={20} />
                     {menuEntryId === entry.id && (

@@ -138,8 +138,7 @@ class InsightsService
         $phpTz = $this->timezoneService->getOrgTimezone($organizationId);
         $endLocal = (new \DateTime('now', new \DateTimeZone($phpTz)))->format('Y-m-d');
         $startLocal = (new \DateTime('now', new \DateTimeZone($phpTz)))->modify('-' . ($days - 1) . ' days')->format('Y-m-d');
-        [$startUtc] = $this->timezoneService->dateRangeUtc($startLocal, $phpTz);
-        [, $endUtc] = $this->timezoneService->dateRangeUtc($endLocal, $phpTz);
+        [$startUtc, $endUtc] = $this->timezoneService->dateRangeUtc($startLocal, $endLocal, $phpTz);
 
         $builder = $this->db->table('activity_logs')
             ->select('activity_logs.*')
@@ -270,7 +269,7 @@ class InsightsService
 
         $projects = $this->db->table('projects')
             ->where('organization_id', $organizationId)
-            ->where('status', 'active')
+            ->where('is_active', 1)
             ->get()
             ->getResultArray();
 
@@ -302,7 +301,7 @@ class InsightsService
                 ->select('COALESCE(SUM(duration_seconds),0)/3600 as hours', false)
                 ->where('organization_id', $organizationId)
                 ->where('project_id', $projectId)
-                ->where('started_at >=', $this->timezoneService->dateRangeUtc($weekStart, $phpTz)[0])
+                ->where('started_at >=', $this->timezoneService->dayRangeUtc($weekStart, $phpTz)[0])
                 ->get()
                 ->getRowArray()['hours'];
 
@@ -406,8 +405,7 @@ class InsightsService
     protected function getRoleBenchmarks(int $organizationId, string $startDate, string $endDate): array
     {
         $phpTz = $this->timezoneService->getOrgTimezone($organizationId);
-        [$startUtc] = $this->timezoneService->dateRangeUtc($startDate, $phpTz);
-        [, $endUtc] = $this->timezoneService->dateRangeUtc($endDate, $phpTz);
+        [$startUtc, $endUtc] = $this->timezoneService->dateRangeUtc($startDate, $endDate, $phpTz);
 
         $rows = $this->db->table('time_entries')
             ->select('roles.name as role_name, roles.slug as role_slug, COALESCE(SUM(time_entries.duration_seconds),0) as total_seconds', false)
@@ -440,8 +438,7 @@ class InsightsService
         $benchmarks = [];
 
         foreach ($sprints as $sprint) {
-            [$startUtc] = $this->timezoneService->dateRangeUtc($sprint['start_date'], $phpTz);
-            [, $endUtc] = $this->timezoneService->dateRangeUtc($sprint['end_date'], $phpTz);
+            [$startUtc, $endUtc] = $this->timezoneService->dateRangeUtc($sprint['start_date'], $sprint['end_date'], $phpTz);
 
             $builder = $this->db->table('time_entries')
                 ->select('COALESCE(SUM(duration_seconds),0) as total_seconds', false)
@@ -470,8 +467,7 @@ class InsightsService
     protected function getTopMembersForRange(int $organizationId, string $start, string $end, ?array $userIds, int $limit): array
     {
         $phpTz = $this->timezoneService->getOrgTimezone($organizationId);
-        [$startUtc] = $this->timezoneService->dateRangeUtc($start, $phpTz);
-        [, $endUtc] = $this->timezoneService->dateRangeUtc($end, $phpTz);
+        [$startUtc, $endUtc] = $this->timezoneService->dateRangeUtc($start, $end, $phpTz);
 
         $builder = $this->db->table('time_entries')
             ->select('users.first_name, users.last_name, COALESCE(SUM(time_entries.duration_seconds),0) as total_seconds', false)
@@ -498,8 +494,7 @@ class InsightsService
     protected function getTopDistractions(int $organizationId, string $start, string $end, ?array $userIds, int $limit): array
     {
         $phpTz = $this->timezoneService->getOrgTimezone($organizationId);
-        [$startUtc] = $this->timezoneService->dateRangeUtc($start, $phpTz);
-        [, $endUtc] = $this->timezoneService->dateRangeUtc($end, $phpTz);
+        [$startUtc, $endUtc] = $this->timezoneService->dateRangeUtc($start, $end, $phpTz);
 
         $builder = $this->db->table('activity_logs')
             ->select('COALESCE(activity_logs.app_name, activity_logs.window_title) as name, COALESCE(SUM(CASE WHEN activity_logs.duration_seconds > 0 THEN activity_logs.duration_seconds ELSE 60 END),0) as total_seconds', false)
@@ -532,8 +527,7 @@ class InsightsService
 
         $weekStart = (new \DateTime('now', new \DateTimeZone($phpTz)))->modify('-6 days')->format('Y-m-d');
         $weekEnd = (new \DateTime('now', new \DateTimeZone($phpTz)))->format('Y-m-d');
-        [$startUtc] = $this->timezoneService->dateRangeUtc($weekStart, $phpTz);
-        [, $endUtc] = $this->timezoneService->dateRangeUtc($weekEnd, $phpTz);
+        [$startUtc, $endUtc] = $this->timezoneService->dateRangeUtc($weekStart, $weekEnd, $phpTz);
 
         $weekSeconds = (int) $this->db->table('time_entries')
             ->select('COALESCE(SUM(duration_seconds),0) as total', false)

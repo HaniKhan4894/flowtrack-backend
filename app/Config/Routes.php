@@ -112,9 +112,9 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\API\V1'], function ($r
     $routes->post('time-entries/(:num)/pause', 'TimeEntryController::pause/$1', ['filter' => 'permission:time.edit_own']);
     $routes->post('time-entries/(:num)/resume', 'TimeEntryController::resume/$1', ['filter' => 'permission:time.edit_own']);
     $routes->get('time-entries/active', 'TimeEntryController::active', ['filter' => 'permission:time.view_own']);
-    $routes->post('time-entries/manual', 'TimeEntryController::manual', ['filter' => 'permission:time.edit_own']);
-    $routes->put('time-entries/(:num)', 'TimeEntryController::update/$1', ['filter' => 'permission:time.edit_own']);
-    $routes->delete('time-entries/(:num)', 'TimeEntryController::delete/$1', ['filter' => 'permission:time.edit_own']);
+    $routes->post('time-entries/manual', 'TimeEntryController::manual', ['filter' => 'permission:time.manual_entry']);
+    $routes->put('time-entries/(:num)', 'TimeEntryController::update/$1', ['filter' => 'permission:time.manual_entry']);
+    $routes->delete('time-entries/(:num)', 'TimeEntryController::delete/$1', ['filter' => 'permission:time.manual_entry']);
 
     // Productivity Rules
     $routes->group('productivity-rules', ['filter' => ['auth', 'planFeature:productivity_rules']], function ($routes) {

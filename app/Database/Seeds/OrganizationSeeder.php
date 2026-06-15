@@ -254,7 +254,7 @@ class OrganizationSeeder extends Seeder
         };
 
         $member = ['time.view_own', 'time.edit_own', 'projects.view', 'screenshots.view_own', 'screenshots.create', 'activity.view_own', 'activity.create', 'reports.view_own'];
-        $manager = array_merge($member, ['time.view_team', 'projects.create', 'projects.edit', 'screenshots.view_team', 'activity.view_team', 'reports.view_team', 'reports.export']);
+        $manager = array_merge($member, ['time.manual_entry', 'time.view_team', 'projects.create', 'projects.edit', 'screenshots.view_team', 'activity.view_team', 'reports.view_team', 'reports.export']);
         $admin = array_keys($permMap);
 
         $grant('member', $member);

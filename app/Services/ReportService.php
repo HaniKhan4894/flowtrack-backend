@@ -240,7 +240,7 @@ class ReportService
                 ->modify("-{$i} days")
                 ->format('Y-m-d');
             $dayName = (new \DateTime($localDate, new \DateTimeZone($phpTz)))->format('D');
-            [$startUtc, $endUtc] = $this->timezoneService->dateRangeUtc($localDate, $phpTz);
+            [$startUtc, $endUtc] = $this->timezoneService->dateRangeUtc($localDate, $localDate, $phpTz);
 
             $weeklyBuilder = $this->db->table('time_entries')
                 ->select('COALESCE(SUM(duration_seconds), 0) as total_seconds', false)
