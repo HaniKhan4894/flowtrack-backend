@@ -113,13 +113,10 @@ class SubscriptionService
             throw new \Exception('Plan not found');
         }
 
-        $priceId = $billingCycle === 'yearly'
-            ? ($plan['stripe_price_id_yearly'] ?? null)
-            : ($plan['stripe_price_id_monthly'] ?? null);
-
-        if (!$priceId) {
-            throw new \Exception('Stripe price is not configured for this plan');
-        }
+        $priceId = $this->resolveStripePriceId($plan, $billingCycle);
+        $quantity = ($plan['pricing_model'] ?? 'fixed') === 'per_user'
+            ? max((int) ($plan['min_users'] ?? 1), $userCount)
+            : 1;
 
         $frontendUrl = rtrim((string) (env('app.frontendURL') ?? 'http://localhost:5173'), '/');
         $subscription = $this->subscriptionModel->getActiveSubscription($organizationId);
@@ -131,7 +128,7 @@ class SubscriptionService
             'payment_method_types' => ['card'],
             'line_items' => [[
                 'price' => $priceId,
-                'quantity' => max(1, $userCount),
+                'quantity' => $quantity,
             ]],
             'metadata' => [
                 'organization_id' => (string) $organizationId,
@@ -260,9 +257,7 @@ class SubscriptionService
         }
 
         $billingCycle = $currentSubscription['billing_cycle'] ?? 'monthly';
-        $priceId = $billingCycle === 'yearly'
-            ? ($newPlan['stripe_price_id_yearly'] ?? null)
-            : ($newPlan['stripe_price_id_monthly'] ?? null);
+        $priceId = $this->resolveStripePriceId($newPlan, $billingCycle);
 
         $this->db->transStart();
 
@@ -326,9 +321,7 @@ class SubscriptionService
         }
 
         $billingCycle = $currentSubscription['billing_cycle'] ?? 'monthly';
-        $priceId = $billingCycle === 'yearly'
-            ? ($newPlan['stripe_price_id_yearly'] ?? null)
-            : ($newPlan['stripe_price_id_monthly'] ?? null);
+        $priceId = $this->resolveStripePriceId($newPlan, $billingCycle);
 
         $this->db->transStart();
 
@@ -570,6 +563,154 @@ class SubscriptionService
 
         $this->stripeClient = new StripeClient($secretKey);
         return $this->stripeClient;
+    }
+
+    public function syncStripePlans(): array
+    {
+        $synced = [];
+        foreach ($this->planModel->getActivePlans() as $plan) {
+            if ((float) ($plan['price_monthly'] ?? 0) <= 0 && (float) ($plan['price_yearly'] ?? 0) <= 0) {
+                continue;
+            }
+
+            foreach (['monthly', 'yearly'] as $billingCycle) {
+                $priceId = $this->resolveStripePriceId($plan, $billingCycle, true);
+                $synced[] = [
+                    'plan_id' => (int) $plan['id'],
+                    'slug' => $plan['slug'],
+                    'billing_cycle' => $billingCycle,
+                    'price_id' => $priceId,
+                ];
+                $plan = $this->planModel->find((int) $plan['id']) ?? $plan;
+            }
+        }
+
+        return $synced;
+    }
+
+    private function resolveStripePriceId(array $plan, string $billingCycle, bool $forceCreate = false): string
+    {
+        $column = $billingCycle === 'yearly' ? 'stripe_price_id_yearly' : 'stripe_price_id_monthly';
+        $priceId = trim((string) ($plan[$column] ?? ''));
+        if ($priceId !== '') {
+            return $priceId;
+        }
+
+        $envKey = 'STRIPE_PRICE_' . strtoupper(str_replace('-', '_', (string) $plan['slug']))
+            . '_' . ($billingCycle === 'yearly' ? 'YEARLY' : 'MONTHLY');
+        $fromEnv = trim((string) (
+            env($envKey)
+            ?? getenv($envKey)
+            ?? ($_ENV[$envKey] ?? '')
+            ?? ($_SERVER[$envKey] ?? '')
+        ));
+        if ($fromEnv !== '') {
+            $this->persistStripePriceId((int) $plan['id'], $billingCycle, $fromEnv);
+            return $fromEnv;
+        }
+
+        if (!$forceCreate && !$this->shouldAutoCreateStripePrices()) {
+            throw new \Exception(
+                'Stripe price is not configured for this plan. Set '
+                . $column
+                . ' on the plan, add '
+                . $envKey
+                . ' to .env, or run: php spark stripe:sync-plans'
+            );
+        }
+
+        return $this->createAndPersistStripePrice($plan, $billingCycle);
+    }
+
+    private function shouldAutoCreateStripePrices(): bool
+    {
+        $flag = strtolower(trim((string) (
+            env('STRIPE_AUTO_CREATE_PRICES')
+            ?? getenv('STRIPE_AUTO_CREATE_PRICES')
+            ?? ''
+        )));
+
+        if (in_array($flag, ['1', 'true', 'yes', 'on'], true)) {
+            return true;
+        }
+
+        return ENVIRONMENT === 'development';
+    }
+
+    private function stripeUnitAmountForPlan(array $plan, string $billingCycle): int
+    {
+        if (($plan['pricing_model'] ?? 'fixed') === 'fixed') {
+            $amount = $billingCycle === 'yearly'
+                ? (float) $plan['price_yearly']
+                : (float) $plan['price_monthly'];
+        } else {
+            $perUser = (float) $plan['price_per_user'];
+            $amount = $billingCycle === 'yearly'
+                ? round($perUser * 12 * 0.9, 2)
+                : $perUser;
+        }
+
+        $cents = (int) round($amount * 100);
+        if ($cents <= 0) {
+            throw new \Exception('Cannot create a Stripe price for a free plan');
+        }
+
+        return $cents;
+    }
+
+    private function findOrCreateStripeProduct(array $plan): string
+    {
+        $stripe = $this->getStripeClient();
+        $planId = (string) $plan['id'];
+        $products = $stripe->products->search([
+            'query' => "metadata['plan_id']:'{$planId}'",
+            'limit' => 1,
+        ]);
+
+        if (!empty($products->data[0]->id)) {
+            return (string) $products->data[0]->id;
+        }
+
+        $product = $stripe->products->create([
+            'name' => 'FlowTrack ' . $plan['name'],
+            'metadata' => [
+                'plan_id' => $planId,
+                'plan_slug' => (string) $plan['slug'],
+            ],
+        ]);
+
+        return (string) $product->id;
+    }
+
+    private function createAndPersistStripePrice(array $plan, string $billingCycle): string
+    {
+        $stripe = $this->getStripeClient();
+        $productId = $this->findOrCreateStripeProduct($plan);
+        $interval = $billingCycle === 'yearly' ? 'year' : 'month';
+        $unitAmount = $this->stripeUnitAmountForPlan($plan, $billingCycle);
+
+        $price = $stripe->prices->create([
+            'product' => $productId,
+            'currency' => 'usd',
+            'unit_amount' => $unitAmount,
+            'recurring' => ['interval' => $interval],
+            'metadata' => [
+                'plan_id' => (string) $plan['id'],
+                'plan_slug' => (string) $plan['slug'],
+                'billing_cycle' => $billingCycle,
+            ],
+        ]);
+
+        $priceId = (string) $price->id;
+        $this->persistStripePriceId((int) $plan['id'], $billingCycle, $priceId);
+
+        return $priceId;
+    }
+
+    private function persistStripePriceId(int $planId, string $billingCycle, string $priceId): void
+    {
+        $column = $billingCycle === 'yearly' ? 'stripe_price_id_yearly' : 'stripe_price_id_monthly';
+        $this->planModel->update($planId, [$column => $priceId]);
     }
 
     public function syncStripeSubscription(

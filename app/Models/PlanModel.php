@@ -12,7 +12,23 @@ class PlanModel extends Model
     protected $returnType       = 'array';
     protected $useSoftDeletes   = false;
     protected $protectFields    = true;
-    protected $allowedFields    = ['name', 'slug', 'description', 'price_monthly', 'price_yearly', 'trial_days', 'is_active', 'is_popular', 'sort_order'];
+    protected $allowedFields    = [
+        'name',
+        'slug',
+        'description',
+        'price_monthly',
+        'price_yearly',
+        'pricing_model',
+        'base_price',
+        'price_per_user',
+        'min_users',
+        'trial_days',
+        'is_active',
+        'is_popular',
+        'sort_order',
+        'stripe_price_id_monthly',
+        'stripe_price_id_yearly',
+    ];
 
     protected $useTimestamps = true;
     protected $dateFormat    = 'datetime';
