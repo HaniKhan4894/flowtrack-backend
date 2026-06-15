@@ -3,11 +3,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { UserPlus, Mail, Shield, Trash2, Search, Filter, X, Loader2, CheckCircle2, SlidersHorizontal, UsersRound, Target, Pencil } from 'lucide-react';
 import { teamService, type TeamMember, type TeamGroup } from '../../api/teamService';
 import { reportService } from '../../api/reportService';
+import { billingService, type SubscriptionUsage } from '../../api/billingService';
 import { Button, Input } from '../../components/ui';
 import { useAuthStore } from '../../store/authStore';
 import { canManageTeam, canViewMemberTracking } from '../../utils/access';
 import { Link } from 'react-router-dom';
 import type { MemberMonitoringSettings } from '../../types';
+import axios from 'axios';
 
 const TeamPage = () => {
   const [members, setMembers] = useState<TeamMember[]>([]);
@@ -32,12 +34,18 @@ const TeamPage = () => {
   const [savingTeam, setSavingTeam] = useState(false);
   const [editingTarget, setEditingTarget] = useState<number | null>(null);
   const [targetValue, setTargetValue] = useState('');
+  const [usage, setUsage] = useState<SubscriptionUsage | null>(null);
+  const [inviteError, setInviteError] = useState('');
   const { user } = useAuthStore();
   const canManageTeamAccess = canManageTeam(user);
+  const userLimit = usage?.users.limit;
+  const slotsUsed = usage?.users.current ?? members.length;
+  const atMemberLimit = typeof userLimit === 'number' && slotsUsed >= userLimit;
 
   useEffect(() => {
     fetchMembers();
     teamService.getTeams().then((r) => setTeams(r.data ?? [])).catch(() => setTeams([]));
+    billingService.getUsage().then((r) => setUsage(r.data)).catch(() => setUsage(null));
   }, []);
 
   useEffect(() => {
@@ -66,6 +74,7 @@ const TeamPage = () => {
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsInviting(true);
+    setInviteError('');
     try {
       const resp = await teamService.invite(inviteEmail, inviteRole);
       setShowInviteModal(false);
@@ -78,10 +87,14 @@ const TeamPage = () => {
           setInviteEmail('');
           setShowSuccess(true);
           fetchMembers();
+          billingService.getUsage().then((r) => setUsage(r.data)).catch(() => setUsage(null));
           setTimeout(() => setShowSuccess(false), 3000);
       }
     } catch (e) {
-      console.error('Invite failed', e);
+      const message = axios.isAxiosError(e)
+        ? (e.response?.data?.message || e.response?.data?.messages?.error || e.message)
+        : 'Failed to send invitation';
+      setInviteError(String(message));
     } finally {
       setIsInviting(false);
     }
@@ -160,15 +173,40 @@ const TeamPage = () => {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-white mb-2">Team Management</h1>
-          <p className="text-slate-400">Manage your organization's members and their roles.</p>
+          <p className="text-slate-400">
+            Manage your organization's members and their roles.
+            {typeof userLimit === 'number' && (
+              <span className="block mt-1 text-slate-500">
+                Plan limit: {slotsUsed} / {userLimit} members
+                {(usage?.users.pending_invites ?? 0) > 0 ? ` (includes ${usage?.users.pending_invites} pending invite${usage?.users.pending_invites === 1 ? '' : 's'})` : ''}
+              </span>
+            )}
+          </p>
         </div>
         {canManageTeamAccess && (
-        <Button onClick={() => setShowInviteModal(true)} className="w-fit">
+        <Button
+          onClick={() => {
+            setInviteError('');
+            setShowInviteModal(true);
+          }}
+          className="w-fit"
+          disabled={atMemberLimit}
+        >
           <UserPlus size={20} className="mr-2" />
-          Invite Member
+          {atMemberLimit ? 'Member Limit Reached' : 'Invite Member'}
         </Button>
         )}
       </div>
+
+      {atMemberLimit && canManageTeamAccess && (
+        <div className="glass-card border border-amber-500/20 text-amber-200 p-4 rounded-2xl text-sm flex items-start justify-between gap-4">
+          <p>
+            Your plan allows up to {userLimit} team members. Remove a member or{' '}
+            <Link to="/billing" className="font-semibold text-amber-100 hover:underline">upgrade your plan</Link>{' '}
+            to invite more people.
+          </p>
+        </div>
+      )}
 
       {!canManageTeamAccess && (
         <div className="glass-card border border-amber-500/20 text-amber-300 p-4 rounded-2xl text-sm">
@@ -437,6 +475,11 @@ const TeamPage = () => {
               </div>
 
               <form onSubmit={handleInvite} className="space-y-6">
+                {inviteError && (
+                  <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+                    {inviteError}
+                  </div>
+                )}
                 <div className="space-y-2">
                   <label className="text-sm font-bold text-slate-400 uppercase tracking-wider ml-1">Email Address</label>
                   <Input 

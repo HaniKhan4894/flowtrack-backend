@@ -12,6 +12,7 @@ import { scheduledReportService, type ScheduledReport } from '../../api/schedule
 import { taxTemplateService, type PayrollTaxTemplate } from '../../api/taxTemplateService';
 import { getApiErrorMessage } from '../../utils/apiError';
 import { hasPermission } from '../../utils/access';
+import { formatApiDate } from '../../utils/date';
 import { productivityRuleService } from '../../api/productivityRuleService';
 import { roleService } from '../../api/roleService';
 import { notificationPreferenceService } from '../../api/notificationPreferenceService';
@@ -1051,7 +1052,7 @@ const SettingsPage = () => {
                     <div>
                       <p className="text-slate-500">Renews</p>
                       <p className="text-white font-semibold">
-                        {new Date(subscription.current_period_end).toLocaleDateString()}
+                        {formatApiDate(subscription.current_period_end)}
                       </p>
                     </div>
                   </div>

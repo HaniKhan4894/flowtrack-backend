@@ -506,6 +506,12 @@ class SubscriptionService
             ->where('organization_id', $organizationId)
             ->countAllResults();
 
+        $pendingInvites = $this->db->table('organization_invitations')
+            ->where('organization_id', $organizationId)
+            ->countAllResults();
+
+        $slotsUsed = $userCount + $pendingInvites;
+
         $projectCount = $this->db->table('projects')
             ->where('organization_id', $organizationId)
             ->countAllResults();
@@ -516,9 +522,11 @@ class SubscriptionService
 
         return [
             'users' => [
-                'current' => $userCount,
+                'current' => $slotsUsed,
+                'members' => $userCount,
+                'pending_invites' => $pendingInvites,
                 'limit' => $maxUsers === 'unlimited' ? 'unlimited' : (int)$maxUsers,
-                'percentage' => $maxUsers === 'unlimited' ? 0 : ($userCount / (int)$maxUsers) * 100,
+                'percentage' => $maxUsers === 'unlimited' ? 0 : ($slotsUsed / (int)$maxUsers) * 100,
             ],
             'projects' => [
                 'current' => $projectCount,
@@ -713,6 +721,48 @@ class SubscriptionService
         $this->planModel->update($planId, [$column => $priceId]);
     }
 
+    public function needsPeriodResync(array $subscription): bool
+    {
+        if (empty($subscription['stripe_subscription_id'])) {
+            return false;
+        }
+
+        foreach (['current_period_start', 'current_period_end'] as $field) {
+            $value = trim((string) ($subscription[$field] ?? ''));
+            if ($value === '' || str_starts_with($value, '0000-00-00')) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function extractStripePeriod(object $stripeSub, string $billingCycle = 'monthly'): array
+    {
+        $start = $stripeSub->current_period_start ?? null;
+        $end = $stripeSub->current_period_end ?? null;
+
+        if ((!$start || !$end) && !empty($stripeSub->items->data[0])) {
+            $item = $stripeSub->items->data[0];
+            $start = $start ?: ($item->current_period_start ?? null);
+            $end = $end ?: ($item->current_period_end ?? null);
+        }
+
+        if (!$start && !empty($stripeSub->billing_cycle_anchor)) {
+            $start = $stripeSub->billing_cycle_anchor;
+        }
+
+        if ((int) $start <= 0 || (int) $end <= 0) {
+            $start = time();
+            $end = strtotime($billingCycle === 'yearly' ? '+1 year' : '+1 month', $start);
+        }
+
+        return [
+            'start' => date('Y-m-d H:i:s', (int) $start),
+            'end' => date('Y-m-d H:i:s', (int) $end),
+        ];
+    }
+
     public function syncStripeSubscription(
         int $organizationId,
         string $stripeSubscriptionId,
@@ -731,8 +781,9 @@ class SubscriptionService
         }
 
         $amount = $this->calculatePrice($planId, $userCount, $billingCycle);
-        $periodStart = date('Y-m-d H:i:s', (int) $stripeSub->current_period_start);
-        $periodEnd = date('Y-m-d H:i:s', (int) $stripeSub->current_period_end);
+        $period = $this->extractStripePeriod($stripeSub, $billingCycle);
+        $periodStart = $period['start'];
+        $periodEnd = $period['end'];
         $status = in_array($stripeSub->status, ['active', 'trialing'], true)
             ? ($stripeSub->status === 'trialing' ? 'trial' : 'active')
             : 'cancelled';

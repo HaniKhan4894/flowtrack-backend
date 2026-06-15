@@ -14,6 +14,21 @@ export interface Subscription {
     user_count?: number;
 }
 
+export interface SubscriptionUsage {
+    users: {
+        current: number;
+        members: number;
+        pending_invites: number;
+        limit: number | 'unlimited';
+        percentage: number;
+    };
+    projects: {
+        current: number;
+        limit: number | 'unlimited';
+        percentage: number;
+    };
+}
+
 export const billingService = {
     getSubscription: async (): Promise<{ data: Subscription | null }> => {
         const response = await client.get('/subscriptions/current');
@@ -37,6 +52,10 @@ export const billingService = {
     },
     getPlans: async (): Promise<{ data: any[] }> => {
         const response = await client.get('/plans');
+        return response.data;
+    },
+    getUsage: async (): Promise<{ data: SubscriptionUsage }> => {
+        const response = await client.get('/subscriptions/usage');
         return response.data;
     },
 };

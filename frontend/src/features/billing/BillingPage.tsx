@@ -4,6 +4,7 @@ import { Check, Sparkles, Shield, Loader2, PartyPopper, AlertTriangle, Calendar,
 import { Button } from '../../components/ui';
 import { billingService, type Subscription } from '../../api/billingService';
 import { useSearchParams } from 'react-router-dom';
+import { formatApiDate } from '../../utils/date';
 
 const plans = [
   {
@@ -164,7 +165,7 @@ const BillingPage = () => {
           <div>
             <p className="font-bold text-amber-200">Subscription ends soon</p>
             <p className="text-sm text-amber-100/80 mt-1">
-              Your plan will cancel on {new Date(currentSub.current_period_end).toLocaleDateString()}.
+              Your plan will cancel on {formatApiDate(currentSub.current_period_end)}.
             </p>
           </div>
         </div>
@@ -180,7 +181,7 @@ const BillingPage = () => {
               <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Current subscription</p>
               <p className="text-xl font-bold text-white capitalize">{currentSub.status.replace('_', ' ')}</p>
               <p className="text-sm text-slate-400 mt-1">
-                Renews {new Date(currentSub.current_period_end).toLocaleDateString()}
+                Renews {formatApiDate(currentSub.current_period_end)}
                 · {currentSub.billing_cycle}
                 · ${currentSub.amount}
               </p>

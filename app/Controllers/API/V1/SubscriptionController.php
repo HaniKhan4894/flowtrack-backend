@@ -194,6 +194,17 @@ class SubscriptionController extends ResourceController
             $subscriptionModel = new \App\Models\SubscriptionModel();
             $subscription = $subscriptionModel->getActiveSubscription($organizationId);
 
+            if ($subscription && $this->subscriptionService->needsPeriodResync($subscription)) {
+                try {
+                    $subscription = $this->subscriptionService->syncStripeSubscription(
+                        (int) $organizationId,
+                        (string) $subscription['stripe_subscription_id']
+                    );
+                } catch (\Exception $e) {
+                    // Keep the stored subscription if Stripe sync fails.
+                }
+            }
+
             return $this->respond([
                 'success' => true,
                 'data' => $subscription // Returns null if not found, which is better than 404 for frontend
