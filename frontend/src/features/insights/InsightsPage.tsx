@@ -33,18 +33,29 @@ const InsightsPage = () => {
     setLoading(true);
     setError(null);
     try {
-      const tasks: Promise<void>[] = [];
+      const tasks: { key: string; run: () => Promise<unknown> }[] = [];
 
       if (canViewTeam) {
-        tasks.push(insightsService.getWeeklySummary().then((r) => setWeekly(r.data)));
-        tasks.push(insightsService.getBenchmarks().then((r) => setBenchmarks(r.data)));
-        tasks.push(insightsService.getDeliveryRisks().then((r) => setRisks(r.data)));
+        tasks.push({ key: 'weekly', run: () => insightsService.getWeeklySummary().then((r) => setWeekly(r.data)) });
+        tasks.push({ key: 'benchmarks', run: () => insightsService.getBenchmarks().then((r) => setBenchmarks(r.data)) });
+        tasks.push({ key: 'risks', run: () => insightsService.getDeliveryRisks().then((r) => setRisks(r.data)) });
       }
 
-      tasks.push(insightsService.getWorkPatterns().then((r) => setPatterns(r.data)));
-      tasks.push(insightsService.getCoach().then((r) => setCoach(r.data)));
+      tasks.push({ key: 'patterns', run: () => insightsService.getWorkPatterns().then((r) => setPatterns(r.data)) });
+      tasks.push({ key: 'coach', run: () => insightsService.getCoach().then((r) => setCoach(r.data)) });
 
-      await Promise.all(tasks);
+      const results = await Promise.allSettled(tasks.map((t) => t.run()));
+      const failedPersonal = results
+        .map((result, index) => ({ result, key: tasks[index]?.key }))
+        .filter(({ result, key }) => result.status === 'rejected' && (key === 'patterns' || key === 'coach'));
+
+      if (failedPersonal.length > 0) {
+        const reason = failedPersonal[0].result;
+        setError(getApiErrorMessage(
+          reason.status === 'rejected' ? reason.reason : null,
+          'Failed to load insights',
+        ));
+      }
     } catch (e) {
       setError(getApiErrorMessage(e, 'Failed to load insights'));
     } finally {

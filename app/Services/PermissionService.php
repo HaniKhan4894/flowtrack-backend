@@ -46,6 +46,11 @@ class PermissionService
             }
         }
 
+        $role = $this->roleModel->find($member['role_id']);
+        if ($role && in_array($role['slug'], ['owner', 'admin'], true)) {
+            return true;
+        }
+
         // Get role permissions
         $permissions = $this->roleModel->getPermissions($member['role_id']);
         
@@ -53,6 +58,15 @@ class PermissionService
         foreach ($permissions as $permission) {
             if ($permission['slug'] === $permissionSlug) {
                 return true;
+            }
+        }
+
+        // Team-level report access includes own-level access
+        if ($permissionSlug === 'reports.view_own') {
+            foreach ($permissions as $permission) {
+                if (in_array($permission['slug'], ['reports.view_team', 'reports.view_all'], true)) {
+                    return true;
+                }
             }
         }
 

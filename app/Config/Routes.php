@@ -236,13 +236,15 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\API\V1'], function ($r
     $routes->get('reports/idle-breakdown', 'ReportController::idleBreakdown', ['filter' => 'permission:reports.view_team']);
     $routes->post('reports/export', 'ReportController::export', ['filter' => 'permission:reports.export']);
 
-    $routes->get('insights/weekly-summary', 'InsightsController::weeklySummary', ['filter' => 'permission:reports.view_team']);
-    $routes->get('insights/benchmarks', 'InsightsController::benchmarks', ['filter' => 'permission:reports.view_team']);
-    $routes->get('insights/work-patterns', 'InsightsController::workPatterns', ['filter' => 'auth']);
-    $routes->get('insights/coach', 'InsightsController::coach', ['filter' => 'auth']);
-    $routes->get('insights/delivery-risks', 'InsightsController::deliveryRisks', ['filter' => 'permission:reports.view_team']);
-    $routes->get('insights/sprints', 'InsightsController::sprints', ['filter' => 'permission:reports.view_team']);
-    $routes->post('insights/sprints', 'InsightsController::createSprint', ['filter' => 'permission:reports.view_team']);
+    $routes->group('insights', ['filter' => ['auth', 'permission:reports.view_own']], function ($routes) {
+        $routes->get('weekly-summary', 'InsightsController::weeklySummary');
+        $routes->get('benchmarks', 'InsightsController::benchmarks');
+        $routes->get('work-patterns', 'InsightsController::workPatterns');
+        $routes->get('coach', 'InsightsController::coach');
+        $routes->get('delivery-risks', 'InsightsController::deliveryRisks');
+        $routes->get('sprints', 'InsightsController::sprints');
+        $routes->post('sprints', 'InsightsController::createSprint');
+    });
 
     // Scheduled Reports
     $routes->get('scheduled-reports', 'ScheduledReportController::index', ['filter' => 'permission:settings.view']);

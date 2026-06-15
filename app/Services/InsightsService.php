@@ -143,7 +143,8 @@ class InsightsService
 
         $builder = $this->db->table('activity_logs')
             ->select('activity_logs.*')
-            ->where('activity_logs.organization_id', $organizationId)
+            ->join('time_entries', 'time_entries.id = activity_logs.time_entry_id')
+            ->where('time_entries.organization_id', $organizationId)
             ->where('activity_logs.logged_at >=', $startUtc)
             ->where('activity_logs.logged_at <=', $endUtc);
 
@@ -502,7 +503,8 @@ class InsightsService
 
         $builder = $this->db->table('activity_logs')
             ->select('COALESCE(activity_logs.app_name, activity_logs.window_title) as name, COALESCE(SUM(CASE WHEN activity_logs.duration_seconds > 0 THEN activity_logs.duration_seconds ELSE 60 END),0) as total_seconds', false)
-            ->where('activity_logs.organization_id', $organizationId)
+            ->join('time_entries', 'time_entries.id = activity_logs.time_entry_id')
+            ->where('time_entries.organization_id', $organizationId)
             ->where('activity_logs.category', 'unproductive')
             ->where('activity_logs.logged_at >=', $startUtc)
             ->where('activity_logs.logged_at <=', $endUtc)
