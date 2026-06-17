@@ -38,8 +38,19 @@ import { canAccessPath, isSuperAdmin } from './utils/access'
 import { isDesktopApp } from './utils/electronAuth'
 import { DesktopTitleBar } from './components/WindowControls'
 
+import { Loader2 } from 'lucide-react';
+
+const AuthBootLoader = () => (
+  <div className="min-h-screen flex items-center justify-center bg-background">
+    <Loader2 className="w-10 h-10 text-primary-500 animate-spin" />
+  </div>
+);
+
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, sessionReady } = useAuthStore();
+  if (!sessionReady) {
+    return <AuthBootLoader />;
+  }
   return isAuthenticated ? <Shell>{children}</Shell> : <Navigate to="/login" />;
 };
 
@@ -66,7 +77,10 @@ const RoleRoute = ({ path, children }: { path: string; children: React.ReactNode
 
 const RootPage = () => {
   if (isDesktopApp()) {
-    const { isAuthenticated } = useAuthStore();
+    const { isAuthenticated, sessionReady } = useAuthStore();
+    if (!sessionReady) {
+      return <AuthBootLoader />;
+    }
     return <Navigate to={isAuthenticated ? '/app' : '/login'} replace />;
   }
   return <LandingPage />;

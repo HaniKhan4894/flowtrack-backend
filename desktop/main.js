@@ -23,6 +23,7 @@ let mainWindow = null;
 let appIsQuitting = false;
 let screenshotTimer = null;   // holds the current setTimeout handle
 let tokenRefreshTimer = null;
+let sessionRefreshTimer = null;
 let distractionTimer = null;
 let isPaused = false;
 let pausedByLock = false;
@@ -108,8 +109,12 @@ async function refreshTokenViaRenderer() {
                     });
                     const json = await res.json();
                     const newToken = json?.data?.access_token;
+                    const newRefresh = json?.data?.refresh_token;
                     if (newToken) {
                         localStorage.setItem('access_token', newToken);
+                        if (newRefresh) {
+                            localStorage.setItem('refresh_token', newRefresh);
+                        }
                         if (json?.data?.organization_id) {
                             localStorage.setItem('organization_id', String(json.data.organization_id));
                         }
@@ -143,16 +148,68 @@ async function resolveAuthToken(forceRefresh = false) {
 }
 
 function resolveAppIcon() {
-    const candidates = [
-        path.join(__dirname, 'build', 'icon.png'),
-        path.join(__dirname, 'icon.png'),
-    ];
+    const candidates = process.platform === 'win32'
+        ? [
+            path.join(__dirname, 'build', 'icon.ico'),
+            path.join(__dirname, 'build', 'icon.png'),
+            path.join(__dirname, 'icon.png'),
+        ]
+        : [
+            path.join(__dirname, 'build', 'icon.png'),
+            path.join(__dirname, 'icon.png'),
+        ];
+
     for (const candidate of candidates) {
         if (fs.existsSync(candidate)) {
-            return nativeImage.createFromPath(candidate);
+            const image = nativeImage.createFromPath(candidate);
+            if (!image.isEmpty()) {
+                return image;
+            }
         }
     }
     return null;
+}
+
+function isFlowTrackProcess(win) {
+    if (!win?.owner) {
+        return false;
+    }
+
+    const ownerPath = String(win.owner.path || '').toLowerCase();
+    const ownerName = String(win.owner.name || '').toLowerCase();
+    const title = String(win.title || '').toLowerCase();
+
+    if (Number(win.owner.processId) === process.pid) {
+        return true;
+    }
+    if (ownerPath.includes('flowtrack')) {
+        return true;
+    }
+    if (ownerName.includes('flowtrack')) {
+        return true;
+    }
+    if (ownerName === 'electron' && (
+        title.includes('flowtrack')
+        || title.includes('localhost:5173')
+        || title.includes('flowtrackhani.vercel.app')
+    )) {
+        return true;
+    }
+
+    return false;
+}
+
+function normalizeTrackedAppName(appName, windowTitle = '', win = null) {
+    if (win && isFlowTrackProcess(win)) {
+        return 'FlowTrack Desktop';
+    }
+
+    const hay = `${appName} ${windowTitle}`.toLowerCase();
+    if (hay.includes('flowtrack') || (String(appName).toLowerCase() === 'electron' && hay.includes('flowtrack'))) {
+        return 'FlowTrack Desktop';
+    }
+
+    return appName || 'Unknown App';
 }
 
 function resolveFrontendIndexPath() {
@@ -182,6 +239,7 @@ function createWindow() {
         },
         backgroundColor: '#0A0C12',
         show: false,
+        title: 'FlowTrack',
     });
 
     const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
@@ -433,7 +491,13 @@ async function scheduleNextScreenshot() {
 
 function showDesktopNotification(title, body) {
     if (Notification.isSupported()) {
-        new Notification({ title, body, silent: false }).show();
+        const appIcon = resolveAppIcon();
+        new Notification({
+            title,
+            body,
+            silent: false,
+            icon: appIcon && !appIcon.isEmpty() ? appIcon : undefined,
+        }).show();
     }
 }
 
@@ -566,8 +630,9 @@ async function getForegroundApp() {
         const activeWin = require('active-win');
         const win = await activeWin();
         if (win) {
+            const rawName = win.owner?.name || 'Unknown App';
             return {
-                appName: win.owner?.name || 'Unknown App',
+                appName: normalizeTrackedAppName(rawName, win.title || '', win),
                 windowTitle: win.title || '',
             };
         }
@@ -754,6 +819,15 @@ function startTokenRefreshLoop() {
     }, 8 * 60 * 1000);
 }
 
+function startSessionRefreshLoop() {
+    if (sessionRefreshTimer) return;
+    sessionRefreshTimer = setInterval(async () => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            await refreshTokenViaRenderer();
+        }
+    }, 10 * 60 * 1000);
+}
+
 // ──────────────────────────────────────────────
 //  IPC Handlers
 // ──────────────────────────────────────────────
@@ -886,6 +960,7 @@ app.whenReady().then(() => {
     if (process.platform === 'win32') {
         app.setAppUserModelId('com.flowtrack.desktop');
     }
+    app.setName('FlowTrack');
     const appIcon = resolveAppIcon();
     if (appIcon && !appIcon.isEmpty()) {
         app.dock?.setIcon?.(appIcon);
@@ -894,6 +969,7 @@ app.whenReady().then(() => {
     console.log(`[Config] Frontend URL: ${FRONTEND_URL}`);
     createWindow();
     setupTray();
+    startSessionRefreshLoop();
 
     powerMonitor.on('lock-screen', () => {
         if (!currentSession.isTracking || isPaused) return;
@@ -919,6 +995,14 @@ app.whenReady().then(() => {
         }
         showDesktopNotification('FlowTrack', 'Timer resumed — welcome back!');
         console.log('[Power] Unlock screen — tracking resumed.');
+    });
+
+    powerMonitor.on('resume', () => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('system-resume');
+        }
+        void refreshTokenViaRenderer();
+        console.log('[Power] System resumed — refreshing auth session.');
     });
 
     app.on('activate', () => {

@@ -6,10 +6,12 @@
     "author": "FlowTrack",
     "license": "ISC",
     "scripts": {
+        "icons": "node scripts/generate-icons.js",
+        "prestart": "node scripts/generate-icons.js",
+        "predev": "node scripts/generate-icons.js",
         "start": "electron . --disable-gpu-sandbox",
         "dev": "electron . --disable-gpu-sandbox",
         "sync-env": "node ../scripts/sync-deploy-env.js",
-        "icons": "node scripts/generate-icons.js",
         "build:frontend": "npm run sync-env && cd ../frontend && npm run build",
         "pack:win": "npm run icons && npm run build:frontend && electron-builder --win && node ../scripts/publish-installers.js",
         "pack:mac": "npm run icons && npm run build:frontend && electron-builder --mac && node ../scripts/publish-installers.js",

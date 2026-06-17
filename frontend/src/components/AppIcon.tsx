@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { getAppIconUrl, getAppDisplayName } from '../utils/appIcons';
+import { useEffect, useMemo, useState } from 'react';
+import { getAppDisplayName, getAppIconUrls } from '../utils/appIcons';
 
 interface AppIconProps {
   appName: string;
@@ -8,12 +8,17 @@ interface AppIconProps {
 }
 
 export function AppIcon({ appName, size = 40, className = '' }: AppIconProps) {
-  const [failed, setFailed] = useState(false);
-  const iconUrl = getAppIconUrl(appName);
+  const iconUrls = useMemo(() => getAppIconUrls(appName), [appName]);
+  const [iconIndex, setIconIndex] = useState(0);
   const display = getAppDisplayName(appName);
   const boxStyle = { width: size, height: size };
+  const iconUrl = iconIndex < iconUrls.length ? iconUrls[iconIndex] : undefined;
 
-  if (iconUrl && !failed) {
+  useEffect(() => {
+    setIconIndex(0);
+  }, [appName, iconUrls]);
+
+  if (iconUrl) {
     return (
       <img
         src={iconUrl}
@@ -21,7 +26,13 @@ export function AppIcon({ appName, size = 40, className = '' }: AppIconProps) {
         title={display}
         style={boxStyle}
         className={`rounded-xl object-contain p-1.5 bg-white/5 border border-white/10 ${className}`}
-        onError={() => setFailed(true)}
+        onError={() => {
+          if (iconIndex < iconUrls.length - 1) {
+            setIconIndex((current) => current + 1);
+          } else {
+            setIconIndex(iconUrls.length);
+          }
+        }}
       />
     );
   }

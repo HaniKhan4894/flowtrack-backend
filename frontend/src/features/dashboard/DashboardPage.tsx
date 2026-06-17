@@ -41,26 +41,42 @@ const DashboardPage = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!user?.id) {
+      return;
+    }
+
+    let cancelled = false;
     const fetchStats = async () => {
+      setLoading(true);
       try {
         const resp = await dashboardService.getStats();
-        setStats(resp.data);
+        if (!cancelled) {
+          setStats(resp.data);
+        }
       } catch (e) {
         console.error(e);
-        setStats({
-          total_hours: 0,
-          productivity_score: 0,
-          team_count: 0,
-          active_timers: 0,
-          recent_activity: [],
-          weekly_stats: [],
-        });
+        if (!cancelled) {
+          setStats({
+            total_hours: 0,
+            productivity_score: 0,
+            team_count: 0,
+            active_timers: 0,
+            recent_activity: [],
+            weekly_stats: [],
+          });
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     };
+
     fetchStats();
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, user?.organization_id]);
 
   useEffect(() => {
     const fetchSessions = async () => {

@@ -33,7 +33,15 @@ export const authService = {
         await client.post('/auth/logout');
     },
 
-    refresh: async (refreshToken: string): Promise<{ data: { access_token: string; token_type: string; expires_in: number } }> => {
+    refresh: async (refreshToken: string): Promise<{
+        data: {
+            access_token: string;
+            refresh_token: string;
+            token_type: string;
+            expires_in: number;
+            organization_id?: number | null;
+        };
+    }> => {
         const response = await client.post('/auth/refresh', { refresh_token: refreshToken });
         return response.data;
     },

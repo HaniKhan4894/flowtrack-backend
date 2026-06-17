@@ -1,0 +1,3 @@
+Employee,Email,"Pay Type","Tracked Hours",Base,Bonus,Deductions,Gross,Paid,Status
+"Admin User",admin@flowtrack.com,fixed,4.67,1000,0,0,1000,1000,paid
+"Muhammad  Adnan",hanikhan4894@gmail.com,hourly,23.63,189.02,80,0,269.02,0,pending

@@ -7,6 +7,7 @@ import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { authService } from '../../api/authService';
 import { useAuthStore } from '../../store/authStore';
 import { isDesktopApp } from '../../utils/electronAuth';
+import { getSavedLoginCredentials, persistAuthTokens, saveLoginCredentials } from '../../utils/authStorage';
 import SeoHead from '../../seo/SeoHead';
 import { getApiErrorMessage } from '../../utils/apiError';
 
@@ -16,7 +17,11 @@ const LoginPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const setAuth = useAuthStore((state) => state.setAuth);
+  const setUser = useAuthStore((state) => state.setUser);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const savedCredentials = getSavedLoginCredentials();
+  const [email, setEmail] = useState(savedCredentials?.email ?? '');
+  const [password, setPassword] = useState(savedCredentials?.password ?? '');
   
   const successMessage = location.state?.message 
     ?? (new URLSearchParams(location.search).get('signed_out') ? 'Signed out successfully. Log in with your account.' : null);
@@ -27,27 +32,39 @@ const LoginPage = () => {
     }
   }, [isAuthenticated, navigate]);
 
+  useEffect(() => {
+    const saved = getSavedLoginCredentials();
+    if (saved) {
+      setEmail(saved.email);
+      setPassword(saved.password);
+    }
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsLoading(true);
     setError(null);
 
     const formData = new FormData(e.currentTarget);
-    const email = formData.get('email') as string;
-    const password = formData.get('password') as string;
+    const submittedEmail = (formData.get('email') as string).trim();
+    const submittedPassword = formData.get('password') as string;
 
     try {
-      const response = await authService.login(email, password);
-      // Attach to global store
+      const response = await authService.login(submittedEmail, submittedPassword);
+      persistAuthTokens({
+        access_token: response.data.tokens.access_token,
+        refresh_token: response.data.tokens.refresh_token,
+        organization_id: (response.data.tokens as { organization_id?: number }).organization_id
+          ?? response.data.user.organization_id
+          ?? null,
+      });
+      saveLoginCredentials(submittedEmail, submittedPassword);
       setAuth(response.data.user, response.data.tokens.access_token);
-      localStorage.setItem('refresh_token', response.data.tokens.refresh_token);
-      const orgId = (response.data.tokens as any)?.organization_id ?? (response.data.user as any)?.organization_id;
-      if (orgId) {
-        localStorage.setItem('organization_id', String(orgId));
-      }
-      
-      // Navigate to dashboard
-      navigate('/app');
+
+      const profile = await authService.me();
+      setUser(profile.data);
+
+      navigate('/app', { replace: true });
     } catch (err: unknown) {
       setError(getApiErrorMessage(err, 'Invalid email or password.'));
     } finally {
@@ -126,6 +143,9 @@ const LoginPage = () => {
               name="email"
               type="email"
               placeholder="name@company.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              autoComplete="username"
               required
             />
             <div className="space-y-1">
@@ -134,6 +154,9 @@ const LoginPage = () => {
                 name="password"
                 type="password"
                 placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
                 required
               />
               <div className="text-right">

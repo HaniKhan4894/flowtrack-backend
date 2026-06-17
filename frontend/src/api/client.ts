@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { authService } from './authService';
 import { syncElectronAuthToken } from '../utils/electronAuth';
+import { persistAuthTokens, clearAuthTokens } from '../utils/authStorage';
 
 const apiBaseUrl =
     import.meta.env.VITE_API_URL ||
@@ -62,12 +63,12 @@ client.interceptors.response.use(
                 isRefreshingToken = true;
                 try {
                     const refreshed = await authService.refresh(refreshToken);
+                    persistAuthTokens({
+                        access_token: refreshed.data.access_token,
+                        refresh_token: refreshed.data.refresh_token,
+                        organization_id: (refreshed.data as { organization_id?: number }).organization_id,
+                    });
                     const newAccessToken = refreshed.data.access_token;
-                    const refreshedOrgId = (refreshed.data as any)?.organization_id;
-                    localStorage.setItem('access_token', newAccessToken);
-                    if (refreshedOrgId) {
-                        localStorage.setItem('organization_id', String(refreshedOrgId));
-                    }
                     syncElectronAuthToken(newAccessToken);
                     flushPendingRequests(newAccessToken);
                     originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
@@ -79,10 +80,7 @@ client.interceptors.response.use(
                         Boolean((window as Window & { __flowtrackTrackingActive?: boolean }).__flowtrackTrackingActive);
 
                     if (!trackingActive) {
-                        localStorage.removeItem('access_token');
-                        localStorage.removeItem('refresh_token');
-                        localStorage.removeItem('organization_id');
-                        localStorage.removeItem('user');
+                        clearAuthTokens();
                         syncElectronAuthToken('');
                         if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
                             window.location.href = '/login';

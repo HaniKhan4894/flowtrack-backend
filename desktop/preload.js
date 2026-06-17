@@ -49,6 +49,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
         };
     },
 
+    onSystemResume: (callback) => {
+        const handler = () => callback();
+        ipcRenderer.on('system-resume', handler);
+        return () => ipcRenderer.removeListener('system-resume', handler);
+    },
+
     onTimerIdleChange: (callback) => {
         const onPaused = (_event, data) => callback('paused', data);
         const onResumed = (_event, data) => callback('resumed', data);

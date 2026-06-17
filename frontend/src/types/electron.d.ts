@@ -20,6 +20,7 @@ declare global {
       sendActivityEvent: (type: string) => void;
       onScreenshotCaptured: (callback: (data: { activityLevel: number }) => void) => () => void;
       onSystemLockChange: (callback: (locked: boolean) => void) => () => void;
+      onSystemResume: (callback: () => void) => () => void;
       onTimerIdleChange: (callback: (state: 'paused' | 'resumed', data?: { idleMinutes?: number }) => void) => () => void;
     };
   }
