@@ -1,11 +1,27 @@
 type ApiErrorBody = {
   message?: string;
+  error?: string;
   messages?: string | { error?: string | string[]; [key: string]: unknown };
 };
 
 export function getApiErrorMessage(error: unknown, fallback: string): string {
-  const data = (error as { response?: { data?: ApiErrorBody } })?.response?.data;
-  if (!data) return fallback;
+  const err = error as { response?: { data?: ApiErrorBody }; message?: string; code?: string };
+  const data = err?.response?.data;
+
+  if (!data) {
+    if (err?.code === 'ERR_NETWORK') {
+      return 'Cannot reach the server. Please check your connection or try again later.';
+    }
+    if (typeof err?.message === 'string' && err.message.trim()) {
+      return err.message;
+    }
+    return fallback;
+  }
+
+  // Backend returns plain `error` key (portal controller, etc.)
+  if (typeof data.error === 'string' && data.error.trim()) {
+    return data.error;
+  }
 
   if (typeof data.message === 'string' && data.message.trim()) {
     return data.message;
