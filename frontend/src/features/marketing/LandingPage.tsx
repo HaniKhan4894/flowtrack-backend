@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
+  Activity,
   ArrowRight,
   CheckCircle2,
   Sparkles,
@@ -11,6 +12,7 @@ import {
   Download,
   Users,
   Shield,
+  ShieldCheck,
   Zap,
   Star,
   Quote,
@@ -43,13 +45,13 @@ const packageCards = [
     name: 'Starter',
     price: '$12',
     subtitle: 'Per month',
-    features: ['Up to 5 members', 'Screenshot monitoring', 'Activity + productivity rules'],
+    features: ['Up to 5 members', 'Screenshot monitoring', 'Proof-of-Work client portal'],
   },
   {
     name: 'Professional',
     price: '$10 + $5/user',
     subtitle: 'Growing teams',
-    features: ['Faster screenshot capture', 'Payroll & timesheets', 'Custom roles & analytics'],
+    features: ['Faster screenshot capture', 'Payroll & Proof-of-Work invoicing', 'Custom roles & analytics'],
     popular: true,
   },
   {
@@ -91,7 +93,7 @@ const platformPillars = [
     title: 'Business & Intelligence',
     accent: 'text-cyan-400',
     items: [
-      'Client portal for invoice approvals and payment tracking',
+      'Proof-of-Work Client Portal with Billable Integrity Score',
       'Weekly productivity summaries for managers',
       'Performance benchmarks by project, role, and sprint',
       'AI work patterns, coach tips, and delivery risk alerts',
@@ -108,6 +110,27 @@ const desktopFeatures = [
   'Idle detection with auto-pause and resume notifications',
   'Distraction alerts for social / entertainment apps',
   'System tray timer + lock-screen pause/resume',
+];
+
+const proofPackHighlights = [
+  {
+    title: 'Billable Integrity Score',
+    description: 'A 0–100 score from productive activity, billing alignment, screenshot evidence, and coverage — so clients see trust at a glance.',
+    icon: ShieldCheck,
+    accent: 'text-emerald-400',
+  },
+  {
+    title: 'Verified hours & top apps',
+    description: 'Tracked time, team contribution, and app/site breakdown tied to the invoice period — not a PDF guess.',
+    icon: Activity,
+    accent: 'text-cyan-400',
+  },
+  {
+    title: 'Screenshot evidence samples',
+    description: 'Sampled work screenshots (respecting blur policies) inside the same portal where clients approve and pay.',
+    icon: Monitor,
+    accent: 'text-violet-400',
+  },
 ];
 
 const heroStats = [
@@ -185,7 +208,7 @@ const coreFeatures = [
   {
     icon: Wallet,
     title: 'Payroll & Invoicing',
-    description: 'Run payroll cycles, compensate teams, and turn tracked hours into client-ready invoices.',
+    description: 'Run payroll cycles, turn tracked hours into invoices, and attach a Proof-of-Work Pack clients review before paying.',
     accent: 'text-emerald-400',
     glow: 'from-emerald-500/20 to-transparent',
   },
@@ -296,6 +319,7 @@ const LandingPage = () => {
 
           <nav className="hidden md:flex items-center gap-8 text-sm text-slate-400" aria-label="Primary navigation">
             <a href="#features" className="hover:text-white transition-colors">Features</a>
+            <a href="#proof-pack" className="hover:text-white transition-colors">Proof Pack</a>
             <a href="#pricing" className="hover:text-white transition-colors">Pricing</a>
             {(desktopWinUrl || desktopMacUrl) && (
               <a href="#download" className="hover:text-white transition-colors">Desktop</a>
@@ -333,7 +357,8 @@ const LandingPage = () => {
               <span className="gradient-text">clarity</span>, speed, and accountability.
             </h1>
             <p className="text-slate-300 text-lg mb-8 max-w-xl leading-relaxed">
-              FlowTrack gives you time tracking, screen evidence, analytics, team visibility, and billing workflows in one clean platform.
+              FlowTrack gives you time tracking, screen evidence, analytics, team visibility, and billing workflows — plus a{' '}
+              <span className="text-emerald-300 font-medium">Proof-of-Work Client Portal</span> so clients verify work before they pay.
             </p>
             <div className="flex flex-wrap gap-3 mb-10">
               <Link to="/register"><Button size="lg">Start Free Trial <ArrowRight className="w-4 h-4 ml-2" /></Button></Link>
@@ -376,10 +401,105 @@ const LandingPage = () => {
               </div>
               <div className="flex gap-3 rounded-xl border border-white/5 bg-white/[0.02] p-3">
                 <Wallet className="w-5 h-5 text-emerald-400 mt-0.5 shrink-0" />
-                <p className="text-sm">Payroll, timesheets, leave, invoices, and role-based team visibility.</p>
+                <p className="text-sm">Invoices ship with a Proof-of-Work Pack — integrity score, verified hours, and screenshot samples in the client portal.</p>
               </div>
             </div>
           </motion.div>
+        </div>
+      </section>
+
+      <section id="proof-pack" className="max-w-7xl mx-auto px-6 py-14 relative z-10 scroll-mt-24">
+        <div className="relative overflow-hidden rounded-[2rem] border border-emerald-500/25 bg-gradient-to-br from-emerald-600/15 via-background to-cyan-600/10 p-8 md:p-12">
+          <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-emerald-500/20 blur-3xl" />
+          <div className="pointer-events-none absolute -bottom-20 left-10 h-48 w-48 rounded-full bg-cyan-500/15 blur-3xl" />
+
+          <div className="grid lg:grid-cols-2 gap-10 items-center relative">
+            <div>
+              <SectionHeading
+                badge="Proof-of-Work Portal"
+                title="Verify before you pay — built into every client invoice"
+                description="Hubstaff shows activity. FlowTrack closes the loop: clients open one portal link, review verified work evidence, approve the invoice, and record payment."
+                align="left"
+              />
+              <ul className="space-y-3">
+                {proofPackHighlights.map((item) => (
+                  <li key={item.title} className="flex gap-3 rounded-xl border border-white/10 bg-black/20 p-4">
+                    <div className={`mt-0.5 shrink-0 ${item.accent}`}>
+                      <item.icon className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-white">{item.title}</p>
+                      <p className="text-sm text-slate-400 leading-relaxed">{item.description}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-8 flex flex-wrap gap-3">
+                <Link to="/register"><Button>Try Proof Pack Free <ArrowRight className="w-4 h-4 ml-2" /></Button></Link>
+              </div>
+            </div>
+
+            <motion.div
+              initial={{ opacity: 0, scale: 0.98 }}
+              whileInView={{ opacity: 1, scale: 1 }}
+              viewport={{ once: true, amount: 0.4 }}
+              transition={{ duration: 0.5 }}
+              className="glass-card p-6 md:p-8 border-emerald-500/20"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.18em] text-emerald-300 font-bold">Client portal preview</p>
+                  <p className="text-lg font-bold mt-1">Invoice #INV-20260613</p>
+                </div>
+                <div className="text-center">
+                  <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full border-4 border-emerald-400/80 text-2xl font-extrabold text-emerald-300">
+                    92
+                  </div>
+                  <p className="text-[11px] uppercase tracking-wide text-slate-500 mt-1">Integrity</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3 mb-6">
+                {[
+                  { label: 'Tracked', value: '48.5h' },
+                  { label: 'Billed', value: '47.0h' },
+                  { label: 'Shots', value: '126' },
+                ].map((stat) => (
+                  <div key={stat.label} className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-3 text-center">
+                    <p className="text-[10px] uppercase text-slate-500">{stat.label}</p>
+                    <p className="text-lg font-bold">{stat.value}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="space-y-2 mb-6">
+                {[
+                  { app: 'Cursor', pct: 42 },
+                  { app: 'Chrome · GitHub', pct: 28 },
+                  { app: 'Figma', pct: 18 },
+                ].map((row) => (
+                  <div key={row.app}>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className="text-slate-300">{row.app}</span>
+                      <span className="text-slate-500">{row.pct}%</span>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-white/10">
+                      <div className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-cyan-500" style={{ width: `${row.pct}%` }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-4 gap-2">
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <div key={i} className="aspect-video rounded-lg bg-gradient-to-br from-slate-700/80 to-slate-900 border border-white/10" />
+                ))}
+              </div>
+              <p className="mt-4 text-xs text-slate-500 text-center">
+                Approve · record payment · dispute less — all from one secure link.
+              </p>
+            </motion.div>
+          </div>
         </div>
       </section>
 

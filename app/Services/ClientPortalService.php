@@ -76,6 +76,7 @@ class ClientPortalService
         $invoice['portal_url'] = $this->getPortalUrl($token);
         $invoice['amount_paid'] = (float) ($invoice['amount_paid'] ?? 0);
         $invoice['balance_due'] = max(0, (float) $invoice['total'] - (float) $invoice['amount_paid']);
+        $invoice['proof_pack'] = (new ProofOfWorkService())->buildForInvoice($invoice, $token);
 
         return $invoice;
     }

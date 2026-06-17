@@ -3,16 +3,22 @@
 namespace App\Controllers\API\V1;
 
 use App\Services\ClientPortalService;
+use App\Services\ProofOfWorkService;
+use App\Services\ScreenshotService;
 use CodeIgniter\RESTful\ResourceController;
 
 class ClientPortalController extends ResourceController
 {
     protected ClientPortalService $portalService;
+    protected ProofOfWorkService $proofService;
+    protected ScreenshotService $screenshotService;
     protected $format = 'json';
 
     public function __construct()
     {
         $this->portalService = new ClientPortalService();
+        $this->proofService = new ProofOfWorkService();
+        $this->screenshotService = new ScreenshotService();
     }
 
     public function show(string $token)
@@ -50,5 +56,27 @@ class ClientPortalController extends ResourceController
         } catch (\Exception $e) {
             return $this->respond(['success' => false, 'error' => $e->getMessage()], 400);
         }
+    }
+
+    public function screenshotThumbnail(string $token, string $screenshotId)
+    {
+        $screenshot = $this->proofService->canAccessScreenshot($token, (int) $screenshotId);
+        if (!$screenshot) {
+            return $this->respond(['success' => false, 'error' => 'Screenshot not found'], 404);
+        }
+
+        $relativePath = $this->screenshotService->resolveFilePath($screenshot, true);
+        $path = WRITEPATH . 'uploads/screenshots/' . $relativePath;
+
+        if (!is_file($path)) {
+            return $this->respond(['success' => false, 'error' => 'File not found'], 404);
+        }
+
+        $mimeType = mime_content_type($path) ?: 'image/jpeg';
+
+        return $this->response
+            ->setHeader('Content-Type', $mimeType)
+            ->setHeader('Cache-Control', 'private, max-age=3600')
+            ->setBody(file_get_contents($path));
     }
 }

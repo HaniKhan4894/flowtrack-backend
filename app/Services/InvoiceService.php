@@ -160,6 +160,7 @@ class InvoiceService
                 'description' => $group['description'],
                 'quantity' => round($group['quantity'], 2),
                 'unit_price' => $group['unit_price'],
+                'time_entry_id' => $group['time_entry_ids'][0] ?? null,
             ];
         }
 

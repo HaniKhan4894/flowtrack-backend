@@ -134,7 +134,7 @@ class EmailService
     public function sendInvoiceEmail(array $invoice, string $clientEmail, ?string $portalUrl = null): bool
     {
         $portalBlock = $portalUrl
-            ? '<p><a href="' . htmlspecialchars($portalUrl) . '" style="display:inline-block;padding:12px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:8px;">Review &amp; approve invoice</a></p>'
+            ? '<p><a href="' . htmlspecialchars($portalUrl) . '" style="display:inline-block;padding:12px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:8px;">Review verified work &amp; approve invoice</a></p>'
             : '';
 
         $message = $this->wrapTemplate(
@@ -145,7 +145,7 @@ class EmailService
                 <p><strong>Total:</strong> {$invoice['currency']} {$invoice['total']}</p>
                 <p><strong>Due Date:</strong> {$invoice['due_date']}</p>
                 {$portalBlock}
-                <p>Use the client portal to approve this invoice and record payments.</p>
+                <p>The client portal includes a <strong>Proof-of-Work Pack</strong> — verified hours, activity breakdown, screenshot samples, and a Billable Integrity Score — so you can review evidence before approving or paying.</p>
                 <p>Thank you for your business.</p>
             "
         );

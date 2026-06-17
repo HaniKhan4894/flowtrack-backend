@@ -8,7 +8,7 @@ export const DEFAULT_TITLE =
   'FlowTrack — Team Time Tracking, Screenshot Monitoring & Productivity Analytics';
 
 export const DEFAULT_DESCRIPTION =
-  'FlowTrack is an all-in-one team productivity platform with real-time time tracking, automatic screenshot capture, activity analytics, invoicing, and desktop apps for Windows and macOS. Built for remote and hybrid teams.';
+  'FlowTrack is an all-in-one team productivity platform with real-time time tracking, screenshot capture, Proof-of-Work client invoicing, activity analytics, and desktop apps for Windows and macOS. Built for remote and hybrid teams.';
 
 export const DEFAULT_KEYWORDS = [
   'time tracking software',

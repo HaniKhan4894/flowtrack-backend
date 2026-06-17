@@ -5,7 +5,7 @@ const apiBaseUrl =
   import.meta.env.VITE_API_URL ||
   'https://2310-154-192-119-80.ngrok-free.app/flowtrack-backend/public/api/v1';
 
-const usesNgrok = apiBaseUrl.includes('ngrok');
+export const usesNgrok = apiBaseUrl.includes('ngrok');
 
 const portalClient = axios.create({
   baseURL: apiBaseUrl,
@@ -15,6 +15,39 @@ const portalClient = axios.create({
   },
 });
 
+export interface ProofPackIntegrity {
+  score: number;
+  grade: string;
+  components: { label: string; score: number; weight: number }[];
+}
+
+export interface ProofPackScreenshot {
+  id: number;
+  captured_at: string;
+  activity_level: number;
+  is_blurred: boolean;
+  thumbnail_url: string;
+}
+
+export interface ProofPack {
+  available: boolean;
+  organization_name: string;
+  period: { start_date: string; end_date: string; label: string };
+  summary: {
+    tracked_hours: number;
+    billed_hours: number;
+    time_entry_count: number;
+    screenshot_count: number;
+    contributor_count: number;
+  };
+  integrity: ProofPackIntegrity;
+  productivity: { category: string; seconds: number; hours: number; percent: number }[];
+  top_apps: { app_name: string; category: string; hours: number; percent: number }[];
+  contributors: { display_name: string; hours: number }[];
+  screenshots: ProofPackScreenshot[];
+  highlights: string[];
+}
+
 export interface PortalInvoice extends Invoice {
   payments?: { id: number; amount: string | number; method: string; reference?: string; paid_at: string }[];
   amount_paid?: number;
@@ -22,6 +55,7 @@ export interface PortalInvoice extends Invoice {
   client_approved_at?: string | null;
   portal_url?: string;
   currency?: string;
+  proof_pack?: ProofPack;
 }
 
 export const clientPortalService = {
@@ -38,5 +72,13 @@ export const clientPortalService = {
   recordPayment: async (token: string, data: { amount: number; method?: string; reference?: string; note?: string }) => {
     const res = await portalClient.post(`/portal/invoice/${token}/payment`, data);
     return res.data;
+  },
+
+  fetchScreenshotBlob: async (url: string) => {
+    const res = await axios.get(url, {
+      responseType: 'blob',
+      headers: usesNgrok ? { 'ngrok-skip-browser-warning': 'true' } : {},
+    });
+    return URL.createObjectURL(res.data);
   },
 };

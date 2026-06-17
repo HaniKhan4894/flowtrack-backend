@@ -34,6 +34,11 @@ export const landingFaq: FaqItem[] = [
       'FlowTrack offers a free plan for solo users, Starter at $12/month, Professional at $10 plus $5 per user, and custom Enterprise pricing for larger organizations.',
   },
   {
+    question: 'What is FlowTrack\'s Proof-of-Work Client Portal?',
+    answer:
+      'When you send an invoice, clients get a secure portal link with a Proof-of-Work Pack: verified tracked hours, team contribution, top apps, screenshot samples, and a Billable Integrity Score — so they can approve and pay with confidence.',
+  },
+  {
     question: 'Can FlowTrack generate invoices from tracked time?',
     answer:
       'Yes. FlowTrack turns tracked hours into professional invoices and supports subscription-style billing workflows for agencies and service teams.',

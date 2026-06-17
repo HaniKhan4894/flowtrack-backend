@@ -42,6 +42,7 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\API\V1'], function ($r
 
     // Client portal (public, token-based)
     $routes->get('portal/invoice/(:segment)', 'ClientPortalController::show/$1');
+    $routes->get('portal/invoice/(:segment)/screenshots/(:num)/thumbnail', 'ClientPortalController::screenshotThumbnail/$1/$2');
     $routes->post('portal/invoice/(:segment)/approve', 'ClientPortalController::approve/$1');
     $routes->post('portal/invoice/(:segment)/payment', 'ClientPortalController::recordPayment/$1');
 
