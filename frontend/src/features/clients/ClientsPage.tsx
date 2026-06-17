@@ -168,9 +168,9 @@ const ClientsPage = () => {
 
       <AnimatePresence>
         {showModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/60" onClick={() => setShowModal(false)} />
-            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative w-full max-w-lg glass-card p-8" onClick={(e) => e.stopPropagation()}>
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 modal-overlay">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0" onClick={() => setShowModal(false)} />
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative z-10 w-full max-w-lg modal-panel p-8" onClick={(e) => e.stopPropagation()}>
               <div className="flex justify-between mb-6">
                 <h2 className="text-2xl font-bold text-white">{editing ? 'Edit Client' : 'New Client'}</h2>
                 <button onClick={() => setShowModal(false)}><X size={24} className="text-slate-500" /></button>
@@ -180,7 +180,7 @@ const ClientsPage = () => {
                 <Input type="email" value={form.email} onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))} placeholder="Email" />
                 <Input value={form.phone} onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))} placeholder="Phone" />
                 <Input type="number" step="0.01" value={form.default_rate} onChange={(e) => setForm((p) => ({ ...p, default_rate: e.target.value }))} placeholder="Default hourly rate" />
-                <textarea value={form.notes} onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))} placeholder="Notes" className="w-full h-24 bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white resize-none" />
+                <textarea value={form.notes} onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))} placeholder="Notes" className="w-full h-24 form-field resize-none" />
                 <Button type="submit" className="w-full" isLoading={saving}>{editing ? 'Save Changes' : 'Create Client'}</Button>
               </form>
             </motion.div>

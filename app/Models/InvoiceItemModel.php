@@ -17,7 +17,7 @@ class InvoiceItemModel extends Model
     ];
 
     protected bool $allowEmptyInserts = false;
-    protected bool $updateOnlyChanged = true;
+    protected bool $updateOnlyChanged = false;
 
     protected $useTimestamps = true;
     protected $dateFormat    = 'datetime';

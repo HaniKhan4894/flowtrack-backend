@@ -15,7 +15,7 @@ import {
   Sparkles,
   Pencil,
 } from 'lucide-react';
-import { Button } from '../../components/ui';
+import { Button, SearchableSelect } from '../../components/ui';
 import { invoiceService, type Invoice } from '../../api/invoiceService';
 import { clientService, type Client } from '../../api/clientService';
 import { projectService, type Project } from '../../api/projectService';
@@ -23,6 +23,7 @@ import { hasPermission } from '../../utils/access';
 import { useAuthStore } from '../../store/authStore';
 import { getApiErrorMessage } from '../../utils/apiError';
 import { formatApiDate } from '../../utils/date';
+import { filterProjectsForClient } from '../../utils/projectFilters';
 
 const toNumber = (value: unknown): number => {
   const n = Number(value);
@@ -64,10 +65,26 @@ const InvoiceDetailPage = () => {
   const canSend = hasPermission(user, 'invoices.send');
   const isDraft = invoice?.status === 'draft';
 
-  const filteredProjects = useMemo(() => {
-    if (!metaForm.client_id) return projects;
-    return projects.filter((p) => String(p.client_id ?? '') === metaForm.client_id);
-  }, [projects, metaForm.client_id]);
+  const filteredProjects = useMemo(
+    () => filterProjectsForClient(projects, clients, metaForm.client_id),
+    [projects, clients, metaForm.client_id],
+  );
+
+  const clientOptions = useMemo(
+    () => [
+      { value: '', label: 'Link to client record (optional)' },
+      ...clients.map((c) => ({ value: c.id, label: c.name })),
+    ],
+    [clients],
+  );
+
+  const projectOptions = useMemo(
+    () => [
+      { value: '', label: 'No project' },
+      ...filteredProjects.map((p) => ({ value: p.id, label: p.name })),
+    ],
+    [filteredProjects],
+  );
 
   const load = async () => {
     if (!invoiceId) return;
@@ -228,7 +245,9 @@ const InvoiceDetailPage = () => {
     }
   };
 
-  const inputClass = 'w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-primary-500/50';
+  const inputClass = 'form-field';
+  const modalOverlay = 'fixed inset-0 z-[100] flex items-center justify-center p-4 modal-overlay';
+  const modalPanel = 'relative z-10 w-full modal-panel p-6 space-y-4';
 
   if (loading) {
     return (
@@ -425,8 +444,9 @@ const InvoiceDetailPage = () => {
       </div>
 
       {showAddItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <form onSubmit={handleAddItem} className="w-full max-w-md glass-card border border-white/10 p-6 space-y-4">
+        <div className={modalOverlay}>
+          <button type="button" aria-label="Close" className="absolute inset-0" onClick={() => setShowAddItem(false)} />
+          <form onSubmit={handleAddItem} className={`${modalPanel} max-w-md`}>
             <h3 className="text-lg font-bold text-white">Add line item</h3>
             <input
               required
@@ -470,36 +490,40 @@ const InvoiceDetailPage = () => {
       )}
 
       {showEditMeta && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <form onSubmit={handleUpdateMeta} className="w-full max-w-lg glass-card border border-white/10 p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+        <div className={modalOverlay}>
+          <button type="button" aria-label="Close" className="absolute inset-0" onClick={() => setShowEditMeta(false)} />
+          <form onSubmit={handleUpdateMeta} className={`${modalPanel} max-w-lg max-h-[90vh] overflow-y-auto`}>
             <h3 className="text-lg font-bold text-white">Edit invoice details</h3>
-            <select
+            <SearchableSelect
               value={metaForm.client_id}
-              onChange={(e) => {
-                const selected = clients.find((c) => String(c.id) === e.target.value);
-                setMetaForm((f) => ({
-                  ...f,
-                  client_id: e.target.value,
-                  client_name: selected?.name ?? f.client_name,
-                  client_email: selected?.email ?? f.client_email,
-                  project_id: '',
-                }));
+              onChange={(val) => {
+                const clientId = String(val);
+                const selected = clients.find((c) => String(c.id) === clientId);
+                const nextProjects = filterProjectsForClient(projects, clients, clientId);
+                setMetaForm((f) => {
+                  const keepProject = nextProjects.some((p) => String(p.id) === f.project_id);
+                  return {
+                    ...f,
+                    client_id: clientId,
+                    client_name: selected?.name ?? f.client_name,
+                    client_email: selected?.email ?? f.client_email,
+                    project_id: keepProject ? f.project_id : '',
+                  };
+                });
               }}
-              className={inputClass}
-            >
-              <option value="">Link to client record (optional)</option>
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
+              options={clientOptions}
+              placeholder="Link to client record (optional)"
+              searchPlaceholder="Search clients…"
+            />
             <input required value={metaForm.client_name} onChange={(e) => setMetaForm((f) => ({ ...f, client_name: e.target.value }))} placeholder="Client name" className={inputClass} />
             <input type="email" value={metaForm.client_email} onChange={(e) => setMetaForm((f) => ({ ...f, client_email: e.target.value }))} placeholder="Client email (required to send)" className={inputClass} />
-            <select value={metaForm.project_id} onChange={(e) => setMetaForm((f) => ({ ...f, project_id: e.target.value }))} className={inputClass}>
-              <option value="">No project</option>
-              {filteredProjects.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
+            <SearchableSelect
+              value={metaForm.project_id}
+              onChange={(val) => setMetaForm((f) => ({ ...f, project_id: String(val) }))}
+              options={projectOptions}
+              placeholder="No project"
+              searchPlaceholder="Search projects…"
+            />
             <div className="grid grid-cols-2 gap-3">
               <input required type="date" value={metaForm.due_date} onChange={(e) => setMetaForm((f) => ({ ...f, due_date: e.target.value }))} className={inputClass} />
               <input type="number" min="0" step="0.01" placeholder="Tax rate %" value={metaForm.tax_rate} onChange={(e) => setMetaForm((f) => ({ ...f, tax_rate: e.target.value }))} className={inputClass} />
@@ -514,8 +538,9 @@ const InvoiceDetailPage = () => {
       )}
 
       {showGenerateTime && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <form onSubmit={handleGenerateFromTime} className="w-full max-w-md glass-card border border-white/10 p-6 space-y-4">
+        <div className={modalOverlay}>
+          <button type="button" aria-label="Close" className="absolute inset-0" onClick={() => setShowGenerateTime(false)} />
+          <form onSubmit={handleGenerateFromTime} className={`${modalPanel} max-w-md`}>
             <h3 className="text-lg font-bold text-white">Generate from tracked time</h3>
             <p className="text-sm text-slate-400">Adds line items from billable hours in the selected period to this draft invoice.</p>
             <input required type="date" value={timeForm.start_date} onChange={(e) => setTimeForm((f) => ({ ...f, start_date: e.target.value }))} className={inputClass} />

@@ -90,15 +90,31 @@ class InvoiceService
 
     public function addInvoiceItem(int $invoiceId, array $itemData): array
     {
-        $quantity = (float) ($itemData['quantity'] ?? 0);
-        $unitPrice = (float) ($itemData['unit_price'] ?? 0);
+        $quantity = round((float) ($itemData['quantity'] ?? 0), 2);
+        $unitPrice = round((float) ($itemData['unit_price'] ?? 0), 2);
+        $amount = round($quantity * $unitPrice, 2);
 
-        $itemData['invoice_id'] = $invoiceId;
-        $itemData['amount'] = $quantity * $unitPrice;
+        if (trim((string) ($itemData['description'] ?? '')) === '') {
+            throw new \RuntimeException('Line item description is required');
+        }
 
-        $itemId = $this->invoiceItemModel->insert($itemData);
-        if (!$itemId) {
-            throw new \RuntimeException('Failed to add invoice item: ' . json_encode($this->invoiceItemModel->errors()));
+        $row = [
+            'invoice_id' => $invoiceId,
+            'description' => (string) $itemData['description'],
+            'quantity' => $quantity,
+            'unit_price' => $unitPrice,
+            'amount' => $amount,
+            'created_at' => date('Y-m-d H:i:s'),
+        ];
+
+        if (!empty($itemData['time_entry_id'])) {
+            $row['time_entry_id'] = (int) $itemData['time_entry_id'];
+        }
+
+        $this->db->table('invoice_items')->insert($row);
+        $itemId = (int) $this->db->insertID();
+        if ($itemId <= 0) {
+            throw new \RuntimeException('Failed to add invoice item');
         }
 
         $this->recalculateInvoice($invoiceId);
@@ -164,10 +180,15 @@ class InvoiceService
             throw new \Exception('No billable time entries found for the selected period');
         }
 
+        $clientRow = null;
+        if (!empty($data['client_id'])) {
+            $clientRow = $this->db->table('clients')->where('id', (int) $data['client_id'])->get()->getRowArray();
+        }
+
         $grouped = [];
         foreach ($entries as $entry) {
             $projectId = (int) ($entry['project_id'] ?? 0);
-            $rate = (float) ($entry['hourly_rate'] ?? $data['default_rate'] ?? 0);
+            $rate = $this->resolveHourlyRate($entry, $data, $clientRow);
             $key = $projectId . ':' . $rate;
             if (!isset($grouped[$key])) {
                 $project = $projectId ? $this->projectModel->find($projectId) : null;
@@ -275,10 +296,15 @@ class InvoiceService
             throw new \Exception('No billable time entries found for the selected period');
         }
 
+        $clientRow = null;
+        if (!empty($invoice['client_id'])) {
+            $clientRow = $this->db->table('clients')->where('id', (int) $invoice['client_id'])->get()->getRowArray();
+        }
+
         $grouped = [];
         foreach ($entries as $entry) {
             $entryProjectId = (int) ($entry['project_id'] ?? 0);
-            $rate = (float) ($entry['hourly_rate'] ?? $data['default_rate'] ?? 0);
+            $rate = $this->resolveHourlyRate($entry, $data, $clientRow);
             $key = $entryProjectId . ':' . $rate;
             if (!isset($grouped[$key])) {
                 $project = $entryProjectId ? $this->projectModel->find($entryProjectId) : null;
@@ -479,5 +505,23 @@ class InvoiceService
     private function generateInvoiceNumber(): string
     {
         return 'INV-' . date('Ymd-His') . '-' . str_pad((string) random_int(0, 9999), 4, '0', STR_PAD_LEFT);
+    }
+
+    private function resolveHourlyRate(array $entry, array $data, ?array $clientRow = null): float
+    {
+        $rate = (float) ($entry['hourly_rate'] ?? 0);
+        if ($rate > 0) {
+            return $rate;
+        }
+
+        if (!empty($data['default_rate'])) {
+            return (float) $data['default_rate'];
+        }
+
+        if ($clientRow && !empty($clientRow['default_rate'])) {
+            return (float) $clientRow['default_rate'];
+        }
+
+        return 0;
     }
 }

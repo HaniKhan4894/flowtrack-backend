@@ -2,11 +2,12 @@ import { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { FileText, Plus, Download, Mail, MoreVertical, Search, Filter, CheckCircle2, Clock, X, ExternalLink, Sparkles } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Button } from '../../components/ui';
+import { Button, SearchableSelect } from '../../components/ui';
 import { invoiceService, type Invoice } from '../../api/invoiceService';
 import { clientService, type Client } from '../../api/clientService';
 import { projectService, type Project } from '../../api/projectService';
 import { getApiErrorMessage } from '../../utils/apiError';
+import { filterProjectsForClient } from '../../utils/projectFilters';
 
 const toNumber = (value: unknown): number => {
   const n = Number(value);
@@ -73,10 +74,29 @@ const InvoicesPage = () => {
       });
   }, [showCreateModal]);
 
-  const filteredProjects = useMemo(() => {
-    if (!form.client_id) return projects;
-    return projects.filter((p) => String(p.client_id ?? '') === form.client_id);
-  }, [projects, form.client_id]);
+  const filteredProjects = useMemo(
+    () => filterProjectsForClient(projects, clients, form.client_id),
+    [projects, clients, form.client_id],
+  );
+
+  const clientOptions = useMemo(
+    () => [
+      { value: '', label: 'Select existing client (optional)' },
+      ...clients.map((c) => ({
+        value: c.id,
+        label: `${c.name}${c.email ? ` · ${c.email}` : ''}`,
+      })),
+    ],
+    [clients],
+  );
+
+  const projectOptions = useMemo(
+    () => [
+      { value: '', label: 'No project / all projects' },
+      ...filteredProjects.map((p) => ({ value: p.id, label: p.name })),
+    ],
+    [filteredProjects],
+  );
 
   const fetchInvoices = async () => {
     try {
@@ -115,15 +135,19 @@ const InvoicesPage = () => {
     });
   };
 
-  const handleClientSelect = (clientId: string) => {
+  const applyClientSelection = (clientId: string) => {
     const selected = clients.find((c) => String(c.id) === clientId);
-    setForm((f) => ({
-      ...f,
-      client_id: clientId,
-      client_name: selected?.name ?? f.client_name,
-      client_email: selected?.email ?? f.client_email,
-      project_id: '',
-    }));
+    const nextProjects = filterProjectsForClient(projects, clients, clientId);
+    setForm((f) => {
+      const keepProject = nextProjects.some((p) => String(p.id) === f.project_id);
+      return {
+        ...f,
+        client_id: clientId,
+        client_name: selected?.name ?? f.client_name,
+        client_email: selected?.email ?? f.client_email,
+        project_id: keepProject ? f.project_id : '',
+      };
+    });
   };
 
   const handleCreateInvoice = async (e: React.FormEvent) => {
@@ -131,6 +155,7 @@ const InvoicesPage = () => {
     setIsCreating(true);
     setCreateError(null);
 
+    const selectedClient = clients.find((c) => String(c.id) === form.client_id);
     const payload = {
       client_name: form.client_name.trim(),
       client_email: form.client_email.trim() || undefined,
@@ -139,6 +164,7 @@ const InvoicesPage = () => {
       due_date: form.due_date,
       notes: form.notes.trim() || undefined,
       tax_rate: form.tax_rate ? Number(form.tax_rate) : undefined,
+      default_rate: selectedClient?.default_rate ?? undefined,
     };
 
     try {
@@ -185,7 +211,7 @@ const InvoicesPage = () => {
     }
   };
 
-  const inputClass = 'w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-primary-500/50';
+  const inputClass = 'form-field mt-1';
 
   return (
     <>
@@ -306,8 +332,17 @@ const InvoicesPage = () => {
     </div>
 
     {showCreateModal && (
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-        <form onSubmit={handleCreateInvoice} className="w-full max-w-xl glass-card border border-white/10 p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+      <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 modal-overlay">
+        <button
+          type="button"
+          aria-label="Close"
+          className="absolute inset-0"
+          onClick={() => setShowCreateModal(false)}
+        />
+        <form
+          onSubmit={handleCreateInvoice}
+          className="relative z-10 w-full max-w-xl modal-panel p-6 space-y-4 max-h-[90vh] overflow-y-auto"
+        >
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-xl font-bold text-white">Create Invoice</h3>
@@ -338,16 +373,15 @@ const InvoicesPage = () => {
 
           <div>
             <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Client</label>
-            <select
+            <SearchableSelect
               value={form.client_id}
-              onChange={(e) => handleClientSelect(e.target.value)}
-              className={`${inputClass} mt-1`}
-            >
-              <option value="">Select existing client (optional)</option>
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}{c.email ? ` · ${c.email}` : ''}</option>
-              ))}
-            </select>
+              onChange={(val) => applyClientSelection(String(val))}
+              options={clientOptions}
+              placeholder="Select existing client (optional)"
+              searchPlaceholder="Search clients…"
+              emptyMessage="No clients found"
+              className="mt-1"
+            />
           </div>
 
           <div className="grid sm:grid-cols-2 gap-3">
@@ -375,17 +409,20 @@ const InvoicesPage = () => {
 
           <div>
             <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Project</label>
-            <select
+            <SearchableSelect
               value={form.project_id}
-              onChange={(e) => setForm((f) => ({ ...f, project_id: e.target.value }))}
-              className={`${inputClass} mt-1`}
-            >
-              <option value="">No project / all projects</option>
-              {filteredProjects.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
-            <p className="text-[11px] text-slate-500 mt-1">Proof-of-Work Pack uses project time when linked.</p>
+              onChange={(val) => setForm((f) => ({ ...f, project_id: String(val) }))}
+              options={projectOptions}
+              placeholder="No project / all projects"
+              searchPlaceholder="Search projects…"
+              emptyMessage="No projects found"
+              className="mt-1"
+            />
+            <p className="text-[11px] text-slate-500 mt-1">
+              {form.client_id
+                ? 'Showing projects for this client (or all if none linked yet).'
+                : 'Proof-of-Work Pack uses project time when linked.'}
+            </p>
           </div>
 
           {createMode === 'from_time' && (
