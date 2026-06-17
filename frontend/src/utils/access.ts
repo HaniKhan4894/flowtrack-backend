@@ -161,3 +161,8 @@ export function canManageTeam(user: User | null | undefined): boolean {
 export function canViewMemberTracking(user: User | null | undefined): boolean {
   return hasAnyPermission(user, ['time.view_team', 'screenshots.view_team', 'activity.view_team', 'reports.view_team']);
 }
+
+/** Owner, admin, and manager only — used for unusual activity and org-wide oversight. */
+export function canViewUnusualActivity(user: User | null | undefined): boolean {
+  return isOrgAdmin(user);
+}

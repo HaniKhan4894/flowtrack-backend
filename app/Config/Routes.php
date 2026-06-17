@@ -244,6 +244,7 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\API\V1'], function ($r
         $routes->get('delivery-risks', 'InsightsController::deliveryRisks');
         $routes->get('sprints', 'InsightsController::sprints');
         $routes->post('sprints', 'InsightsController::createSprint');
+        $routes->get('unusual-activity', 'InsightsController::unusualActivity');
     });
 
     // Scheduled Reports

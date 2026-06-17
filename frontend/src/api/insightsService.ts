@@ -56,6 +56,48 @@ export interface DeliveryRisk {
   open_tasks?: number;
 }
 
+export type UnusualActivityTier = 'highly_unusual' | 'unusual' | 'slightly_unusual';
+
+export interface UnusualActivityInstance {
+  tier: UnusualActivityTier;
+  start_at: string;
+  end_at: string;
+  duration_seconds: number;
+  duration_minutes: number;
+  input_score: number;
+  baseline_median: number;
+  baseline_mean: number;
+  percentile: number;
+  top_app: string | null;
+}
+
+export interface UnusualActivityReport {
+  user: { id: number; name: string };
+  period: { start: string; end: string };
+  baseline_period: {
+    start: string;
+    end: string;
+    days: number;
+    sample_buckets: number;
+    ready: boolean;
+  };
+  summary: {
+    highly_unusual_count: number;
+    unusual_count: number;
+    slightly_unusual_count: number;
+    total_flagged_seconds: number;
+    total_flagged_hm: string;
+  };
+  previous_period: {
+    start: string;
+    end: string;
+    flagged_seconds: number;
+    flagged_hm: string;
+  };
+  instances: UnusualActivityInstance[];
+  tiers_filter: UnusualActivityTier[];
+}
+
 export const insightsService = {
   getWeeklySummary: async () => {
     const res = await client.get<{ data: WeeklySummary }>('/insights/weekly-summary');
@@ -89,6 +131,23 @@ export const insightsService = {
 
   createSprint: async (data: { name: string; start_date: string; end_date: string; project_id?: number }) => {
     const res = await client.post('/insights/sprints', data);
+    return res.data;
+  },
+
+  getUnusualActivity: async (params: {
+    user_id: number;
+    start_date?: string;
+    end_date?: string;
+    tiers?: UnusualActivityTier[];
+  }) => {
+    const res = await client.get<{ data: UnusualActivityReport }>('/insights/unusual-activity', {
+      params: {
+        user_id: params.user_id,
+        start_date: params.start_date,
+        end_date: params.end_date,
+        tiers: params.tiers?.join(','),
+      },
+    });
     return res.data;
   },
 };

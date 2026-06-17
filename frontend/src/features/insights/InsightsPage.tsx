@@ -9,17 +9,20 @@ import {
   TrendingUp,
   AlertTriangle,
   Users,
+  ShieldAlert,
 } from 'lucide-react';
 import { insightsService, type Benchmarks, type CoachSuggestion, type DeliveryRisk, type WeeklySummary, type WorkPatterns } from '../../api/insightsService';
-import { hasPermission } from '../../utils/access';
+import { hasPermission, canViewUnusualActivity } from '../../utils/access';
 import { useAuthStore } from '../../store/authStore';
 import { getApiErrorMessage } from '../../utils/apiError';
+import { UnusualActivityPanel } from './UnusualActivityPanel';
 
-type Tab = 'weekly' | 'benchmarks' | 'patterns' | 'coach' | 'risks';
+type Tab = 'weekly' | 'benchmarks' | 'patterns' | 'coach' | 'risks' | 'unusual';
 
 const InsightsPage = () => {
   const { user } = useAuthStore();
   const canViewTeam = hasPermission(user, 'reports.view_team');
+  const canViewUnusual = canViewUnusualActivity(user);
   const [tab, setTab] = useState<Tab>(canViewTeam ? 'weekly' : 'patterns');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -67,15 +70,20 @@ const InsightsPage = () => {
     load();
   }, [load]);
 
-  const tabs: { id: Tab; label: string; icon: typeof Sparkles; managerOnly?: boolean }[] = [
+  const tabs: { id: Tab; label: string; icon: typeof Sparkles; managerOnly?: boolean; ownerManagerOnly?: boolean }[] = [
     { id: 'weekly', label: 'Weekly Digest', icon: TrendingUp, managerOnly: true },
     { id: 'benchmarks', label: 'Benchmarks', icon: Gauge, managerOnly: true },
     { id: 'patterns', label: 'Work Patterns', icon: Brain },
     { id: 'coach', label: 'Productivity Coach', icon: Target },
     { id: 'risks', label: 'Delivery Risks', icon: AlertTriangle, managerOnly: true },
+    { id: 'unusual', label: 'Unusual Activity', icon: ShieldAlert, ownerManagerOnly: true },
   ];
 
-  const visibleTabs = tabs.filter((t) => !t.managerOnly || canViewTeam);
+  const visibleTabs = tabs.filter((t) => {
+    if (t.ownerManagerOnly) return canViewUnusual;
+    if (t.managerOnly) return canViewTeam;
+    return true;
+  });
 
   return (
     <div className="space-y-6">
@@ -244,6 +252,8 @@ const InsightsPage = () => {
             )}
           </motion.div>
         )}
+
+        {tab === 'unusual' && canViewUnusual && <UnusualActivityPanel />}
       </div>
   );
 };

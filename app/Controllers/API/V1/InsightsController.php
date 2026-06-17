@@ -5,11 +5,13 @@ namespace App\Controllers\API\V1;
 use App\Services\InsightsService;
 use App\Services\PermissionService;
 use App\Services\TeamScopeService;
+use App\Services\UnusualActivityService;
 use CodeIgniter\RESTful\ResourceController;
 
 class InsightsController extends ResourceController
 {
     protected InsightsService $insightsService;
+    protected UnusualActivityService $unusualActivityService;
     protected PermissionService $permissionService;
     protected TeamScopeService $teamScopeService;
     protected $format = 'json';
@@ -17,6 +19,7 @@ class InsightsController extends ResourceController
     public function __construct()
     {
         $this->insightsService = new InsightsService();
+        $this->unusualActivityService = new UnusualActivityService();
         $this->permissionService = new PermissionService();
         $this->teamScopeService = new TeamScopeService();
     }
@@ -135,6 +138,45 @@ class InsightsController extends ResourceController
         }
     }
 
+    public function unusualActivity()
+    {
+        try {
+            [$orgId, $userId] = $this->requireContext();
+            if ($response = $this->requireOrgWideViewer($orgId, $userId)) {
+                return $response;
+            }
+
+            $targetUserId = $this->resolveTargetUserId($orgId, $userId);
+            if ($targetUserId instanceof \CodeIgniter\HTTP\ResponseInterface) {
+                return $targetUserId;
+            }
+
+            $start = $this->request->getGet('start_date') ?? $this->request->getGet('start') ?? date('Y-m-d');
+            $end = $this->request->getGet('end_date') ?? $this->request->getGet('end') ?? $start;
+
+            $tiersParam = trim((string) ($this->request->getGet('tiers') ?? ''));
+            $allowedTiers = ['highly_unusual', 'unusual', 'slightly_unusual'];
+            $tiersFilter = $tiersParam !== ''
+                ? array_values(array_intersect(explode(',', $tiersParam), $allowedTiers))
+                : $allowedTiers;
+            if ($tiersFilter === []) {
+                $tiersFilter = $allowedTiers;
+            }
+
+            $data = $this->unusualActivityService->getUnusualActivity(
+                $orgId,
+                (int) $targetUserId,
+                (string) $start,
+                (string) $end,
+                $tiersFilter
+            );
+
+            return $this->respond(['success' => true, 'data' => $data]);
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+
     protected function requireContext(): array
     {
         $orgId = (int) ($this->request->getServer('FLOWTRACK_ORGANIZATION_ID') ?? 0);
@@ -154,6 +196,15 @@ class InsightsController extends ResourceController
         }
 
         return $this->failForbidden('Team report permission required');
+    }
+
+    protected function requireOrgWideViewer(int $orgId, int $userId)
+    {
+        if ($this->teamScopeService->isOrgWideViewer($userId, $orgId)) {
+            return null;
+        }
+
+        return $this->failForbidden('Manager or owner access required');
     }
 
     protected function resolveTargetUserId(int $orgId, int $userId)
