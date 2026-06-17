@@ -6,11 +6,13 @@ export interface Invoice {
     invoice_number: string;
     client_name: string;
     client_email?: string;
+    client_id?: number;
     project_name?: string;
     project_id?: number;
     amount?: number;
     subtotal?: number;
     tax_amount?: number;
+    tax_rate?: number;
     total?: number;
     status: 'draft' | 'sent' | 'pending_approval' | 'approved' | 'partially_paid' | 'paid' | 'cancelled' | 'overdue';
     issue_date: string;
@@ -41,8 +43,53 @@ export const invoiceService = {
         };
     },
 
-    create: async (data: any) => {
+    create: async (data: {
+        client_name: string;
+        client_email?: string;
+        client_id?: number;
+        project_id?: number;
+        due_date: string;
+        notes?: string;
+        tax_rate?: number;
+    }) => {
         const response = await client.post('/invoices', data);
+        return response.data;
+    },
+
+    generateFromTime: async (data: {
+        start_date: string;
+        end_date: string;
+        due_date: string;
+        client_name?: string;
+        client_email?: string;
+        client_id?: number;
+        project_id?: number;
+        tax_rate?: number;
+        notes?: string;
+        default_rate?: number;
+    }) => {
+        const response = await client.post('/invoices/generate-from-time', data);
+        return response.data;
+    },
+
+    update: async (
+        id: number,
+        data: Partial<{
+            client_name: string;
+            client_email: string | null;
+            client_id: number | null;
+            project_id: number | null;
+            due_date: string;
+            notes: string | null;
+            tax_rate: number;
+        }>,
+    ) => {
+        const response = await client.put(`/invoices/${id}`, data);
+        return response.data;
+    },
+
+    populateFromTime: async (id: number, data: { start_date: string; end_date: string; project_id?: number }) => {
+        const response = await client.post(`/invoices/${id}/populate-from-time`, data);
         return response.data;
     },
 

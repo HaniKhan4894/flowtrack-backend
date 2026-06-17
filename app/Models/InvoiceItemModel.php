@@ -13,7 +13,7 @@ class InvoiceItemModel extends Model
     protected $useSoftDeletes   = false;
     protected $protectFields    = true;
     protected $allowedFields    = [
-        'invoice_id', 'time_entry_id', 'description', 'quantity', 'unit_price', 'amount'
+        'invoice_id', 'time_entry_id', 'description', 'quantity', 'unit_price', 'amount', 'created_at',
     ];
 
     protected bool $allowEmptyInserts = false;

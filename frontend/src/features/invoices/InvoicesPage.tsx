@@ -1,10 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { FileText, Plus, Download, Mail, MoreVertical, Search, Filter, CheckCircle2, Clock, X, ExternalLink } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { FileText, Plus, Download, Mail, MoreVertical, Search, Filter, CheckCircle2, Clock, X, ExternalLink, Sparkles } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '../../components/ui';
-
 import { invoiceService, type Invoice } from '../../api/invoiceService';
+import { clientService, type Client } from '../../api/clientService';
+import { projectService, type Project } from '../../api/projectService';
+import { getApiErrorMessage } from '../../utils/apiError';
 
 const toNumber = (value: unknown): number => {
   const n = Number(value);
@@ -15,49 +17,151 @@ const invoiceAmount = (inv: Invoice): number => {
   return toNumber(inv.total ?? inv.amount ?? inv.subtotal ?? 0);
 };
 
+type CreateMode = 'manual' | 'from_time';
+
+const defaultDueDate = () => {
+  const d = new Date();
+  d.setDate(d.getDate() + 30);
+  return d.toISOString().slice(0, 10);
+};
+
+const defaultStartDate = () => {
+  const d = new Date();
+  d.setDate(1);
+  return d.toISOString().slice(0, 10);
+};
+
 const InvoicesPage = () => {
+  const navigate = useNavigate();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [stats, setStats] = useState({ total_invoiced: 0, paid_amount: 0, outstanding: 0 });
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
-  const [form, setForm] = useState({ client_name: '', due_date: '', notes: '' });
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [createMode, setCreateMode] = useState<CreateMode>('manual');
+  const [clients, setClients] = useState<Client[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [form, setForm] = useState({
+    client_id: '',
+    client_name: '',
+    client_email: '',
+    project_id: '',
+    due_date: defaultDueDate(),
+    start_date: defaultStartDate(),
+    end_date: new Date().toISOString().slice(0, 10),
+    tax_rate: '',
+    notes: '',
+  });
 
   useEffect(() => {
     fetchInvoices();
   }, []);
+
+  useEffect(() => {
+    if (!showCreateModal) return;
+    Promise.all([
+      clientService.getAll({ is_active: 1 }),
+      projectService.getAll({ is_active: 1 }),
+    ])
+      .then(([clientResp, projectResp]) => {
+        setClients(clientResp.data ?? []);
+        setProjects(projectResp.data ?? []);
+      })
+      .catch(() => {
+        setClients([]);
+        setProjects([]);
+      });
+  }, [showCreateModal]);
+
+  const filteredProjects = useMemo(() => {
+    if (!form.client_id) return projects;
+    return projects.filter((p) => String(p.client_id ?? '') === form.client_id);
+  }, [projects, form.client_id]);
 
   const fetchInvoices = async () => {
     try {
       const resp = await invoiceService.getAll();
       const records = resp.data ?? [];
       setInvoices(records);
-      
-      // Calculate stats on frontend
+
       const total = records.reduce((sum, inv) => sum + invoiceAmount(inv), 0);
-      const paid = records.filter(inv => inv.status === 'paid').reduce((sum, inv) => sum + invoiceAmount(inv), 0);
-      const outstanding = records.filter(inv => inv.status !== 'paid').reduce((sum, inv) => sum + invoiceAmount(inv), 0);
-      
+      const paid = records.filter((inv) => inv.status === 'paid').reduce((sum, inv) => sum + invoiceAmount(inv), 0);
+      const outstanding = records.filter((inv) => inv.status !== 'paid').reduce((sum, inv) => sum + invoiceAmount(inv), 0);
+
       setStats({
-          total_invoiced: total,
-          paid_amount: paid,
-          outstanding: outstanding
+        total_invoiced: total,
+        paid_amount: paid,
+        outstanding: outstanding,
       });
     } catch (e) {
       console.error(e);
       setInvoices([]);
-    } finally {
-      // no-op
     }
+  };
+
+  const resetForm = () => {
+    setCreateMode('manual');
+    setCreateError(null);
+    setForm({
+      client_id: '',
+      client_name: '',
+      client_email: '',
+      project_id: '',
+      due_date: defaultDueDate(),
+      start_date: defaultStartDate(),
+      end_date: new Date().toISOString().slice(0, 10),
+      tax_rate: '',
+      notes: '',
+    });
+  };
+
+  const handleClientSelect = (clientId: string) => {
+    const selected = clients.find((c) => String(c.id) === clientId);
+    setForm((f) => ({
+      ...f,
+      client_id: clientId,
+      client_name: selected?.name ?? f.client_name,
+      client_email: selected?.email ?? f.client_email,
+      project_id: '',
+    }));
   };
 
   const handleCreateInvoice = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsCreating(true);
+    setCreateError(null);
+
+    const payload = {
+      client_name: form.client_name.trim(),
+      client_email: form.client_email.trim() || undefined,
+      client_id: form.client_id ? Number(form.client_id) : undefined,
+      project_id: form.project_id ? Number(form.project_id) : undefined,
+      due_date: form.due_date,
+      notes: form.notes.trim() || undefined,
+      tax_rate: form.tax_rate ? Number(form.tax_rate) : undefined,
+    };
+
     try {
-      await invoiceService.create(form);
+      let resp;
+      if (createMode === 'from_time') {
+        resp = await invoiceService.generateFromTime({
+          ...payload,
+          start_date: form.start_date,
+          end_date: form.end_date,
+        });
+      } else {
+        resp = await invoiceService.create(payload);
+      }
+
+      const invoiceId = resp.data?.id;
       setShowCreateModal(false);
-      setForm({ client_name: '', due_date: '', notes: '' });
+      resetForm();
       await fetchInvoices();
+      if (invoiceId) {
+        navigate(`/invoices/${invoiceId}`);
+      }
+    } catch (err) {
+      setCreateError(getApiErrorMessage(err, 'Failed to create invoice'));
     } finally {
       setIsCreating(false);
     }
@@ -81,6 +185,8 @@ const InvoicesPage = () => {
     }
   };
 
+  const inputClass = 'w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-primary-500/50';
+
   return (
     <>
     <div className="space-y-8">
@@ -92,21 +198,20 @@ const InvoicesPage = () => {
           </h1>
           <p className="text-slate-400">Manage client billing and track payment status.</p>
         </div>
-        
-        <Button onClick={() => setShowCreateModal(true)}>
+
+        <Button onClick={() => { resetForm(); setShowCreateModal(true); }}>
           <Plus className="w-4 h-4 mr-2" />
           Create Invoice
         </Button>
       </div>
 
-      {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {[
           { label: 'Total Invoiced', value: `$${stats.total_invoiced.toLocaleString()}`, trend: '+12%', icon: FileText, color: 'primary' },
           { label: 'Paid Amount', value: `$${stats.paid_amount.toLocaleString()}`, trend: '23%', icon: CheckCircle2, color: 'green' },
           { label: 'Outstanding', value: `$${stats.outstanding.toLocaleString()}`, trend: '77%', icon: Clock, color: 'yellow' },
         ].map((stat, i) => (
-          <motion.div 
+          <motion.div
             key={stat.label}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -125,7 +230,6 @@ const InvoicesPage = () => {
         ))}
       </div>
 
-      {/* Invoice Table */}
       <div className="glass-card p-0 overflow-hidden">
         <div className="p-6 border-b border-white/5 flex items-center justify-between">
           <h3 className="font-bold text-white">Recent Invoices</h3>
@@ -200,36 +304,161 @@ const InvoicesPage = () => {
         </div>
       </div>
     </div>
+
     {showCreateModal && (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-        <form onSubmit={handleCreateInvoice} className="w-full max-w-lg glass-card border border-white/10 p-6 space-y-4">
+        <form onSubmit={handleCreateInvoice} className="w-full max-w-xl glass-card border border-white/10 p-6 space-y-4 max-h-[90vh] overflow-y-auto">
           <div className="flex items-center justify-between">
-            <h3 className="text-xl font-bold text-white">Create Invoice</h3>
+            <div>
+              <h3 className="text-xl font-bold text-white">Create Invoice</h3>
+              <p className="text-xs text-slate-500 mt-1">Link a client, add billing details, or pull tracked hours.</p>
+            </div>
             <button type="button" onClick={() => setShowCreateModal(false)} className="text-slate-500 hover:text-white">
               <X size={20} />
             </button>
           </div>
-          <input
-            required
-            placeholder="Client name"
-            value={form.client_name}
-            onChange={(e) => setForm((f) => ({ ...f, client_name: e.target.value }))}
-            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white outline-none"
-          />
-          <input
-            required
-            type="date"
-            value={form.due_date}
-            onChange={(e) => setForm((f) => ({ ...f, due_date: e.target.value }))}
-            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white outline-none"
-          />
-          <textarea
-            placeholder="Invoice notes"
-            value={form.notes}
-            onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white outline-none min-h-28"
-          />
-          <Button type="submit" isLoading={isCreating} className="w-full">Create</Button>
+
+          <div className="grid grid-cols-2 gap-2 p-1 rounded-xl bg-white/5 border border-white/10">
+            {([
+              ['manual', 'Blank invoice'],
+              ['from_time', 'From tracked time'],
+            ] as const).map(([mode, label]) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setCreateMode(mode)}
+                className={`rounded-lg px-3 py-2 text-sm font-medium transition ${
+                  createMode === mode ? 'bg-primary-500 text-white' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Client</label>
+            <select
+              value={form.client_id}
+              onChange={(e) => handleClientSelect(e.target.value)}
+              className={`${inputClass} mt-1`}
+            >
+              <option value="">Select existing client (optional)</option>
+              {clients.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}{c.email ? ` · ${c.email}` : ''}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Client name *</label>
+              <input
+                required
+                placeholder="Client name"
+                value={form.client_name}
+                onChange={(e) => setForm((f) => ({ ...f, client_name: e.target.value }))}
+                className={`${inputClass} mt-1`}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Client email</label>
+              <input
+                type="email"
+                placeholder="Required to send invoice"
+                value={form.client_email}
+                onChange={(e) => setForm((f) => ({ ...f, client_email: e.target.value }))}
+                className={`${inputClass} mt-1`}
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Project</label>
+            <select
+              value={form.project_id}
+              onChange={(e) => setForm((f) => ({ ...f, project_id: e.target.value }))}
+              className={`${inputClass} mt-1`}
+            >
+              <option value="">No project / all projects</option>
+              {filteredProjects.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+            <p className="text-[11px] text-slate-500 mt-1">Proof-of-Work Pack uses project time when linked.</p>
+          </div>
+
+          {createMode === 'from_time' && (
+            <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 space-y-3">
+              <p className="text-sm font-medium text-emerald-300 flex items-center gap-2">
+                <Sparkles className="w-4 h-4" />
+                Pull billable hours into line items automatically
+              </p>
+              <div className="grid sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Period start *</label>
+                  <input
+                    required
+                    type="date"
+                    value={form.start_date}
+                    onChange={(e) => setForm((f) => ({ ...f, start_date: e.target.value }))}
+                    className={`${inputClass} mt-1`}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Period end *</label>
+                  <input
+                    required
+                    type="date"
+                    value={form.end_date}
+                    onChange={(e) => setForm((f) => ({ ...f, end_date: e.target.value }))}
+                    className={`${inputClass} mt-1`}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="grid sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Due date *</label>
+              <input
+                required
+                type="date"
+                value={form.due_date}
+                onChange={(e) => setForm((f) => ({ ...f, due_date: e.target.value }))}
+                className={`${inputClass} mt-1`}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Tax rate %</label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="0"
+                value={form.tax_rate}
+                onChange={(e) => setForm((f) => ({ ...f, tax_rate: e.target.value }))}
+                className={`${inputClass} mt-1`}
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Notes</label>
+            <textarea
+              placeholder="Invoice notes"
+              value={form.notes}
+              onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
+              className={`${inputClass} mt-1 min-h-24`}
+            />
+          </div>
+
+          {createError && <p className="text-sm text-rose-400">{createError}</p>}
+
+          <Button type="submit" isLoading={isCreating} className="w-full">
+            {createMode === 'from_time' ? 'Generate invoice from time' : 'Create & open invoice'}
+          </Button>
         </form>
       </div>
     )}

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
@@ -11,12 +11,18 @@ import {
   CheckCircle2,
   Copy,
   ExternalLink,
+  ShieldCheck,
+  Sparkles,
+  Pencil,
 } from 'lucide-react';
 import { Button } from '../../components/ui';
 import { invoiceService, type Invoice } from '../../api/invoiceService';
+import { clientService, type Client } from '../../api/clientService';
+import { projectService, type Project } from '../../api/projectService';
 import { hasPermission } from '../../utils/access';
 import { useAuthStore } from '../../store/authStore';
 import { getApiErrorMessage } from '../../utils/apiError';
+import { formatApiDate } from '../../utils/date';
 
 const toNumber = (value: unknown): number => {
   const n = Number(value);
@@ -33,12 +39,35 @@ const InvoiceDetailPage = () => {
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [showAddItem, setShowAddItem] = useState(false);
+  const [showEditMeta, setShowEditMeta] = useState(false);
+  const [showGenerateTime, setShowGenerateTime] = useState(false);
   const [itemForm, setItemForm] = useState({ description: '', quantity: '1', unit_price: '' });
+  const [metaForm, setMetaForm] = useState({
+    client_name: '',
+    client_email: '',
+    client_id: '',
+    project_id: '',
+    due_date: '',
+    tax_rate: '',
+    notes: '',
+  });
+  const [timeForm, setTimeForm] = useState({
+    start_date: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10),
+    end_date: new Date().toISOString().slice(0, 10),
+  });
+  const [clients, setClients] = useState<Client[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [portalUrl, setPortalUrl] = useState<string | null>(null);
   const [payments, setPayments] = useState<{ id: number; amount: number; method: string; reference?: string; paid_at: string }[]>([]);
 
   const canEdit = hasPermission(user, 'invoices.edit');
   const canSend = hasPermission(user, 'invoices.send');
+  const isDraft = invoice?.status === 'draft';
+
+  const filteredProjects = useMemo(() => {
+    if (!metaForm.client_id) return projects;
+    return projects.filter((p) => String(p.client_id ?? '') === metaForm.client_id);
+  }, [projects, metaForm.client_id]);
 
   const load = async () => {
     if (!invoiceId) return;
@@ -47,6 +76,15 @@ const InvoiceDetailPage = () => {
     try {
       const resp = await invoiceService.getById(invoiceId);
       setInvoice(resp.data);
+      setMetaForm({
+        client_name: resp.data.client_name ?? '',
+        client_email: resp.data.client_email ?? '',
+        client_id: resp.data.client_id ? String(resp.data.client_id) : '',
+        project_id: resp.data.project_id ? String(resp.data.project_id) : '',
+        due_date: resp.data.due_date?.slice(0, 10) ?? '',
+        tax_rate: resp.data.tax_rate != null ? String(toNumber(resp.data.tax_rate)) : '',
+        notes: resp.data.notes ?? '',
+      });
       if (resp.data.status !== 'draft' && resp.data.status !== 'cancelled') {
         try {
           const portal = await invoiceService.getPortalLink(invoiceId);
@@ -57,6 +95,9 @@ const InvoiceDetailPage = () => {
           setPortalUrl(null);
           setPayments([]);
         }
+      } else {
+        setPortalUrl(null);
+        setPayments([]);
       }
     } catch (e) {
       setError(getApiErrorMessage(e, 'Failed to load invoice'));
@@ -70,9 +111,24 @@ const InvoiceDetailPage = () => {
     load();
   }, [invoiceId]);
 
+  useEffect(() => {
+    if (!showEditMeta && !showGenerateTime) return;
+    Promise.all([
+      clientService.getAll({ is_active: 1 }),
+      projectService.getAll({ is_active: 1 }),
+    ]).then(([clientResp, projectResp]) => {
+      setClients(clientResp.data ?? []);
+      setProjects(projectResp.data ?? []);
+    }).catch(() => {
+      setClients([]);
+      setProjects([]);
+    });
+  }, [showEditMeta, showGenerateTime]);
+
   const handleAddItem = async (e: React.FormEvent) => {
     e.preventDefault();
     setActionLoading(true);
+    setError(null);
     try {
       await invoiceService.addItem(invoiceId, {
         description: itemForm.description,
@@ -89,8 +145,56 @@ const InvoiceDetailPage = () => {
     }
   };
 
-  const handleSend = async () => {
+  const handleUpdateMeta = async (e: React.FormEvent) => {
+    e.preventDefault();
     setActionLoading(true);
+    setError(null);
+    try {
+      await invoiceService.update(invoiceId, {
+        client_name: metaForm.client_name.trim(),
+        client_email: metaForm.client_email.trim() || null,
+        client_id: metaForm.client_id ? Number(metaForm.client_id) : null,
+        project_id: metaForm.project_id ? Number(metaForm.project_id) : null,
+        due_date: metaForm.due_date,
+        notes: metaForm.notes.trim() || null,
+        tax_rate: metaForm.tax_rate ? Number(metaForm.tax_rate) : 0,
+      });
+      setShowEditMeta(false);
+      await load();
+    } catch (e) {
+      setError(getApiErrorMessage(e, 'Failed to update invoice'));
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleGenerateFromTime = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setActionLoading(true);
+    setError(null);
+    try {
+      await invoiceService.populateFromTime(invoiceId, {
+        start_date: timeForm.start_date,
+        end_date: timeForm.end_date,
+        project_id: invoice?.project_id,
+      });
+      setShowGenerateTime(false);
+      await load();
+    } catch (e) {
+      setError(getApiErrorMessage(e, 'No billable time found for this period'));
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleSend = async () => {
+    if (!invoice?.client_email) {
+      setError('Client email is required before sending. Edit invoice details to add an email.');
+      setShowEditMeta(true);
+      return;
+    }
+    setActionLoading(true);
+    setError(null);
     try {
       await invoiceService.send(invoiceId);
       await load();
@@ -123,6 +227,8 @@ const InvoiceDetailPage = () => {
       setActionLoading(false);
     }
   };
+
+  const inputClass = 'w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-primary-500/50';
 
   if (loading) {
     return (
@@ -160,11 +266,20 @@ const InvoiceDetailPage = () => {
           </h1>
           <p className="text-slate-400 mt-2">
             {invoice.client_name}
-            {invoice.client_email ? ` · ${invoice.client_email}` : ''}
+            {invoice.client_email ? ` · ${invoice.client_email}` : ' · no client email yet'}
           </p>
+          {invoice.project_name && (
+            <p className="text-sm text-slate-500 mt-1">Project: {invoice.project_name}</p>
+          )}
         </div>
 
         <div className="flex flex-wrap gap-3">
+          {canEdit && isDraft && (
+            <Button variant="secondary" onClick={() => setShowEditMeta(true)} className="!rounded-xl">
+              <Pencil size={16} className="mr-2" />
+              Edit details
+            </Button>
+          )}
           <Button variant="secondary" onClick={handleDownloadPdf} isLoading={actionLoading} className="!rounded-xl">
             <Download size={16} className="mr-2" />
             PDF
@@ -181,6 +296,12 @@ const InvoiceDetailPage = () => {
               Mark paid
             </Button>
           )}
+          {canEdit && isDraft && (
+            <Button variant="secondary" onClick={() => setShowGenerateTime(true)} className="!rounded-xl">
+              <Sparkles size={16} className="mr-2" />
+              From time
+            </Button>
+          )}
           {canEdit && (
             <Button variant="secondary" onClick={() => setShowAddItem(true)} className="!rounded-xl">
               <Plus size={16} className="mr-2" />
@@ -191,6 +312,18 @@ const InvoiceDetailPage = () => {
       </div>
 
       {error && <p className="text-rose-400 text-sm">{error}</p>}
+
+      {isDraft && items.length === 0 && (
+        <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-amber-100">
+          This invoice is still a draft with <strong>$0</strong>. Add line items manually, or use <strong>From time</strong> to pull billable hours automatically.
+        </div>
+      )}
+
+      {!invoice.client_email && isDraft && (
+        <div className="rounded-2xl border border-rose-500/20 bg-rose-500/5 p-4 text-sm text-rose-100">
+          Add a <strong>client email</strong> before sending — the client portal and Proof-of-Work Pack are delivered by email.
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="glass-card lg:col-span-2 p-0 overflow-hidden">
@@ -232,15 +365,15 @@ const InvoiceDetailPage = () => {
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="glass-card space-y-4">
           <div>
             <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Status</p>
-            <p className="text-lg font-bold text-white capitalize mt-1">{invoice.status}</p>
+            <p className="text-lg font-bold text-white capitalize mt-1">{invoice.status.replace('_', ' ')}</p>
           </div>
           <div>
             <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Issue date</p>
-            <p className="text-white mt-1">{new Date(invoice.issue_date).toLocaleDateString()}</p>
+            <p className="text-white mt-1">{formatApiDate(invoice.issue_date)}</p>
           </div>
           <div>
             <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Due date</p>
-            <p className="text-white mt-1">{new Date(invoice.due_date).toLocaleDateString()}</p>
+            <p className="text-white mt-1">{formatApiDate(invoice.due_date)}</p>
           </div>
           <div className="pt-4 border-t border-white/10">
             <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Subtotal</p>
@@ -263,6 +396,9 @@ const InvoiceDetailPage = () => {
           {portalUrl && (
             <div className="pt-4 border-t border-white/10 space-y-2">
               <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Client portal</p>
+              <p className="text-xs text-emerald-300 flex items-center gap-1">
+                <ShieldCheck size={12} /> Includes Proof-of-Work Pack
+              </p>
               <a href={portalUrl} target="_blank" rel="noreferrer" className="text-sm text-primary-400 hover:underline inline-flex items-center gap-1 break-all">
                 <ExternalLink size={14} /> Open portal
               </a>
@@ -274,12 +410,12 @@ const InvoiceDetailPage = () => {
                 <Copy size={12} /> Copy link for client
               </button>
               {invoice.client_approved_at && (
-                <p className="text-xs text-emerald-400">Client approved {new Date(invoice.client_approved_at).toLocaleDateString()}</p>
+                <p className="text-xs text-emerald-400">Client approved {formatApiDate(invoice.client_approved_at)}</p>
               )}
               {payments.length > 0 && (
                 <ul className="text-xs text-slate-300 space-y-1 mt-2">
                   {payments.map((p) => (
-                    <li key={p.id}>{new Date(p.paid_at).toLocaleDateString()} — ${Number(p.amount).toFixed(2)}</li>
+                    <li key={p.id}>{formatApiDate(p.paid_at)} — ${Number(p.amount).toFixed(2)}</li>
                   ))}
                 </ul>
               )}
@@ -297,7 +433,7 @@ const InvoiceDetailPage = () => {
               placeholder="Description"
               value={itemForm.description}
               onChange={(e) => setItemForm((f) => ({ ...f, description: e.target.value }))}
-              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white outline-none"
+              className={inputClass}
             />
             <div className="grid grid-cols-2 gap-3">
               <input
@@ -305,20 +441,20 @@ const InvoiceDetailPage = () => {
                 type="number"
                 min="0"
                 step="0.01"
-                placeholder="Quantity"
+                placeholder="Quantity (hours)"
                 value={itemForm.quantity}
                 onChange={(e) => setItemForm((f) => ({ ...f, quantity: e.target.value }))}
-                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white outline-none"
+                className={inputClass}
               />
               <input
                 required
                 type="number"
                 min="0"
                 step="0.01"
-                placeholder="Unit price"
+                placeholder="Unit price ($)"
                 value={itemForm.unit_price}
                 onChange={(e) => setItemForm((f) => ({ ...f, unit_price: e.target.value }))}
-                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white outline-none"
+                className={inputClass}
               />
             </div>
             <div className="flex gap-3">
@@ -328,6 +464,65 @@ const InvoiceDetailPage = () => {
               <Button type="submit" className="flex-1" isLoading={actionLoading}>
                 Add
               </Button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {showEditMeta && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <form onSubmit={handleUpdateMeta} className="w-full max-w-lg glass-card border border-white/10 p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-bold text-white">Edit invoice details</h3>
+            <select
+              value={metaForm.client_id}
+              onChange={(e) => {
+                const selected = clients.find((c) => String(c.id) === e.target.value);
+                setMetaForm((f) => ({
+                  ...f,
+                  client_id: e.target.value,
+                  client_name: selected?.name ?? f.client_name,
+                  client_email: selected?.email ?? f.client_email,
+                  project_id: '',
+                }));
+              }}
+              className={inputClass}
+            >
+              <option value="">Link to client record (optional)</option>
+              {clients.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+            <input required value={metaForm.client_name} onChange={(e) => setMetaForm((f) => ({ ...f, client_name: e.target.value }))} placeholder="Client name" className={inputClass} />
+            <input type="email" value={metaForm.client_email} onChange={(e) => setMetaForm((f) => ({ ...f, client_email: e.target.value }))} placeholder="Client email (required to send)" className={inputClass} />
+            <select value={metaForm.project_id} onChange={(e) => setMetaForm((f) => ({ ...f, project_id: e.target.value }))} className={inputClass}>
+              <option value="">No project</option>
+              {filteredProjects.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+            <div className="grid grid-cols-2 gap-3">
+              <input required type="date" value={metaForm.due_date} onChange={(e) => setMetaForm((f) => ({ ...f, due_date: e.target.value }))} className={inputClass} />
+              <input type="number" min="0" step="0.01" placeholder="Tax rate %" value={metaForm.tax_rate} onChange={(e) => setMetaForm((f) => ({ ...f, tax_rate: e.target.value }))} className={inputClass} />
+            </div>
+            <textarea value={metaForm.notes} onChange={(e) => setMetaForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Notes" className={`${inputClass} min-h-24`} />
+            <div className="flex gap-3">
+              <Button variant="secondary" type="button" className="flex-1" onClick={() => setShowEditMeta(false)}>Cancel</Button>
+              <Button type="submit" className="flex-1" isLoading={actionLoading}>Save</Button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {showGenerateTime && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <form onSubmit={handleGenerateFromTime} className="w-full max-w-md glass-card border border-white/10 p-6 space-y-4">
+            <h3 className="text-lg font-bold text-white">Generate from tracked time</h3>
+            <p className="text-sm text-slate-400">Adds line items from billable hours in the selected period to this draft invoice.</p>
+            <input required type="date" value={timeForm.start_date} onChange={(e) => setTimeForm((f) => ({ ...f, start_date: e.target.value }))} className={inputClass} />
+            <input required type="date" value={timeForm.end_date} onChange={(e) => setTimeForm((f) => ({ ...f, end_date: e.target.value }))} className={inputClass} />
+            <div className="flex gap-3">
+              <Button variant="secondary" type="button" className="flex-1" onClick={() => setShowGenerateTime(false)}>Cancel</Button>
+              <Button type="submit" className="flex-1" isLoading={actionLoading}>Generate</Button>
             </div>
           </form>
         </div>

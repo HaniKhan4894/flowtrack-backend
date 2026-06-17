@@ -104,6 +104,100 @@ class InvoiceController extends ResourceController
     }
 
     /**
+     * POST /api/v1/invoices/generate-from-time
+     */
+    public function generateFromTime()
+    {
+        try {
+            $organizationId = (int) ($this->request->getServer('FLOWTRACK_ORGANIZATION_ID') ?? 0);
+            $createdBy = (int) ($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
+            if (!$organizationId || !$createdBy) {
+                return $this->fail('Unauthorized', 401);
+            }
+
+            $data = $this->request->getJSON(true) ?? [];
+
+            $rules = [
+                'start_date' => 'required|valid_date',
+                'end_date' => 'required|valid_date',
+                'due_date' => 'required|valid_date',
+            ];
+
+            if (!$this->validate($rules)) {
+                return $this->failValidationErrors($this->validator->getErrors());
+            }
+
+            $invoice = $this->invoiceService->generateFromTimeEntries($organizationId, $createdBy, $data);
+
+            return $this->respondCreated([
+                'success' => true,
+                'message' => 'Invoice generated from tracked time',
+                'data' => $invoice,
+            ]);
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+
+    /**
+     * POST /api/v1/invoices/{id}/populate-from-time
+     */
+    public function populateFromTime($id = null)
+    {
+        try {
+            $organizationId = (int) ($this->request->getServer('FLOWTRACK_ORGANIZATION_ID') ?? 0);
+            if (!$organizationId) {
+                return $this->fail('Unauthorized', 401);
+            }
+
+            $data = $this->request->getJSON(true) ?? [];
+
+            $rules = [
+                'start_date' => 'required|valid_date',
+                'end_date' => 'required|valid_date',
+            ];
+
+            if (!$this->validate($rules)) {
+                return $this->failValidationErrors($this->validator->getErrors());
+            }
+
+            $invoice = $this->invoiceService->populateFromTimeEntries((int) $id, $organizationId, $data);
+
+            return $this->respond([
+                'success' => true,
+                'message' => 'Invoice populated from tracked time',
+                'data' => $invoice,
+            ]);
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+
+    /**
+     * PUT /api/v1/invoices/{id}
+     */
+    public function update($id = null)
+    {
+        try {
+            $organizationId = (int) ($this->request->getServer('FLOWTRACK_ORGANIZATION_ID') ?? 0);
+            if (!$organizationId) {
+                return $this->fail('Unauthorized', 401);
+            }
+
+            $data = $this->request->getJSON(true) ?? [];
+            $invoice = $this->invoiceService->updateInvoice((int) $id, $organizationId, $data);
+
+            return $this->respond([
+                'success' => true,
+                'message' => 'Invoice updated successfully',
+                'data' => $invoice,
+            ]);
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+
+    /**
      * POST /api/v1/invoices/{id}/items
      */
     public function addItem($id = null)

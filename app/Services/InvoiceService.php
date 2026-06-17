@@ -97,9 +97,41 @@ class InvoiceService
         $itemData['amount'] = $quantity * $unitPrice;
 
         $itemId = $this->invoiceItemModel->insert($itemData);
+        if (!$itemId) {
+            throw new \RuntimeException('Failed to add invoice item: ' . json_encode($this->invoiceItemModel->errors()));
+        }
+
         $this->recalculateInvoice($invoiceId);
 
         return $this->invoiceItemModel->find($itemId);
+    }
+
+    public function updateInvoice(int $invoiceId, int $organizationId, array $data): array
+    {
+        $invoice = $this->invoiceModel->find($invoiceId);
+        if (!$invoice || (int) $invoice['organization_id'] !== $organizationId) {
+            throw new \Exception('Invoice not found');
+        }
+
+        if (in_array($invoice['status'], ['paid', 'cancelled'], true)) {
+            throw new \Exception('Invoice cannot be edited in current status');
+        }
+
+        $update = [];
+        foreach (['client_name', 'client_email', 'client_id', 'project_id', 'due_date', 'notes', 'tax_rate', 'currency'] as $field) {
+            if (array_key_exists($field, $data)) {
+                $update[$field] = $data[$field];
+            }
+        }
+
+        if (!empty($update)) {
+            $this->invoiceModel->update($invoiceId, $update);
+            if (array_key_exists('tax_rate', $update)) {
+                $this->recalculateInvoice($invoiceId);
+            }
+        }
+
+        return $this->getInvoiceById($invoiceId) ?? throw new \Exception('Invoice not found');
     }
 
     public function generateFromTimeEntries(int $organizationId, int $createdBy, array $data): array
@@ -165,16 +197,33 @@ class InvoiceService
         }
 
         $clientName = $data['client_name'] ?? 'Client';
+        $clientEmail = $data['client_email'] ?? null;
+        $clientId = !empty($data['client_id']) ? (int) $data['client_id'] : null;
+
+        if ($clientId) {
+            $clientRow = $this->db->table('clients')->where('id', $clientId)->get()->getRowArray();
+            if ($clientRow) {
+                $clientName = $clientRow['name'] ?? $clientName;
+                $clientEmail = $clientEmail ?: ($clientRow['email'] ?? null);
+            }
+        }
+
         if (!empty($data['project_id'])) {
             $project = $this->projectModel->find((int) $data['project_id']);
-            if ($project && !empty($project['client_name'])) {
-                $clientName = $project['client_name'];
+            if ($project) {
+                if (!empty($project['client_name'])) {
+                    $clientName = $project['client_name'];
+                }
+                if (!$clientId && !empty($project['client_id'])) {
+                    $clientId = (int) $project['client_id'];
+                }
             }
         }
 
         return $this->createInvoice($organizationId, $createdBy, [
             'client_name' => $clientName,
-            'client_email' => $data['client_email'] ?? null,
+            'client_email' => $clientEmail,
+            'client_id' => $clientId,
             'project_id' => $data['project_id'] ?? null,
             'tax_rate' => $data['tax_rate'] ?? 0,
             'currency' => $data['currency'] ?? 'USD',
@@ -183,6 +232,81 @@ class InvoiceService
             'notes' => $data['notes'] ?? null,
             'items' => $items,
         ]);
+    }
+
+    public function populateFromTimeEntries(int $invoiceId, int $organizationId, array $data): array
+    {
+        $invoice = $this->invoiceModel->find($invoiceId);
+        if (!$invoice || (int) $invoice['organization_id'] !== $organizationId) {
+            throw new \Exception('Invoice not found');
+        }
+
+        if ($invoice['status'] !== 'draft') {
+            throw new \Exception('Only draft invoices can be populated from tracked time');
+        }
+
+        $startDate = $data['start_date'] ?? null;
+        $endDate = $data['end_date'] ?? null;
+        if (!$startDate || !$endDate) {
+            throw new \Exception('start_date and end_date are required');
+        }
+
+        $phpTz = $this->timezoneService->getOrgTimezone($organizationId);
+        [$startUtc, $endUtc] = $this->timezoneService->dateRangeUtc($startDate, $endDate, $phpTz);
+
+        $builder = $this->timeEntryModel->builder();
+        $builder->where('organization_id', $organizationId)
+            ->where('is_billable', 1)
+            ->where('ended_at IS NOT NULL')
+            ->where('started_at >=', $startUtc)
+            ->where('started_at <=', $endUtc);
+
+        $projectId = $data['project_id'] ?? $invoice['project_id'] ?? null;
+        if (!empty($projectId)) {
+            $builder->where('project_id', (int) $projectId);
+        }
+
+        if (!empty($data['user_id'])) {
+            $builder->where('user_id', (int) $data['user_id']);
+        }
+
+        $entries = $builder->orderBy('started_at', 'ASC')->get()->getResultArray();
+        if (empty($entries)) {
+            throw new \Exception('No billable time entries found for the selected period');
+        }
+
+        $grouped = [];
+        foreach ($entries as $entry) {
+            $entryProjectId = (int) ($entry['project_id'] ?? 0);
+            $rate = (float) ($entry['hourly_rate'] ?? $data['default_rate'] ?? 0);
+            $key = $entryProjectId . ':' . $rate;
+            if (!isset($grouped[$key])) {
+                $project = $entryProjectId ? $this->projectModel->find($entryProjectId) : null;
+                $grouped[$key] = [
+                    'description' => ($project['name'] ?? 'General') . ' — tracked time',
+                    'quantity' => 0,
+                    'unit_price' => $rate,
+                    'time_entry_id' => null,
+                ];
+            }
+            $hours = round(((int) ($entry['duration_seconds'] ?? 0)) / 3600, 2);
+            $grouped[$key]['quantity'] += $hours;
+            $grouped[$key]['time_entry_id'] = $grouped[$key]['time_entry_id'] ?? $entry['id'];
+        }
+
+        foreach ($grouped as $group) {
+            if ($group['quantity'] <= 0) {
+                continue;
+            }
+            $this->addInvoiceItem($invoiceId, [
+                'description' => $group['description'],
+                'quantity' => round($group['quantity'], 2),
+                'unit_price' => $group['unit_price'],
+                'time_entry_id' => $group['time_entry_id'],
+            ]);
+        }
+
+        return $this->getInvoiceById($invoiceId) ?? throw new \Exception('Invoice not found');
     }
 
     public function sendInvoice(int $invoiceId, int $organizationId, int $sentBy): array
@@ -286,6 +410,16 @@ class InvoiceService
 
         if ($invoice) {
             $invoice['items'] = $this->invoiceItemModel->where('invoice_id', $id)->findAll();
+
+            if (!empty($invoice['project_id'])) {
+                $project = $this->projectModel->find((int) $invoice['project_id']);
+                $invoice['project_name'] = $project['name'] ?? null;
+            }
+
+            if (!empty($invoice['client_id'])) {
+                $client = $this->db->table('clients')->where('id', (int) $invoice['client_id'])->get()->getRowArray();
+                $invoice['client_ref_name'] = $client['name'] ?? null;
+            }
         }
 
         return $invoice;
@@ -323,7 +457,13 @@ class InvoiceService
         $offset = ($page - 1) * $perPage;
 
         $total = $builder->countAllResults(false);
-        $invoices = $builder->orderBy('created_at', 'DESC')->limit($perPage, $offset)->get()->getResultArray();
+        $invoices = $builder
+            ->select('invoices.*, projects.name as project_name')
+            ->join('projects', 'projects.id = invoices.project_id', 'left')
+            ->orderBy('invoices.created_at', 'DESC')
+            ->limit($perPage, $offset)
+            ->get()
+            ->getResultArray();
 
         return [
             'data' => $invoices,

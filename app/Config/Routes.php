@@ -155,9 +155,12 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\API\V1'], function ($r
     // Invoice Routes
     $routes->group('invoices', ['filter' => ['auth', 'planFeature:invoicing']], function ($routes) {
         $routes->get('/', 'InvoiceController::index', ['filter' => 'permission:invoices.view']);
+        $routes->post('generate-from-time', 'InvoiceController::generateFromTime', ['filter' => 'permission:invoices.create']);
         $routes->post('/', 'InvoiceController::create', ['filter' => 'permission:invoices.create']);
         $routes->get('(:num)/pdf', 'InvoiceController::pdf/$1', ['filter' => 'permission:invoices.view']);
         $routes->get('(:num)', 'InvoiceController::show/$1', ['filter' => 'permission:invoices.view']);
+        $routes->put('(:num)', 'InvoiceController::update/$1', ['filter' => 'permission:invoices.edit']);
+        $routes->post('(:num)/populate-from-time', 'InvoiceController::populateFromTime/$1', ['filter' => 'permission:invoices.edit']);
         $routes->post('(:num)/items', 'InvoiceController::addItem/$1', ['filter' => 'permission:invoices.edit']);
         $routes->put('(:num)/status', 'InvoiceController::updateStatus/$1', ['filter' => 'permission:invoices.edit']);
         $routes->post('(:num)/send', 'InvoiceController::send/$1', ['filter' => 'permission:invoices.send']);
