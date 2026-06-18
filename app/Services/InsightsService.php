@@ -479,7 +479,7 @@ class InsightsService
             ->orderBy('total_seconds', 'DESC')
             ->limit($limit);
 
-        if ($userIds !== null) {
+        if ($userIds !== null && count($userIds) > 0) {
             $builder->whereIn('time_entries.user_id', $userIds);
         }
 
@@ -507,7 +507,7 @@ class InsightsService
             ->orderBy('total_seconds', 'DESC')
             ->limit($limit);
 
-        if ($userIds !== null) {
+        if ($userIds !== null && count($userIds) > 0) {
             $builder->whereIn('activity_logs.user_id', $userIds);
         }
 

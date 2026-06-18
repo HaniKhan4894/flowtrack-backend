@@ -102,6 +102,7 @@ const SettingsPage = () => {
   const [rolesLoading, setRolesLoading] = useState(false);
   const [savingRoleId, setSavingRoleId] = useState<number | null>(null);
   const [newRoleName, setNewRoleName] = useState('');
+  const [renameModal, setRenameModal] = useState<{ role: Role; name: string } | null>(null);
 
   const [notificationPrefs, setNotificationPrefs] = useState<NotificationPreference[]>([]);
   const [prefsLoading, setPrefsLoading] = useState(false);
@@ -400,19 +401,43 @@ const SettingsPage = () => {
     }
   };
 
-  const handleRenameRole = async (role: Role) => {
+  const handleRenameRole = (role: Role) => {
     if (!isCustomRole(role)) return;
-    const name = window.prompt('Role name', role.name);
-    if (!name?.trim() || name.trim() === role.name) return;
+    setRenameModal({ role, name: role.name });
+  };
+
+  const handleRenameSubmit = async () => {
+    if (!renameModal) return;
+    const { role, name } = renameModal;
+    if (!name.trim() || name.trim() === role.name) { setRenameModal(null); return; }
     setIsSaving(true);
     setError(null);
     try {
       await roleService.update(role.id, { name: name.trim() });
+      setRenameModal(null);
       await loadRolesData();
     } catch (err: unknown) {
       setError(getApiErrorMessage(err, 'Failed to rename role'));
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleSelectAllForRole = async (role: Role) => {
+    if (!isCustomRole(role)) return;
+    const allPermIds = allPermissions.map((p) => p.id);
+    const current = rolePermissionIds[role.id] ?? [];
+    const allSelected = allPermIds.every((id) => current.includes(id));
+    const next = allSelected ? [] : allPermIds;
+    setRolePermissionIds((prev) => ({ ...prev, [role.id]: next }));
+    setSavingRoleId(role.id);
+    try {
+      await roleService.updatePermissions(role.id, next);
+    } catch (err: unknown) {
+      setError(getApiErrorMessage(err, 'Failed to update permissions'));
+      await loadRolesData();
+    } finally {
+      setSavingRoleId(null);
     }
   };
 
@@ -1149,6 +1174,7 @@ const SettingsPage = () => {
                 <input
                   value={newRoleName}
                   onChange={(e) => setNewRoleName(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleCreateRole()}
                   placeholder="New custom role name"
                   className={inputClass}
                 />
@@ -1166,7 +1192,7 @@ const SettingsPage = () => {
                       <tr className="border-b border-white/5 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
                         <th className="px-4 py-3 sticky left-0 bg-[#12141C]">Permission</th>
                         {roles.map((role) => (
-                          <th key={role.id} className="px-4 py-3 text-center min-w-[100px]">
+                          <th key={role.id} className="px-4 py-3 text-center min-w-[110px]">
                             <div className="flex flex-col items-center gap-1">
                               <span>{role.name}</span>
                               {isCustomRole(role) ? (
@@ -1186,6 +1212,36 @@ const SettingsPage = () => {
                           </th>
                         ))}
                       </tr>
+                      {/* Select All row — only shows when at least one custom role exists */}
+                      {roles.some(isCustomRole) && (
+                        <tr className="border-b border-white/10 bg-white/[0.03]">
+                          <td className="px-4 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest sticky left-0 bg-[#12141C]">
+                            Select all
+                          </td>
+                          {roles.map((role) => {
+                            if (!isCustomRole(role)) {
+                              return <td key={role.id} className="px-4 py-2 text-center" />;
+                            }
+                            const allPermIds = allPermissions.map((p) => p.id);
+                            const current = rolePermissionIds[role.id] ?? [];
+                            const allChecked = allPermIds.length > 0 && allPermIds.every((id) => current.includes(id));
+                            const someChecked = !allChecked && allPermIds.some((id) => current.includes(id));
+                            return (
+                              <td key={role.id} className="px-4 py-2 text-center">
+                                <input
+                                  type="checkbox"
+                                  title={allChecked ? 'Deselect all' : 'Select all permissions'}
+                                  checked={allChecked}
+                                  ref={(el) => { if (el) el.indeterminate = someChecked; }}
+                                  disabled={savingRoleId === role.id}
+                                  onChange={() => handleSelectAllForRole(role)}
+                                  className="rounded border-white/20 disabled:opacity-40 accent-indigo-500 w-4 h-4"
+                                />
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      )}
                     </thead>
                     <tbody className="divide-y divide-white/5">
                       {allPermissions.map((perm) => (
@@ -1203,7 +1259,7 @@ const SettingsPage = () => {
                                   checked={checked}
                                   disabled={!isCustomRole(role) || savingRoleId === role.id}
                                   onChange={() => toggleRolePermission(role.id, perm.id, role)}
-                                  className="rounded border-white/20 disabled:opacity-40"
+                                  className="rounded border-white/20 disabled:opacity-40 accent-indigo-500"
                                 />
                               </td>
                             );
@@ -1212,6 +1268,38 @@ const SettingsPage = () => {
                       ))}
                     </tbody>
                   </table>
+                </div>
+              )}
+
+              {/* Rename role modal */}
+              {renameModal && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 modal-overlay">
+                  <button type="button" aria-label="Close" className="absolute inset-0" onClick={() => setRenameModal(null)} />
+                  <div className="relative z-10 w-full max-w-sm modal-panel p-6 space-y-4">
+                    <h4 className="text-lg font-bold text-white">Rename role</h4>
+                    <input
+                      autoFocus
+                      value={renameModal.name}
+                      onChange={(e) => setRenameModal((prev) => prev ? { ...prev, name: e.target.value } : null)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') handleRenameSubmit(); if (e.key === 'Escape') setRenameModal(null); }}
+                      className="form-field"
+                      placeholder="Role name"
+                    />
+                    <div className="flex justify-end gap-3 pt-1">
+                      <button type="button" onClick={() => setRenameModal(null)} className="px-4 py-2 rounded-xl text-sm text-slate-400 hover:text-white bg-white/5 hover:bg-white/10 transition-colors">
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleRenameSubmit}
+                        disabled={isSaving || !renameModal.name.trim()}
+                        className="flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-bold bg-ai-gradient text-white disabled:opacity-50"
+                      >
+                        {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Pencil size={14} />}
+                        Rename
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
