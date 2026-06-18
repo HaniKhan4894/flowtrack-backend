@@ -181,20 +181,13 @@ const BillingPage = () => {
               <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Current subscription</p>
               <p className="text-xl font-bold text-white capitalize">{currentSub.status.replace('_', ' ')}</p>
               <p className="text-sm text-slate-400 mt-1">
-                Renews {formatApiDate(currentSub.current_period_end)}
+                {currentSub.cancel_at_period_end
+                  ? <span className="text-amber-400">Cancels {formatApiDate(currentSub.current_period_end)}</span>
+                  : <>Renews {formatApiDate(currentSub.current_period_end)}</>}
                 · {currentSub.billing_cycle}
                 · ${currentSub.amount}
               </p>
             </div>
-          </div>
-          <div className="text-sm text-slate-400 space-y-1">
-            {currentSub.stripe_subscription_id ? (
-              <p>
-                Stripe: <span className="text-slate-300 font-mono text-xs">{currentSub.stripe_subscription_id}</span>
-              </p>
-            ) : (
-              <p>No Stripe subscription linked (free or manual plan)</p>
-            )}
           </div>
         </div>
       )}
