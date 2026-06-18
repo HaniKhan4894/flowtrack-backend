@@ -77,7 +77,11 @@ export const leaveService = {
     },
 
     reviewRequest: async (id: number, data: { status: 'approved' | 'rejected'; reviewer_notes?: string }): Promise<{ data: LeaveRequest }> => {
-        const response = await client.post(`/leave/requests/${id}/review`, data);
+        const action = data.status === 'approved' ? 'approve' : 'reject';
+        const response = await client.post(`/leave/requests/${id}/review`, {
+            action,
+            reason: data.reviewer_notes,
+        });
         return response.data;
     },
 
