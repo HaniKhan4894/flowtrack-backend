@@ -40,9 +40,9 @@ class ActivityLogService
         $insertData = [
             'time_entry_id'    => (int)$timeEntryId,
             'user_id'          => (int)$userId,
-            'app_name'         => $data['app_name'] ?? 'Unknown',
-            'window_title'     => $data['window_title'] ?? '',
-            'url'              => $data['url'] ?? '',
+            'app_name'         => $this->truncate((string) ($data['app_name'] ?? 'Unknown'), 191),
+            'window_title'     => $this->truncate((string) ($data['window_title'] ?? ''), 500),
+            'url'              => $this->truncate((string) ($data['url'] ?? ''), 1000),
             'category'         => $data['category'] ?? $this->categorizeActivity($data, (int) $entry['organization_id']),
             'duration_seconds' => (int)($data['duration_seconds'] ?? 0) ?: 60,
             'keyboard_strokes' => (int)($data['keyboard_strokes'] ?? 0),
@@ -125,6 +125,15 @@ class ActivityLogService
         }
 
         return 'uncategorized';
+    }
+
+    private function truncate(string $value, int $maxLength): string
+    {
+        if ($maxLength <= 0) {
+            return '';
+        }
+
+        return mb_strlen($value) > $maxLength ? mb_substr($value, 0, $maxLength) : $value;
     }
 
     public function getActivityLogs(array $filters): array

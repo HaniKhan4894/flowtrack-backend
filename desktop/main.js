@@ -712,7 +712,7 @@ async function syncActivityToBackend(retried = false) {
                 return syncActivityToBackend(true);
             }
         }
-        console.error('[Activity] Sync error:', err.message);
+        console.error('[Activity] Sync error:', err.message, err.body ? `- ${err.body}` : '');
     }
 }
 

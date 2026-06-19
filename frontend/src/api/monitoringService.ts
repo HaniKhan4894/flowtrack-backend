@@ -86,11 +86,20 @@ function stopElectronActivityForwarding() {
 // ─────────────────────────────────────────────────────────
 //  Public API
 // ─────────────────────────────────────────────────────────
+let activeMonitoringEntryId: number | null = null;
+
 export const monitoringService = {
     isDesktop: isElectron,
 
     startMonitoring: (timeEntryId: number, token?: string) => {
-        activeTimeEntryId = timeEntryId;
+        if (activeMonitoringEntryId === timeEntryId && isElectron) {
+            if (token) {
+                electronAPI?.setAuthToken?.(token);
+            }
+            return () => monitoringService.stopMonitoring();
+        }
+
+        activeMonitoringEntryId = timeEntryId;
         const user = useAuthStore.getState().user;
         const tracking = user?.tracking_config;
         const screenshotsEnabled = tracking?.screenshot_enabled !== false;
@@ -154,6 +163,7 @@ export const monitoringService = {
     },
 
     stopMonitoring: () => {
+        activeMonitoringEntryId = null;
         activeTimeEntryId = null;
         if (isElectron && electronAPI) {
             electronAPI.stopTracking();
@@ -207,5 +217,7 @@ export const monitoringService = {
             return electronAPI.captureNow();
         }
         return { success: false, error: 'Only available in desktop app' };
-    }
+    },
+
+    isMonitoringEntry: (timeEntryId: number) => activeMonitoringEntryId === timeEntryId,
 };

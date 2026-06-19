@@ -26,7 +26,10 @@ class TimeEntryModel extends Model
         'is_billable',
         'hourly_rate',
         'paused_at',
-        'paused_duration_seconds'
+        'paused_duration_seconds',
+        'work_location',
+        'client_public_ip',
+        'client_router_mac',
     ];
 
     protected bool $allowEmptyInserts = false;

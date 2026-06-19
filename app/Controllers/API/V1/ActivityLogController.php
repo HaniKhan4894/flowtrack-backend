@@ -91,19 +91,28 @@ class ActivityLogController extends ResourceController
 
             $settingsService = new OrganizationSettingsService();
             $tracking = $settingsService->getEffectiveTrackingConfig($organizationId);
-            if (empty($tracking['activity_tracking_enabled'])) {
-                return $this->fail('Activity tracking is disabled for your organization.', 403);
-            }
+            $activityEnabled = filter_var($tracking['activity_tracking_enabled'] ?? true, FILTER_VALIDATE_BOOLEAN);
 
             $data = $this->request->getJSON(true);
+            if (!is_array($data)) {
+                return $this->fail('Invalid JSON payload', 400);
+            }
 
             if (!isset($data['time_entry_id'])) {
                 return $this->fail('time_entry_id is required', 400);
             }
 
-            // If it's a single log, wrap in array
-            $logs = isset($data['logs']) ? $data['logs'] : [$data];
-            if (empty($tracking['url_tracking_enabled'])) {
+            // Batch payload uses `logs`; single-segment payloads include app_name/window_title.
+            if (isset($data['logs']) && is_array($data['logs'])) {
+                $logs = $data['logs'];
+            } elseif (isset($data['app_name']) || isset($data['window_title'])) {
+                $logs = [$data];
+            } else {
+                $logs = [];
+            }
+            if (!$activityEnabled) {
+                $logs = [];
+            } elseif (empty($tracking['url_tracking_enabled'])) {
                 foreach ($logs as &$log) {
                     if (is_array($log)) {
                         $log['url'] = '';
@@ -116,7 +125,10 @@ class ActivityLogController extends ResourceController
 
             $results = [];
             foreach ($logs as $log) {
-                unset($log['idle_seconds'], $log['active_seconds']);
+                if (!is_array($log)) {
+                    continue;
+                }
+                unset($log['idle_seconds'], $log['active_seconds'], $log['metadata']);
                 $results[] = $this->activityLogService->logActivity($data['time_entry_id'], $userId, $log);
             }
 
@@ -132,22 +144,27 @@ class ActivityLogController extends ResourceController
                     );
 
                     if (!empty($data['client_router_mac']) || !empty($data['router_mac'])) {
-                        (new TimeEntryService())->updateWorkLocationFromClient(
-                            (int) $data['time_entry_id'],
-                            (int) $entry['organization_id'],
-                            $data
-                        );
+                        try {
+                            (new TimeEntryService())->updateWorkLocationFromClient(
+                                (int) $data['time_entry_id'],
+                                (int) $entry['organization_id'],
+                                $data
+                            );
+                        } catch (\Throwable $locationError) {
+                            log_message('warning', 'Work location update skipped: ' . $locationError->getMessage());
+                        }
                     }
                 }
             }
 
             return $this->respondCreated([
                 'success' => true,
-                'message' => 'Activity logs synced successfully',
+                'message' => $activityEnabled ? 'Activity logs synced successfully' : 'Idle stats recorded (activity tracking disabled)',
                 'count' => count($results)
             ]);
 
         } catch (\Exception $e) {
+            log_message('error', 'Activity sync failed: ' . $e->getMessage());
             return $this->fail($e->getMessage(), 400);
         }
     }

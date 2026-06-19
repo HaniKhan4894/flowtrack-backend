@@ -147,7 +147,10 @@ class OrganizationSettingsService
             $planInterval = (int) ($intervalRaw ?? 0);
             $planRetention = $this->planModel->getFeatureValue($planId, 'data_retention');
             $activityAllowed = $this->planModel->getFeatureValue($planId, 'activity_tracking') !== 'false';
-            $effective['activity_tracking_enabled'] = $activityAllowed && !empty($tracking['activity_tracking_enabled']);
+            $orgActivityOn = filter_var($tracking['activity_tracking_enabled'] ?? true, FILTER_VALIDATE_BOOLEAN);
+            $effective['activity_tracking_enabled'] = $activityAllowed && $orgActivityOn;
+        } else {
+            $effective['activity_tracking_enabled'] = filter_var($tracking['activity_tracking_enabled'] ?? true, FILTER_VALIDATE_BOOLEAN);
         }
 
         if (!$screenshotsAllowed) {

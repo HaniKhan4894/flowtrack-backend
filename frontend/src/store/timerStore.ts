@@ -171,7 +171,10 @@ export const useTimerStore = create<TimerState>((set, get) => ({
 
                 if (!isPaused) {
                     const token = useAuthStore.getState().accessToken ?? undefined;
-                    monitoringService.startMonitoring(response.data.id, token);
+                    const currentId = get().activeEntry?.id;
+                    if (currentId !== response.data.id || !monitoringService.isMonitoringEntry(response.data.id)) {
+                        monitoringService.startMonitoring(response.data.id, token);
+                    }
                 }
                 startResync();
                 setTrackingSessionActive(true);
