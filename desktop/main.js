@@ -7,6 +7,7 @@ const FormData = require('form-data');
 const { API_BASE_URL, FRONTEND_URL, getApiHeaders } = require('./config');
 const activityTracker = require('./activityTracker');
 const systemInput = require('./systemInput');
+const networkInfo = require('./networkInfo');
 
 // ──────────────────────────────────────────────
 //  Config
@@ -14,6 +15,8 @@ const systemInput = require('./systemInput');
 const SCREENSHOT_MIN_MS = 1 * 60 * 1000; // fallback minimum
 const SCREENSHOT_MAX_MS = 4 * 60 * 1000; // fallback maximum
 let planScreenshotIntervalMinutes = 0;
+let idleThresholdSec = 5 * 60;
+let keepIdleTimeMode = 'prompt';
 let idleGuardTimer = null;
 
 // ──────────────────────────────────────────────
@@ -29,7 +32,6 @@ let isPaused = false;
 let pausedByLock = false;
 let pausedByIdle = false;
 let tray = null;
-const IDLE_THRESHOLD_SEC = 5 * 60;
 const IDLE_RESUME_SEC = 12;
 const IDLE_CHECK_MS = 5 * 1000;
 const DISTRACTION_ALERT_MS = 5 * 1000;
@@ -657,6 +659,11 @@ async function syncActivityToBackend(retried = false) {
             return;
         }
 
+        const routerMac = networkInfo.getDefaultGatewayMac();
+        if (routerMac) {
+            payload.client_router_mac = routerMac;
+        }
+
         const body = JSON.stringify(payload);
 
         const urlParts = new URL(`${API_BASE_URL}/activity-logs/sync`);
@@ -782,7 +789,7 @@ function startIdleGuard() {
 
         if (isPaused) return;
 
-        if (systemIdleSec >= IDLE_THRESHOLD_SEC) {
+        if (systemIdleSec >= idleThresholdSec) {
             handleIdlePause();
         }
     }, IDLE_CHECK_MS);
@@ -852,11 +859,15 @@ ipcMain.handle('logout-session', () => {
 });
 
 // Called from renderer when a timer starts
-ipcMain.handle('start-tracking', (_event, { timeEntryId, token, screenshotIntervalMinutes }) => {
+ipcMain.handle('start-tracking', (_event, { timeEntryId, token, screenshotIntervalMinutes, trackingConfig }) => {
     currentSession.token = token || currentSession.token;
     currentSession.timeEntryId = timeEntryId;
     currentSession.isTracking = true;
-    planScreenshotIntervalMinutes = Number(screenshotIntervalMinutes) || 0;
+    const cfg = trackingConfig || {};
+    planScreenshotIntervalMinutes = Number(screenshotIntervalMinutes ?? cfg.screenshot_frequency_minutes) || 0;
+    const idleMinutes = Number(cfg.idle_timeout_minutes ?? 5);
+    idleThresholdSec = Math.max(60, idleMinutes * 60);
+    keepIdleTimeMode = cfg.keep_idle_time || 'prompt';
     isPaused = false;
     pausedByLock = false;
     pausedByIdle = false;

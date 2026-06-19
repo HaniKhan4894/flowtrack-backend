@@ -3,6 +3,7 @@
 namespace App\Controllers\API\V1;
 
 use CodeIgniter\RESTful\ResourceController;
+use App\Services\OrganizationSettingsService;
 use App\Services\ScreenshotService;
 use App\Services\TeamScopeService;
 use App\Services\PermissionService;
@@ -33,6 +34,11 @@ class ScreenshotController extends ResourceController
             
             $permissionService = new PermissionService();
             $canViewTeam = $permissionService->userHasPermission($userId, $organizationId, 'screenshots.view_team');
+            $settingsService = new OrganizationSettingsService();
+
+            if (!$canViewTeam && $settingsService->areScreenshotsHiddenFromUser($organizationId, $userId)) {
+                return $this->fail('Screenshots are hidden from users in your organization.', 403);
+            }
 
             $requestedUserId = $this->request->getGet('user_id');
             if (!$canViewTeam) {
@@ -142,6 +148,12 @@ class ScreenshotController extends ResourceController
                 return $this->fail('Forbidden', 403);
             }
 
+            $organizationId = (int)($this->request->getServer('FLOWTRACK_ORGANIZATION_ID') ?? 0);
+            $settingsService = new OrganizationSettingsService();
+            if ($settingsService->areScreenshotsHiddenFromUser($organizationId, $userId)) {
+                return $this->fail('Screenshots are hidden from users in your organization.', 403);
+            }
+
             return $this->respond([
                 'success' => true,
                 'data' => $screenshot,
@@ -223,8 +235,14 @@ class ScreenshotController extends ResourceController
     {
         try {
             $userId = (int)($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
+            $organizationId = (int)($this->request->getServer('FLOWTRACK_ORGANIZATION_ID') ?? 0);
             if (!$userId) {
                 return $this->fail('Unauthorized', 401);
+            }
+
+            $settingsService = new OrganizationSettingsService();
+            if ($settingsService->areScreenshotsHiddenFromUser($organizationId, $userId)) {
+                return $this->fail('Screenshots are hidden from users in your organization.', 403);
             }
 
             $deleted = $this->screenshotService->deleteScreenshot($id, $userId);

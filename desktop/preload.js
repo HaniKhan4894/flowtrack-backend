@@ -20,8 +20,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
 
     // Tracking lifecycle
-    startTracking: (timeEntryId, token, screenshotIntervalMinutes = 0) =>
-        ipcRenderer.invoke('start-tracking', { timeEntryId, token, screenshotIntervalMinutes }),
+    startTracking: (timeEntryId, token, trackingConfig = {}) =>
+        ipcRenderer.invoke('start-tracking', {
+            timeEntryId,
+            token,
+            screenshotIntervalMinutes: trackingConfig.screenshot_frequency_minutes ?? trackingConfig.screenshotIntervalMinutes ?? 0,
+            trackingConfig,
+        }),
     stopTracking: () => ipcRenderer.invoke('stop-tracking'),
     pauseTracking: () => ipcRenderer.invoke('pause-tracking'),
     resumeTracking: () => ipcRenderer.invoke('resume-tracking'),

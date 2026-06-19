@@ -6,6 +6,7 @@ use CodeIgniter\RESTful\ResourceController;
 use App\Services\ActivityLogService;
 use App\Services\TeamScopeService;
 use App\Services\PermissionService;
+use App\Services\TimeEntryService;
 
 class ActivityLogController extends ResourceController
 {
@@ -112,6 +113,14 @@ class ActivityLogController extends ResourceController
                         (int) $batchIdleSeconds,
                         (int) $batchActiveSeconds
                     );
+
+                    if (!empty($data['client_router_mac']) || !empty($data['router_mac'])) {
+                        (new TimeEntryService())->updateWorkLocationFromClient(
+                            (int) $data['time_entry_id'],
+                            (int) $entry['organization_id'],
+                            $data
+                        );
+                    }
                 }
             }
 

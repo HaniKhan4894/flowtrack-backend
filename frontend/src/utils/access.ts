@@ -39,7 +39,12 @@ const ALL_NAV_ITEMS: NavItem[] = [
   },
   { icon: Building2, label: 'Clients', path: '/clients', permission: 'invoices.view' },
   { icon: CalendarDays, label: 'Leave', path: '/leave' },
-  { icon: Camera, label: 'Screenshots', path: '/screenshots', permission: 'screenshots.view_own' },
+  {
+    icon: Camera,
+    label: 'Screenshots',
+    path: '/screenshots',
+    showIf: (user) => canAccessScreenshotsPage(user),
+  },
   { icon: Activity, label: 'Activity', path: '/activity', permission: 'activity.view_own' },
   { icon: FileText, label: 'Invoices', path: '/invoices', permission: 'invoices.view' },
   { icon: Wallet, label: 'Payroll', path: '/payroll', permission: 'payroll.view' },
@@ -64,7 +69,7 @@ const PATH_PERMISSIONS: Record<string, string | string[]> = {
   '/projects': ['projects.create', 'projects.edit'],
   '/clients': 'invoices.view',
   '/leave': [],
-  '/screenshots': 'screenshots.view_own',
+  '/screenshots': '__screenshots__',
   '/activity': 'activity.view_own',
   '/invoices': 'invoices.view',
   '/payroll': 'payroll.view',
@@ -129,6 +134,7 @@ export function canAccessPath(user: User | null | undefined, path: string): bool
   }
   if (rule === '__super_admin__') return isSuperAdmin(user);
   if (rule === '__team_nav__') return canViewTeam(user);
+  if (rule === '__screenshots__') return canAccessScreenshotsPage(user);
   return hasPermission(user, rule);
 }
 
@@ -160,6 +166,21 @@ export function canManageTeam(user: User | null | undefined): boolean {
 
 export function canViewMemberTracking(user: User | null | undefined): boolean {
   return hasAnyPermission(user, ['time.view_team', 'screenshots.view_team', 'activity.view_team', 'reports.view_team']);
+}
+
+/** Org setting: members cannot view their own screenshots (managers/admins exempt). */
+export function areOwnScreenshotsHidden(user: User | null | undefined): boolean {
+  if (!user?.tracking_config?.screenshot_hide_from_users) return false;
+  return !hasPermission(user, 'screenshots.view_team');
+}
+
+export function canAccessScreenshotsPage(user: User | null | undefined): boolean {
+  if (!user) return false;
+  if (hasPermission(user, 'screenshots.view_team')) {
+    return hasAnyPermission(user, ['screenshots.view_team', 'screenshots.view_own']);
+  }
+  if (areOwnScreenshotsHidden(user)) return false;
+  return hasPermission(user, 'screenshots.view_own');
 }
 
 /** Owner, admin, and manager only — used for unusual activity and org-wide oversight. */

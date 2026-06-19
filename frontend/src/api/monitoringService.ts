@@ -91,11 +91,23 @@ export const monitoringService = {
 
     startMonitoring: (timeEntryId: number, token?: string) => {
         activeTimeEntryId = timeEntryId;
-        const screenshotInterval = Number(useAuthStore.getState().user?.features?.screenshot_interval ?? 0);
+        const user = useAuthStore.getState().user;
+        const tracking = (user as { tracking_config?: { screenshot_frequency_minutes?: number; idle_timeout_minutes?: number; keep_idle_time?: string } })?.tracking_config;
+        const screenshotInterval = Number(
+            tracking?.screenshot_frequency_minutes ?? user?.features?.screenshot_interval ?? 0,
+        );
+        const trackingConfig = {
+            screenshot_frequency_minutes: screenshotInterval,
+            idle_timeout_minutes: tracking?.idle_timeout_minutes ?? 5,
+            keep_idle_time: tracking?.keep_idle_time ?? 'prompt',
+            timer_tolerance_minutes: (tracking as { timer_tolerance_minutes?: number })?.timer_tolerance_minutes ?? 2,
+            timer_reminder_enabled: (tracking as { timer_reminder_enabled?: boolean })?.timer_reminder_enabled ?? true,
+            automated_tracking: (tracking as { automated_tracking?: boolean })?.automated_tracking ?? true,
+        };
 
         if (isElectron && electronAPI) {
             console.log('[Desktop] Starting tracking via Electron IPC');
-            electronAPI.startTracking(timeEntryId, token ?? null, screenshotInterval);
+            electronAPI.startTracking(timeEntryId, token ?? null, trackingConfig);
             startElectronActivityForwarding();
 
             // Listen for events pushed from the main process

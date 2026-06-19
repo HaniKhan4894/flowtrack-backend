@@ -4,6 +4,7 @@ namespace App\Commands;
 
 use App\Models\PlanModel;
 use App\Models\SubscriptionModel;
+use App\Services\OrganizationSettingsService;
 use CodeIgniter\CLI\BaseCommand;
 use CodeIgniter\CLI\CLI;
 
@@ -27,16 +28,23 @@ class DataPurge extends BaseCommand
         foreach ($organizations as $org) {
             $orgId = (int) $org['id'];
             $subscription = $subscriptionModel->getActiveSubscription($orgId);
-            if (!$subscription) {
+            $settingsService = new OrganizationSettingsService();
+            $effective = $settingsService->getEffectiveTrackingConfig($orgId);
+
+            $planRetention = null;
+            if ($subscription) {
+                $planRetention = $planModel->getFeatureValue((int) $subscription['plan_id'], 'data_retention');
+            }
+
+            $orgRetention = (int) ($effective['screenshot_retention_days'] ?? 90);
+            if ($planRetention && $planRetention !== 'unlimited') {
+                $days = min($orgRetention, (int) $planRetention);
+            } elseif ($orgRetention > 0) {
+                $days = $orgRetention;
+            } else {
                 continue;
             }
 
-            $retention = $planModel->getFeatureValue((int) $subscription['plan_id'], 'data_retention');
-            if (!$retention || $retention === 'unlimited') {
-                continue;
-            }
-
-            $days = (int) $retention;
             if ($days <= 0) {
                 continue;
             }

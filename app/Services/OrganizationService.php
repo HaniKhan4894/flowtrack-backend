@@ -75,16 +75,16 @@ class OrganizationService
 
     private function enrichOrganization(array $org): array
     {
-        if (!empty($org['settings'])) {
-            $decoded = is_string($org['settings']) ? json_decode($org['settings'], true) : $org['settings'];
-            $org['settings'] = is_array($decoded) ? $decoded : [];
+        $settingsService = new OrganizationSettingsService();
+        $rawSettings = $org['settings'] ?? null;
+        if (is_array($rawSettings)) {
+            $org['settings'] = $settingsService->mergeSettings($settingsService->getDefaults(), $rawSettings);
         } else {
-            $org['settings'] = [];
+            $org['settings'] = $settingsService->decodeSettings(is_string($rawSettings) ? $rawSettings : null);
         }
 
-        if (!isset($org['settings']['default_daily_hours'])) {
-            $org['settings']['default_daily_hours'] = 8;
-        }
+        $org['plan_caps'] = $settingsService->getPlanCaps((int) $org['id']);
+        $org['effective_tracking'] = $settingsService->getEffectiveTrackingConfig((int) $org['id']);
 
         if (!empty($org['country_id'])) {
             $country = $this->db->table('countries')->select('id, name')->where('id', $org['country_id'])->get()->getRowArray();
@@ -218,18 +218,13 @@ class OrganizationService
         }
 
         if (array_key_exists('settings', $data) && is_array($data['settings'])) {
+            $settingsService = new OrganizationSettingsService();
             $existing = $this->organizationModel->find($id);
-            $currentSettings = [];
-            if ($existing && !empty($existing['settings'])) {
-                $decoded = is_string($existing['settings']) ? json_decode($existing['settings'], true) : $existing['settings'];
-                $currentSettings = is_array($decoded) ? $decoded : [];
-            }
-
-            if (array_key_exists('default_daily_hours', $data['settings'])) {
-                $currentSettings['default_daily_hours'] = round((float) $data['settings']['default_daily_hours'], 2);
-            }
-
-            $data['settings'] = json_encode($currentSettings);
+            $currentSettings = $settingsService->decodeSettings(
+                is_string($existing['settings'] ?? null) ? $existing['settings'] : null
+            );
+            $merged = $settingsService->mergeSettingsPatch($currentSettings, $data['settings']);
+            $data['settings'] = json_encode($merged);
         }
 
         return $this->organizationModel->update($id, $data);

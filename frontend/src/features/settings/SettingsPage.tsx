@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { User, Building, Bell, Shield, Cloud, Save, Camera, Loader2, CheckCircle2, Lock, CreditCard, ExternalLink, Gauge, Users, Plus, X, Pencil, Trash2 } from 'lucide-react';
+import { User, Building, Bell, Shield, Cloud, Save, Camera, Loader2, CheckCircle2, Lock, CreditCard, ExternalLink, Gauge, Users, Plus, X, Pencil, Trash2, Activity, FileCheck, Sparkles, MapPin } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import client from '../../api/client';
@@ -19,6 +19,10 @@ import { notificationPreferenceService } from '../../api/notificationPreferenceS
 import { Link } from 'react-router-dom';
 import type { Country, State, City, TimezoneOption, ProductivityRule, Role, Permission, NotificationPreference } from '../../types';
 import { SearchableSelect } from '../../components/ui';
+import { ActivityTrackingSettingsTab } from './ActivityTrackingSettingsTab';
+import { TimesheetPolicySettingsTab } from './TimesheetPolicySettingsTab';
+import { SmartNotificationsSettingsTab } from './SmartNotificationsSettingsTab';
+import { OfficeLocationsSettingsTab } from './OfficeLocationsSettingsTab';
 
 const CURRENCY_OPTIONS = [
   { value: 'USD', label: 'USD — US Dollar' },
@@ -124,7 +128,13 @@ const SettingsPage = () => {
     { id: 'profile', label: 'Profile Settings', icon: User },
     ...(canViewOrg ? [{ id: 'organization', label: 'Organization', icon: Building }] : []),
     ...(canManageProductivityRules ? [{ id: 'productivity-rules', label: 'Productivity Rules', icon: Gauge }] : []),
-    ...(canEditOrg ? [{ id: 'roles-permissions', label: 'Roles & Permissions', icon: Users }] : []),
+    ...(canEditOrg ? [
+      { id: 'activity-tracking', label: 'Activity & Tracking', icon: Activity },
+      { id: 'timesheet-policies', label: 'Timesheet Policies', icon: FileCheck },
+      { id: 'smart-notifications', label: 'Smart Notifications', icon: Sparkles },
+      { id: 'office-locations', label: 'Remote vs Office', icon: MapPin },
+      { id: 'roles-permissions', label: 'Roles & Permissions', icon: Users },
+    ] : []),
     { id: 'notifications', label: 'Notifications', icon: Bell },
     { id: 'security', label: 'Security', icon: Shield },
     ...(canManageBilling ? [{ id: 'billing', label: 'Billing & Plans', icon: Cloud }] : []),
@@ -1161,6 +1171,22 @@ const SettingsPage = () => {
                 </div>
               )}
             </div>
+          )}
+
+          {activeTab === 'activity-tracking' && user?.organization_id && (
+            <ActivityTrackingSettingsTab organizationId={user.organization_id} />
+          )}
+
+          {activeTab === 'timesheet-policies' && user?.organization_id && (
+            <TimesheetPolicySettingsTab organizationId={user.organization_id} />
+          )}
+
+          {activeTab === 'smart-notifications' && (
+            <SmartNotificationsSettingsTab />
+          )}
+
+          {activeTab === 'office-locations' && user?.organization_id && (
+            <OfficeLocationsSettingsTab organizationId={user.organization_id} />
           )}
 
           {activeTab === 'roles-permissions' && (

@@ -214,6 +214,11 @@ class ScreenshotService
     public function canViewScreenshot(int $viewerId, int $organizationId, array $screenshot): bool
     {
         if ((int) ($screenshot['user_id'] ?? 0) === $viewerId) {
+            $settingsService = new OrganizationSettingsService();
+            if ($settingsService->areScreenshotsHiddenFromUser($organizationId, $viewerId)) {
+                return false;
+            }
+
             return true;
         }
 

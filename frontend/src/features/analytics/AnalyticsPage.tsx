@@ -11,9 +11,11 @@ import {
   Moon,
   DollarSign,
   Calendar,
+  MapPin,
 } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
 import { reportService, type TimeSummary, type ProjectBreakdown, type TeamLeaderboard, type TopUrl, type OrgProductivityMember, type IdleBreakdownUser, type ProjectProfitability } from '../../api/reportService';
+import { officeLocationService, type LocationBreakdown } from '../../api/officeLocationService';
 import { useAuthStore } from '../../store/authStore';
 import { canViewMemberTracking, hasPermission } from '../../utils/access';
 
@@ -59,6 +61,7 @@ const AnalyticsPage = () => {
   const [topUrls, setTopUrls] = useState<TopUrl[]>([]);
   const [orgProductivity, setOrgProductivity] = useState<OrgProductivityMember[]>([]);
   const [idleBreakdown, setIdleBreakdown] = useState<IdleBreakdownUser[]>([]);
+  const [locationBreakdown, setLocationBreakdown] = useState<LocationBreakdown[]>([]);
   const [profitability, setProfitability] = useState<ProjectProfitability[]>([]);
   const [exportFormat, setExportFormat] = useState<'csv' | 'pdf' | 'xlsx'>('csv');
   const canExport = hasPermission(user, 'reports.export');
@@ -84,21 +87,24 @@ const AnalyticsPage = () => {
       setLeaderboard(leadResp.data ?? []);
 
       if (canViewTeamReports && params.start_date && params.end_date) {
-        const [urlsResp, prodResp, idleResp, profitResp] = await Promise.all([
+        const [urlsResp, prodResp, idleResp, profitResp, locResp] = await Promise.all([
           reportService.getTopUrls({ start_date: params.start_date, end_date: params.end_date }).catch(() => ({ data: { urls: [] } })),
           reportService.getOrgProductivity({ start_date: params.start_date, end_date: params.end_date }).catch(() => ({ data: { members: [] } })),
           reportService.getIdleBreakdown({ start_date: params.start_date, end_date: params.end_date }).catch(() => ({ data: { users: [] } })),
           reportService.getProjectProfitability({ start_date: params.start_date, end_date: params.end_date }).catch(() => ({ data: { projects: [] } })),
+          officeLocationService.breakdown(params.start_date, params.end_date).catch(() => ({ data: [] })),
         ]);
         setTopUrls(urlsResp.data?.urls ?? []);
         setOrgProductivity(prodResp.data?.members ?? []);
         setIdleBreakdown(idleResp.data?.users ?? []);
         setProfitability(profitResp.data?.projects ?? []);
+        setLocationBreakdown(locResp.data ?? []);
       } else {
         setTopUrls([]);
         setOrgProductivity([]);
         setIdleBreakdown([]);
         setProfitability([]);
+        setLocationBreakdown([]);
       }
     } catch (e) {
       console.error('Failed to fetch analytics', e);
@@ -410,6 +416,22 @@ const AnalyticsPage = () => {
                 </div>
               ))}
               {idleBreakdown.length === 0 && <p className="text-slate-500 text-sm">No idle data recorded.</p>}
+            </div>
+          </div>
+
+          <div className="overlay-panel p-8">
+            <div className="flex items-center gap-4 mb-6">
+              <div className="p-3 rounded-xl bg-primary-500/10 text-primary-400"><MapPin size={22} /></div>
+              <h2 className="text-xl font-bold text-white">Remote vs In-Office</h2>
+            </div>
+            <div className="space-y-3">
+              {locationBreakdown.map((row) => (
+                <div key={row.work_location} className="flex items-center justify-between p-3 rounded-xl bg-white/5">
+                  <span className="text-white font-medium capitalize">{row.work_location}</span>
+                  <span className="text-primary-400 font-bold">{row.hours}h · {row.percent}%</span>
+                </div>
+              ))}
+              {locationBreakdown.length === 0 && <p className="text-slate-500 text-sm">No location data yet. Configure office locations in Settings.</p>}
             </div>
           </div>
 

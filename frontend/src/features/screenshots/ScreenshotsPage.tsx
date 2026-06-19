@@ -7,8 +7,8 @@ import { screenshotService } from '../../api/screenshotService';
 import { monitoringService } from '../../api/monitoringService';
 import { TeamMemberFilter } from '../../components/TeamMemberFilter';
 import { useAuthStore } from '../../store/authStore';
-import { canViewMemberTracking, canViewOrgPackage, hasPermission } from '../../utils/access';
-import { Link } from 'react-router-dom';
+import { canViewMemberTracking, canViewOrgPackage, hasPermission, canAccessScreenshotsPage, areOwnScreenshotsHidden } from '../../utils/access';
+import { Link, Navigate } from 'react-router-dom';
 
 const PER_PAGE = 12;
 
@@ -32,6 +32,7 @@ const ScreenshotsPage = () => {
 
   const isDesktop = monitoringService.isDesktop;
   const canDeleteScreenshots = hasPermission(user, 'screenshots.delete');
+  const ownScreenshotsHidden = areOwnScreenshotsHidden(user);
 
   useEffect(() => {
     const uid = searchParams.get('user');
@@ -167,6 +168,10 @@ const ScreenshotsPage = () => {
 
   const today = new Date().toISOString().split('T')[0];
 
+  if (!canAccessScreenshotsPage(user)) {
+    return <Navigate to="/app" replace />;
+  }
+
   return (
     <div className="space-y-8">
       {canViewOrgPackage(user) && user?.features?.screenshots === false && (
@@ -204,7 +209,7 @@ const ScreenshotsPage = () => {
               setPage(1);
             }}
           />
-          {isDesktop && (
+          {isDesktop && !ownScreenshotsHidden && (
             <Button variant="primary" size="sm" onClick={handleCaptureNow} isLoading={isCapturing}>
               <Zap className="w-4 h-4 mr-2" />
               Capture Now

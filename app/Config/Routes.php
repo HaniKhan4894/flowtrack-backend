@@ -117,6 +117,25 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\API\V1'], function ($r
     $routes->put('time-entries/(:num)', 'TimeEntryController::update/$1', ['filter' => 'permission:time.manual_entry']);
     $routes->delete('time-entries/(:num)', 'TimeEntryController::delete/$1', ['filter' => 'permission:time.manual_entry']);
 
+    // Smart notification rules
+    $routes->group('smart-notifications', ['filter' => ['auth', 'permission:settings.edit']], function ($routes) {
+        $routes->get('/', 'SmartNotificationController::index');
+        $routes->get('templates', 'SmartNotificationController::templates');
+        $routes->post('/', 'SmartNotificationController::create');
+        $routes->put('(:num)', 'SmartNotificationController::update/$1');
+        $routes->delete('(:num)', 'SmartNotificationController::delete/$1');
+    });
+
+    // Office locations (remote vs in-office)
+    $routes->group('office-locations', ['filter' => ['auth', 'permission:settings.edit']], function ($routes) {
+        $routes->get('/', 'OfficeLocationController::index');
+        $routes->get('breakdown', 'OfficeLocationController::breakdown');
+        $routes->post('auto-detect', 'OfficeLocationController::runAutoDetect');
+        $routes->post('/', 'OfficeLocationController::create');
+        $routes->put('(:num)', 'OfficeLocationController::update/$1');
+        $routes->delete('(:num)', 'OfficeLocationController::delete/$1');
+    });
+
     // Productivity Rules
     $routes->group('productivity-rules', ['filter' => ['auth', 'planFeature:productivity_rules']], function ($routes) {
         $routes->get('/', 'ProductivityRuleController::index', ['filter' => 'permission:productivity_rules.manage']);

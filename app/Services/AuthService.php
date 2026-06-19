@@ -9,6 +9,7 @@ use App\Services\EmailVerificationService;
 use App\Models\SubscriptionModel;
 use App\Models\PlanModel;
 use App\Models\OrganizationModel;
+use App\Services\OrganizationSettingsService;
 
 class AuthService
 {
@@ -510,6 +511,16 @@ class AuthService
                     'slug' => $plan['slug'],
                 ];
                 $user['features'] = $features;
+
+                $settingsService = new OrganizationSettingsService();
+                $effectiveTracking = $settingsService->getEffectiveTrackingConfig($organizationId);
+                $user['tracking_config'] = $effectiveTracking;
+                if (!empty($effectiveTracking['screenshot_enabled'])) {
+                    $user['features']['screenshot_interval'] = (int) ($effectiveTracking['screenshot_frequency_minutes'] ?? $features['screenshot_interval'] ?? 0);
+                }
+            } elseif ($organizationId > 0) {
+                $settingsService = new OrganizationSettingsService();
+                $user['tracking_config'] = $settingsService->getEffectiveTrackingConfig($organizationId);
             }
         }
 

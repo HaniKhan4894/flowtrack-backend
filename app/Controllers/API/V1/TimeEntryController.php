@@ -6,6 +6,7 @@ use CodeIgniter\RESTful\ResourceController;
 use App\Services\TimeEntryService;
 use App\Services\TeamScopeService;
 use App\Services\PermissionService;
+use App\Services\OrganizationSettingsService;
 
 class TimeEntryController extends ResourceController
 {
@@ -95,6 +96,28 @@ class TimeEntryController extends ResourceController
         return null;
     }
 
+    private function enforceModifyTimePolicy(int $organizationId): void
+    {
+        $settings = (new OrganizationSettingsService())->getTimesheetSettings($organizationId);
+        if (empty($settings['allow_modify_time'])) {
+            throw new \Exception('Manual time edits are disabled by organization policy');
+        }
+    }
+
+    private function enforceReasonOnEdit(array $data, int $organizationId): void
+    {
+        $settings = (new OrganizationSettingsService())->getTimesheetSettings($organizationId);
+        if (!empty($settings['require_reason_on_edit']) && empty(trim((string) ($data['edit_reason'] ?? $data['reason'] ?? '')))) {
+            throw new \Exception('A reason is required when editing time entries');
+        }
+    }
+
+    private function enrichStartPayload(array $data): array
+    {
+        $data['client_public_ip'] = $data['client_public_ip'] ?? $this->request->getIPAddress();
+        return $data;
+    }
+
     /**
      * POST /api/v1/time-entries/start
      */
@@ -111,7 +134,7 @@ class TimeEntryController extends ResourceController
                 return $trackingError;
             }
 
-            $data = $this->request->getJSON(true);
+            $data = $this->enrichStartPayload($this->request->getJSON(true) ?? []);
 
             $entry = $this->timeEntryService->startTimer($userId, $organizationId, $data);
 
@@ -237,6 +260,8 @@ class TimeEntryController extends ResourceController
                 return $trackingError;
             }
 
+            $this->enforceModifyTimePolicy($organizationId);
+
             $data = $this->request->getJSON(true);
 
             // Validation
@@ -275,6 +300,9 @@ class TimeEntryController extends ResourceController
             $userId = (int) ($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
             $organizationId = (int) ($this->request->getServer('FLOWTRACK_ORGANIZATION_ID') ?? 0);
             $data = $this->request->getJSON(true);
+
+            $this->enforceModifyTimePolicy($organizationId);
+            $this->enforceReasonOnEdit($data ?? [], $organizationId);
 
             $entry = $this->timeEntryService->updateEntry((int) $id, $userId, $organizationId, $data);
 

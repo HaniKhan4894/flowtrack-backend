@@ -117,7 +117,7 @@ createRoot(document.getElementById('root')!).render(
         <Route path="/time" element={<ProtectedRoute><TimeTrackingPage /></ProtectedRoute>} />
         <Route path="/timesheets" element={<RoleRoute path="/timesheets"><TimesheetsPage /></RoleRoute>} />
         <Route path="/activity" element={<ProtectedRoute><ActivityPage /></ProtectedRoute>} />
-        <Route path="/screenshots" element={<ProtectedRoute><ScreenshotsPage /></ProtectedRoute>} />
+        <Route path="/screenshots" element={<RoleRoute path="/screenshots"><ScreenshotsPage /></RoleRoute>} />
 
         {/* Admin-only routes */}
         <Route path="/projects" element={<RoleRoute path="/projects"><ProjectsPage /></RoleRoute>} />

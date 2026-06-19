@@ -93,6 +93,9 @@ class TimeEntryService
                 'hourly_rate' => $data['hourly_rate'] ?? null,
             ];
 
+            $locationMeta = $this->resolveWorkLocationMeta($organizationId, $data);
+            $entryData = array_merge($entryData, $locationMeta);
+
             $entryId = $this->timeEntryModel->insert($entryData);
 
             if (!$entryId) {
@@ -402,6 +405,35 @@ class TimeEntryService
         if (!$this->permissionService->userHasPermission($actorUserId, $organizationId, 'time.edit_team')) {
             throw new \Exception('Unauthorized');
         }
+    }
+
+    private function resolveWorkLocationMeta(int $organizationId, array $data): array
+    {
+        $publicIp = $data['client_public_ip'] ?? $data['public_ip'] ?? null;
+        $routerMac = $data['client_router_mac'] ?? $data['router_mac'] ?? null;
+
+        if (!$publicIp && !$routerMac) {
+            return [];
+        }
+
+        $officeService = new OfficeLocationService();
+        $workLocation = $officeService->resolveWorkLocation($organizationId, $publicIp, $routerMac);
+
+        return [
+            'client_public_ip' => $publicIp ? trim((string) $publicIp) : null,
+            'client_router_mac' => $routerMac ? trim((string) $routerMac) : null,
+            'work_location' => $workLocation,
+        ];
+    }
+
+    public function updateWorkLocationFromClient(int $entryId, int $organizationId, array $data): void
+    {
+        $meta = $this->resolveWorkLocationMeta($organizationId, $data);
+        if ($meta === []) {
+            return;
+        }
+
+        $this->timeEntryModel->update($entryId, $meta);
     }
 
     private function attachProjectName(array $entry): array

@@ -16,6 +16,7 @@ class TimesheetService
     protected TimezoneService $timezoneService;
     protected NotificationService $notificationService;
     protected PermissionService $permissionService;
+    protected OrganizationSettingsService $settingsService;
     protected $db;
 
     public function __construct()
@@ -26,7 +27,74 @@ class TimesheetService
         $this->timezoneService = new TimezoneService();
         $this->notificationService = new NotificationService();
         $this->permissionService = new PermissionService();
+        $this->settingsService = new OrganizationSettingsService();
         $this->db = \Config\Database::connect();
+    }
+
+    public function getPayPeriod(int $organizationId): string
+    {
+        $settings = $this->settingsService->getTimesheetSettings($organizationId);
+
+        return $settings['pay_period'] ?? 'weekly';
+    }
+
+    public function requiresApproval(int $organizationId): bool
+    {
+        $settings = $this->settingsService->getTimesheetSettings($organizationId);
+
+        return !empty($settings['require_approval']);
+    }
+
+    public function getPeriodStart(string $date, string $phpTz, ?string $payPeriod = null): string
+    {
+        $payPeriod = $payPeriod ?? 'weekly';
+        $dt = new DateTime($date, new DateTimeZone($phpTz));
+
+        if ($payPeriod === 'monthly') {
+            $dt->modify('first day of this month');
+
+            return $dt->format('Y-m-d');
+        }
+
+        $dayOfWeek = (int) $dt->format('N');
+        if ($dayOfWeek > 1) {
+            $dt->modify('-' . ($dayOfWeek - 1) . ' days');
+        }
+
+        if ($payPeriod === 'biweekly') {
+            $weekNumber = (int) $dt->format('W');
+            if ($weekNumber % 2 === 0) {
+                $dt->modify('-7 days');
+            }
+        }
+
+        return $dt->format('Y-m-d');
+    }
+
+    public function getPeriodEnd(string $periodStart, string $phpTz, ?string $payPeriod = null): string
+    {
+        $payPeriod = $payPeriod ?? 'weekly';
+        $dt = new DateTime($periodStart, new DateTimeZone($phpTz));
+
+        if ($payPeriod === 'monthly') {
+            $dt->modify('last day of this month');
+
+            return $dt->format('Y-m-d');
+        }
+
+        $days = $payPeriod === 'biweekly' ? 13 : 6;
+        $dt->modify('+' . $days . ' days');
+
+        return $dt->format('Y-m-d');
+    }
+
+    public function getPeriodDayCount(?string $payPeriod = null): int
+    {
+        return match ($payPeriod ?? 'weekly') {
+            'monthly' => 31,
+            'biweekly' => 14,
+            default => 7,
+        };
     }
 
     public function getWeekStart(string $date, string $phpTz): string
@@ -120,10 +188,11 @@ class TimesheetService
     public function getCurrentWeekGrid(int $userId, int $organizationId, ?string $weekStart = null): array
     {
         $phpTz = $this->timezoneService->getOrgTimezone($organizationId);
+        $payPeriod = $this->getPayPeriod($organizationId);
         $localToday = $this->timezoneService->toOrgLocal(gmdate('Y-m-d H:i:s'), $phpTz);
         $localDate = $localToday ? substr($localToday, 0, 10) : date('Y-m-d');
-        $weekStart = $weekStart ?? $this->getWeekStart($localDate, $phpTz);
-        $weekEnd = $this->getWeekEnd($weekStart, $phpTz);
+        $weekStart = $weekStart ?? $this->getPeriodStart($localDate, $phpTz, $payPeriod);
+        $weekEnd = $this->getPeriodEnd($weekStart, $phpTz, $payPeriod);
 
         $period = $this->getOrCreatePeriod($organizationId, $userId, $weekStart);
         [$startUtc, $endUtc] = $this->timezoneService->dateRangeUtc($weekStart, $weekEnd, $phpTz);
@@ -146,7 +215,11 @@ class TimesheetService
 
         $days = [];
         $dt = new DateTime($weekStart, new DateTimeZone($phpTz));
-        for ($i = 0; $i < 7; $i++) {
+        $periodDays = min(
+            (int) ((strtotime($weekEnd) - strtotime($weekStart)) / 86400) + 1,
+            $this->getPeriodDayCount($payPeriod)
+        );
+        for ($i = 0; $i < $periodDays; $i++) {
             $dayDate = $dt->format('Y-m-d');
             $dayEntries = array_values(array_filter($entries, function ($e) use ($dayDate, $phpTz) {
                 $started = $e['started_at'] ?? '';
@@ -177,6 +250,7 @@ class TimesheetService
             'period' => $period,
             'week_start' => $weekStart,
             'week_end' => $weekEnd,
+            'pay_period' => $payPeriod,
             'total_seconds' => $totalSeconds,
             'total_hours' => round($totalSeconds / 3600, 2),
             'days' => $days,
@@ -199,7 +273,8 @@ class TimesheetService
         }
 
         $phpTz = $this->timezoneService->getOrgTimezone($organizationId);
-        $weekEnd = $this->getWeekEnd($period['week_start'], $phpTz);
+        $payPeriod = $this->getPayPeriod($organizationId);
+        $weekEnd = $this->getPeriodEnd($period['week_start'], $phpTz, $payPeriod);
         [$startUtc, $endUtc] = $this->timezoneService->dateRangeUtc($period['week_start'], $weekEnd, $phpTz);
 
         $timeEntries = $this->timeEntryModel
@@ -224,18 +299,21 @@ class TimesheetService
                 ]);
             }
 
+            $requiresApproval = $this->requiresApproval($organizationId);
             $this->periodModel->update($periodId, [
-                'status' => 'submitted',
+                'status' => $requiresApproval ? 'submitted' : 'approved',
                 'submitted_at' => date('Y-m-d H:i:s'),
-                'approved_by' => null,
-                'approved_at' => null,
+                'approved_by' => $requiresApproval ? null : $userId,
+                'approved_at' => $requiresApproval ? null : date('Y-m-d H:i:s'),
                 'rejection_reason' => null,
             ]);
 
             $this->db->transComplete();
 
             $updated = $this->periodModel->find($periodId);
-            $this->notifyApprovers($organizationId, $updated, $userId);
+            if ($requiresApproval) {
+                $this->notifyApprovers($organizationId, $updated, $userId);
+            }
 
             return $updated;
         } catch (\Exception $e) {

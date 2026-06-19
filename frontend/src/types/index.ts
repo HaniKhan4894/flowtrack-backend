@@ -74,6 +74,7 @@ export interface User {
     organization?: OrganizationContext | null;
     plan?: PlanInfo | null;
     features?: PlanFeatures | null;
+    tracking_config?: OrgTrackingSettings | null;
     profile_photo?: string;
     avatar_url?: string;
     onboarding?: OnboardingProgress | null;
@@ -132,6 +133,7 @@ export interface TimesheetWeekGrid {
     period: TimesheetPeriod;
     week_start: string;
     week_end: string;
+    pay_period?: 'weekly' | 'biweekly' | 'monthly';
     total_seconds: number;
     total_hours: number;
     days: TimesheetDay[];
@@ -173,6 +175,42 @@ export interface InvoiceItem {
     amount: number;
 }
 
+export interface OrgTrackingSettings {
+    screenshot_enabled: boolean;
+    screenshot_only_while_timer: boolean;
+    screenshot_frequency_minutes: number;
+    screenshot_quality: 'normal' | 'high' | 'very_high';
+    screenshot_retention_days: number;
+    screenshot_hide_from_users: boolean;
+    screenshot_disallow_deleting: boolean;
+    screenshot_suppress_notifications: boolean;
+    activity_tracking_enabled: boolean;
+    url_tracking_enabled: boolean;
+    idle_timeout_minutes: number;
+    keep_idle_time: 'prompt' | 'always' | 'never';
+    timer_tolerance_minutes: number;
+    timer_reminder_enabled: boolean;
+    automated_tracking: boolean;
+}
+
+export interface OrgTimesheetSettings {
+    require_approval: boolean;
+    pay_period: 'weekly' | 'biweekly' | 'monthly';
+    allow_modify_time: boolean;
+    require_reason_on_edit: boolean;
+}
+
+export interface OrgOfficeSettings {
+    auto_detect_enabled: boolean;
+}
+
+export interface OrgPlanCaps {
+    screenshots: boolean;
+    screenshot_interval_min: number;
+    data_retention_days: number | null;
+    activity_tracking: boolean;
+}
+
 export interface Organization {
     id: number;
     name: string;
@@ -183,7 +221,15 @@ export interface Organization {
     timezone_id?: number | null;
     php_timezone?: string;
     currency?: string;
-    settings?: { default_daily_hours?: number; [key: string]: unknown };
+    settings?: {
+        default_daily_hours?: number;
+        tracking?: OrgTrackingSettings;
+        timesheet?: OrgTimesheetSettings;
+        office?: OrgOfficeSettings;
+        [key: string]: unknown;
+    };
+    plan_caps?: OrgPlanCaps;
+    effective_tracking?: OrgTrackingSettings;
     country?: { id: number; name: string } | null;
     state?: { id: number; name: string } | null;
     city?: { id: number; name: string } | null;
