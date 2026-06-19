@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Loader2, Trash2, Bell, Sparkles } from 'lucide-react';
+import { Loader2, Trash2, Sparkles } from 'lucide-react';
 import { smartNotificationService, type SmartNotificationRule, type SmartNotificationTemplate } from '../../api/smartNotificationService';
 import { getApiErrorMessage } from '../../utils/apiError';
 
