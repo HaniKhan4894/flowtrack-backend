@@ -5,7 +5,7 @@ import { persistAuthTokens, clearAuthTokens } from '../utils/authStorage';
 
 const apiBaseUrl =
     import.meta.env.VITE_API_URL ||
-    'https://2310-154-192-119-80.ngrok-free.app/flowtrack-backend/public/api/v1';
+    'https://violation-blade-pretty.ngrok-free.dev/flowtrack-backend/public/api/v1';
 
 const usesNgrok = apiBaseUrl.includes('ngrok');
 

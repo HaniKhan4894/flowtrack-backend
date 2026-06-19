@@ -1,5 +1,5 @@
 {
-  "apiBaseUrl": "https://2310-154-192-119-80.ngrok-free.app/flowtrack-backend/public/api/v1",
-  "publicBaseUrl": "https://2310-154-192-119-80.ngrok-free.app/flowtrack-backend/public",
+  "apiBaseUrl": "https://violation-blade-pretty.ngrok-free.dev/flowtrack-backend/public/api/v1",
+  "publicBaseUrl": "https://violation-blade-pretty.ngrok-free.dev/flowtrack-backend/public",
   "frontendUrl": "https://flowtrackhani.vercel.app"
 }
