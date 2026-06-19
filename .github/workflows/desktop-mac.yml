@@ -39,5 +39,5 @@ jobs:
         with:
           name: FlowTrack-mac-dmg
           path: |
-            desktop/dist/FlowTrack.dmg
+            desktop/dist-build/FlowTrack.dmg
             public/downloads/FlowTrack.dmg

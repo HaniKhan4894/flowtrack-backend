@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 
 const root = path.join(__dirname, '..');
-const distDir = path.join(root, 'desktop', 'dist');
+const distDir = path.join(root, 'desktop', 'dist-build');
 const downloadsDir = path.join(root, 'public', 'downloads');
 
 if (!fs.existsSync(downloadsDir)) {
@@ -13,7 +13,7 @@ if (!fs.existsSync(downloadsDir)) {
 }
 
 if (!fs.existsSync(distDir)) {
-    console.warn('No desktop/dist folder found. Run desktop pack first.');
+    console.warn('No desktop/dist-build folder found. Run desktop pack first.');
     process.exit(0);
 }
 
@@ -36,7 +36,7 @@ for (const file of files) {
 }
 
 if (copied === 0) {
-    console.warn('No installer artifacts found in desktop/dist');
+    console.warn('No installer artifacts found in desktop/dist-build');
 } else {
     console.log(`Published ${copied} installer(s) to public/downloads/`);
 }

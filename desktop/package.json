@@ -13,7 +13,7 @@
         "dev": "electron . --disable-gpu-sandbox",
         "sync-env": "node ../scripts/sync-deploy-env.js",
         "build:frontend": "npm run sync-env && cd ../frontend && npm run build",
-        "pack:win": "npm run icons && npm run build:frontend && electron-builder --win && node ../scripts/publish-installers.js",
+        "pack:win": "node scripts/prepack-clean.js && npm run icons && npm run build:frontend && electron-builder --win && node ../scripts/publish-installers.js",
         "pack:mac": "npm run icons && npm run build:frontend && electron-builder --mac && node ../scripts/publish-installers.js",
         "pack": "npm run icons && npm run build:frontend && electron-builder --win --mac && node ../scripts/publish-installers.js",
         "dist:win": "npm run pack:win",
@@ -38,13 +38,14 @@
         "productName": "FlowTrack",
         "icon": "build/icon.png",
         "directories": {
-            "output": "dist",
+            "output": "dist-build",
             "buildResources": "build"
         },
         "files": [
             "main.js",
             "activityTracker.js",
             "systemInput.js",
+            "networkInfo.js",
             "preload.js",
             "config.js",
             "icon.png",
