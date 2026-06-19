@@ -158,6 +158,10 @@ class OrganizationSettingsService
             $effective['screenshot_enabled'] = true;
         }
 
+        if (!$effective['screenshot_enabled']) {
+            $effective['screenshot_frequency_minutes'] = 0;
+        }
+
         $orgFreq = max(1, (int) ($tracking['screenshot_frequency_minutes'] ?? 5));
         if ($planInterval > 0) {
             $effective['screenshot_frequency_minutes'] = max($orgFreq, $planInterval);

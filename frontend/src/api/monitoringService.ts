@@ -92,12 +92,17 @@ export const monitoringService = {
     startMonitoring: (timeEntryId: number, token?: string) => {
         activeTimeEntryId = timeEntryId;
         const user = useAuthStore.getState().user;
-        const tracking = (user as { tracking_config?: { screenshot_frequency_minutes?: number; idle_timeout_minutes?: number; keep_idle_time?: string } })?.tracking_config;
-        const screenshotInterval = Number(
-            tracking?.screenshot_frequency_minutes ?? user?.features?.screenshot_interval ?? 0,
-        );
+        const tracking = user?.tracking_config;
+        const screenshotsEnabled = tracking?.screenshot_enabled !== false;
+        const screenshotInterval = screenshotsEnabled
+            ? Number(tracking?.screenshot_frequency_minutes ?? user?.features?.screenshot_interval ?? 0)
+            : 0;
         const trackingConfig = {
+            screenshot_enabled: screenshotsEnabled,
             screenshot_frequency_minutes: screenshotInterval,
+            screenshot_suppress_notifications: tracking?.screenshot_suppress_notifications === true,
+            url_tracking_enabled: tracking?.url_tracking_enabled !== false,
+            activity_tracking_enabled: tracking?.activity_tracking_enabled !== false,
             idle_timeout_minutes: tracking?.idle_timeout_minutes ?? 5,
             keep_idle_time: tracking?.keep_idle_time ?? 'prompt',
             timer_tolerance_minutes: (tracking as { timer_tolerance_minutes?: number })?.timer_tolerance_minutes ?? 2,

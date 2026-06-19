@@ -245,6 +245,11 @@ class ScreenshotController extends ResourceController
                 return $this->fail('Screenshots are hidden from users in your organization.', 403);
             }
 
+            $tracking = $settingsService->getEffectiveTrackingConfig($organizationId);
+            if (!empty($tracking['screenshot_disallow_deleting'])) {
+                return $this->fail('Deleting screenshots is disabled by organization policy.', 403);
+            }
+
             $deleted = $this->screenshotService->deleteScreenshot($id, $userId);
 
             if (!$deleted) {

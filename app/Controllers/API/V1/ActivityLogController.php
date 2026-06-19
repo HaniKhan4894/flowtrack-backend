@@ -4,6 +4,7 @@ namespace App\Controllers\API\V1;
 
 use CodeIgniter\RESTful\ResourceController;
 use App\Services\ActivityLogService;
+use App\Services\OrganizationSettingsService;
 use App\Services\TeamScopeService;
 use App\Services\PermissionService;
 use App\Services\TimeEntryService;
@@ -83,9 +84,17 @@ class ActivityLogController extends ResourceController
         try {
             /** @var \App\Entities\User $user */
             $userId = (int)($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
+            $organizationId = (int)($this->request->getServer('FLOWTRACK_ORGANIZATION_ID') ?? 0);
             if (!$userId) {
                 return $this->fail('Unauthorized', 401);
             }
+
+            $settingsService = new OrganizationSettingsService();
+            $tracking = $settingsService->getEffectiveTrackingConfig($organizationId);
+            if (empty($tracking['activity_tracking_enabled'])) {
+                return $this->fail('Activity tracking is disabled for your organization.', 403);
+            }
+
             $data = $this->request->getJSON(true);
 
             if (!isset($data['time_entry_id'])) {
@@ -94,6 +103,14 @@ class ActivityLogController extends ResourceController
 
             // If it's a single log, wrap in array
             $logs = isset($data['logs']) ? $data['logs'] : [$data];
+            if (empty($tracking['url_tracking_enabled'])) {
+                foreach ($logs as &$log) {
+                    if (is_array($log)) {
+                        $log['url'] = '';
+                    }
+                }
+                unset($log);
+            }
             $batchIdleSeconds = (int) ($data['idle_seconds'] ?? 0);
             $batchActiveSeconds = (int) ($data['active_seconds'] ?? 0);
 

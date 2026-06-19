@@ -71,10 +71,15 @@ class SmartNotificationService
 
     public function list(int $organizationId): array
     {
-        return $this->model
+        $rows = $this->model
             ->where('organization_id', $organizationId)
             ->orderBy('created_at', 'DESC')
             ->findAll();
+
+        return array_values(array_filter(array_map(
+            fn ($row) => $this->formatRule($row),
+            $rows
+        )));
     }
 
     public function getTemplates(): array
@@ -388,9 +393,22 @@ class SmartNotificationService
             return null;
         }
 
-        $row['channels'] = json_decode($row['channels'] ?? '[]', true) ?: [];
-        $row['config'] = json_decode($row['config'] ?? 'null', true);
-        $row['is_active'] = (bool) $row['is_active'];
+        $channels = $row['channels'] ?? '[]';
+        if (is_string($channels)) {
+            $channels = json_decode($channels, true);
+        }
+        $row['channels'] = is_array($channels) ? $channels : [];
+
+        $config = $row['config'] ?? null;
+        if (is_string($config)) {
+            $config = json_decode($config, true);
+        }
+        $row['config'] = is_array($config) ? $config : null;
+
+        $row['is_active'] = filter_var($row['is_active'] ?? false, FILTER_VALIDATE_BOOLEAN);
+        $row['threshold'] = isset($row['threshold']) ? (float) $row['threshold'] : null;
+        $row['id'] = (int) $row['id'];
+        $row['organization_id'] = (int) $row['organization_id'];
 
         return $row;
     }

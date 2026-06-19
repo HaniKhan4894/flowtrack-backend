@@ -79,6 +79,11 @@ class MemberMonitoringService
             return false;
         }
 
+        $orgTracking = (new OrganizationSettingsService())->getEffectiveTrackingConfig($organizationId);
+        if (empty($orgTracking['screenshot_enabled'])) {
+            return false;
+        }
+
         if (!($member['screenshots_enabled'] ?? true)) {
             return false;
         }

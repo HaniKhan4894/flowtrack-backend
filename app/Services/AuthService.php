@@ -517,6 +517,8 @@ class AuthService
                 $user['tracking_config'] = $effectiveTracking;
                 if (!empty($effectiveTracking['screenshot_enabled'])) {
                     $user['features']['screenshot_interval'] = (int) ($effectiveTracking['screenshot_frequency_minutes'] ?? $features['screenshot_interval'] ?? 0);
+                } else {
+                    $user['features']['screenshot_interval'] = 0;
                 }
             } elseif ($organizationId > 0) {
                 $settingsService = new OrganizationSettingsService();

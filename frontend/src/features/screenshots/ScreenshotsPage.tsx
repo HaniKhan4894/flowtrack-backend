@@ -31,7 +31,8 @@ const ScreenshotsPage = () => {
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
 
   const isDesktop = monitoringService.isDesktop;
-  const canDeleteScreenshots = hasPermission(user, 'screenshots.delete');
+  const disallowDeleting = user?.tracking_config?.screenshot_disallow_deleting === true;
+  const canDeleteScreenshots = hasPermission(user, 'screenshots.delete') && !disallowDeleting;
   const ownScreenshotsHidden = areOwnScreenshotsHidden(user);
 
   useEffect(() => {

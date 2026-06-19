@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Save, Loader2, Camera, Activity, Clock, Timer } from 'lucide-react';
 import { organizationService } from '../../api/organizationService';
+import { authService } from '../../api/authService';
+import { useAuthStore } from '../../store/authStore';
 import { getApiErrorMessage } from '../../utils/apiError';
 import type { OrgTrackingSettings, Organization } from '../../types';
 import { DEFAULT_TRACKING } from './orgSettingsDefaults';
@@ -73,7 +75,18 @@ export function ActivityTrackingSettingsTab({ organizationId, onSaved }: Props) 
     setSaving(true);
     setError(null);
     try {
-      await organizationService.update(organizationId, { settings: { tracking } });
+      const resp = await organizationService.update(organizationId, { settings: { tracking } });
+      const effective = resp.data?.effective_tracking ?? resp.data?.settings?.tracking ?? tracking;
+      const { user, setUser } = useAuthStore.getState();
+      if (user) {
+        setUser({ ...user, tracking_config: { ...tracking, ...effective } });
+      }
+      try {
+        const me = await authService.me();
+        setUser(me.data);
+      } catch {
+        // keep merged local update if profile refresh fails
+      }
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
       onSaved?.();

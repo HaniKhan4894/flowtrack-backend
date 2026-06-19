@@ -15,6 +15,9 @@ const networkInfo = require('./networkInfo');
 const SCREENSHOT_MIN_MS = 1 * 60 * 1000; // fallback minimum
 const SCREENSHOT_MAX_MS = 4 * 60 * 1000; // fallback maximum
 let planScreenshotIntervalMinutes = 0;
+let suppressScreenshotNotifications = false;
+let urlTrackingEnabled = true;
+let activityTrackingEnabled = true;
 let idleThresholdSec = 5 * 60;
 let keepIdleTimeMode = 'prompt';
 let idleGuardTimer = null;
@@ -416,7 +419,7 @@ async function uploadScreenshot(jpegBuffer, activityLevel, screenIndex = 0, retr
                 res.on('end', () => {
                     if (res.statusCode >= 200 && res.statusCode < 300) {
                         console.log(`[Screenshot] Uploaded successfully. Status: ${res.statusCode}`);
-                        if (mainWindow && !mainWindow.isDestroyed()) {
+                        if (mainWindow && !mainWindow.isDestroyed() && !suppressScreenshotNotifications) {
                             mainWindow.webContents.send('screenshot-captured', { activityLevel });
                         }
                         resolve(res.statusCode);
@@ -803,13 +806,17 @@ function startMonitoringLoop() {
 
     scheduleNextScreenshot();
 
-    activityTracker.start({
-        getForegroundApp,
-        extractUrlFromTitle,
-        detectSensitiveApp,
-        isInternalTrackerApp,
-        onSync: syncActivityToBackend,
-    });
+    if (activityTrackingEnabled) {
+        activityTracker.start({
+            getForegroundApp,
+            extractUrlFromTitle: (title, appName) => (
+                urlTrackingEnabled ? extractUrlFromTitle(title, appName) : ''
+            ),
+            detectSensitiveApp,
+            isInternalTrackerApp,
+            onSync: syncActivityToBackend,
+        });
+    }
 
     startTokenRefreshLoop();
     startDistractionMonitor();
@@ -864,7 +871,12 @@ ipcMain.handle('start-tracking', (_event, { timeEntryId, token, screenshotInterv
     currentSession.timeEntryId = timeEntryId;
     currentSession.isTracking = true;
     const cfg = trackingConfig || {};
-    planScreenshotIntervalMinutes = Number(screenshotIntervalMinutes ?? cfg.screenshot_frequency_minutes) || 0;
+    planScreenshotIntervalMinutes = cfg.screenshot_enabled === false
+        ? 0
+        : Number(screenshotIntervalMinutes ?? cfg.screenshot_frequency_minutes) || 0;
+    suppressScreenshotNotifications = !!cfg.screenshot_suppress_notifications;
+    urlTrackingEnabled = cfg.url_tracking_enabled !== false;
+    activityTrackingEnabled = cfg.activity_tracking_enabled !== false;
     const idleMinutes = Number(cfg.idle_timeout_minutes ?? 5);
     idleThresholdSec = Math.max(60, idleMinutes * 60);
     keepIdleTimeMode = cfg.keep_idle_time || 'prompt';
