@@ -66,6 +66,10 @@ class SubscriptionService
             throw new \Exception('Plan not found');
         }
 
+        if ($this->planRequiresPayment($plan)) {
+            throw new \Exception('Paid plans must use Stripe checkout. Start checkout from the billing page.');
+        }
+
         $this->db->transStart();
 
         try {
@@ -113,6 +117,10 @@ class SubscriptionService
             throw new \Exception('Plan not found');
         }
 
+        if (!$this->planRequiresPayment($plan)) {
+            throw new \Exception('The free plan does not require payment.');
+        }
+
         $priceId = $this->resolveStripePriceId($plan, $billingCycle);
         $quantity = ($plan['pricing_model'] ?? 'fixed') === 'per_user'
             ? max((int) ($plan['min_users'] ?? 1), $userCount)
@@ -156,7 +164,7 @@ class SubscriptionService
         ];
     }
 
-    public function confirmCheckoutSession(string $sessionId): array
+    public function confirmCheckoutSession(string $sessionId, ?int $expectedOrganizationId = null): array
     {
         $session = $this->getStripeClient()->checkout->sessions->retrieve($sessionId, []);
 
@@ -178,66 +186,16 @@ class SubscriptionService
             throw new \Exception('Invalid checkout metadata');
         }
 
+        if ($expectedOrganizationId && $organizationId !== $expectedOrganizationId) {
+            throw new \Exception('Checkout session does not belong to your organization');
+        }
+
         $stripeSubscriptionId = is_string($session->subscription ?? null) ? $session->subscription : null;
-        if ($stripeSubscriptionId) {
-            return $this->syncStripeSubscription($organizationId, $stripeSubscriptionId, $planId, $billingCycle, $userCount);
+        if (!$stripeSubscriptionId) {
+            throw new \Exception('Stripe subscription was not created for this checkout.');
         }
 
-        $plan = $this->planModel->find($planId);
-        if (!$plan) {
-            throw new \Exception('Plan not found');
-        }
-
-        $amount = $this->calculatePrice($planId, $userCount, $billingCycle);
-        $periodEnd = $billingCycle === 'yearly'
-            ? date('Y-m-d H:i:s', strtotime('+1 year'))
-            : date('Y-m-d H:i:s', strtotime('+1 month'));
-
-        $this->db->transStart();
-        try {
-            $current = $this->subscriptionModel->getActiveSubscription($organizationId);
-            if ($current) {
-                $this->subscriptionModel->update($current['id'], [
-                    'plan_id' => $planId,
-                    'user_count' => $userCount,
-                    'amount' => $amount,
-                    'billing_cycle' => $billingCycle,
-                    'status' => 'active',
-                    'trial_ends_at' => null,
-                    'current_period_start' => date('Y-m-d H:i:s'),
-                    'current_period_end' => $periodEnd,
-                    'cancel_at_period_end' => false,
-                    'stripe_customer_id' => $session->customer ?: null,
-                    'stripe_subscription_id' => $stripeSubscriptionId ?: ($session->subscription ?? $session->id),
-                ]);
-                $subscriptionId = $current['id'];
-            } else {
-                $subscriptionId = $this->subscriptionModel->insert([
-                    'organization_id' => $organizationId,
-                    'plan_id' => $planId,
-                    'user_count' => $userCount,
-                    'amount' => $amount,
-                    'billing_cycle' => $billingCycle,
-                    'status' => 'active',
-                    'trial_ends_at' => null,
-                    'current_period_start' => date('Y-m-d H:i:s'),
-                    'current_period_end' => $periodEnd,
-                    'stripe_customer_id' => $session->customer ?: null,
-                    'stripe_subscription_id' => $stripeSubscriptionId ?: ($session->subscription ?? $session->id),
-                ]);
-                if (!$subscriptionId) {
-                    throw new \RuntimeException('Failed to create subscription: ' . json_encode($this->subscriptionModel->errors()));
-                }
-            }
-
-            $this->logHistory($organizationId, null, $planId, 'stripe_checkout', $amount, $billingCycle);
-            $this->db->transComplete();
-
-            return $this->subscriptionModel->find($subscriptionId);
-        } catch (\Exception $e) {
-            $this->db->transRollback();
-            throw $e;
-        }
+        return $this->syncStripeSubscription($organizationId, $stripeSubscriptionId, $planId, $billingCycle, $userCount);
     }
 
     /**
@@ -784,9 +742,12 @@ class SubscriptionService
         $period = $this->extractStripePeriod($stripeSub, $billingCycle);
         $periodStart = $period['start'];
         $periodEnd = $period['end'];
-        $status = in_array($stripeSub->status, ['active', 'trialing'], true)
-            ? ($stripeSub->status === 'trialing' ? 'trial' : 'active')
-            : 'cancelled';
+        $status = match ($stripeSub->status) {
+            'active' => 'active',
+            'trialing' => 'trial',
+            'past_due', 'unpaid' => 'past_due',
+            default => 'cancelled',
+        };
 
         $current = $this->subscriptionModel->getActiveSubscription($organizationId);
         $payload = [
@@ -839,7 +800,17 @@ class SubscriptionService
                     $stripeSub = $this->getStripeClient()->subscriptions->retrieve((string) $invoice->subscription);
                     $orgId = (int) ($stripeSub->metadata->organization_id ?? 0);
                     if ($orgId) {
-                        $this->syncStripeSubscription($orgId, (string) $invoice->subscription);
+                        $local = $this->syncStripeSubscription($orgId, (string) $invoice->subscription);
+                        if (($invoice->billing_reason ?? '') === 'subscription_cycle') {
+                            $this->logHistory(
+                                $orgId,
+                                null,
+                                (int) ($local['plan_id'] ?? 0),
+                                'renewal',
+                                (float) ($invoice->amount_paid ?? 0) / 100,
+                                (string) ($local['billing_cycle'] ?? 'monthly')
+                            );
+                        }
                     }
                 }
                 break;
@@ -875,5 +846,33 @@ class SubscriptionService
                 }
                 break;
         }
+    }
+
+    public function createBillingPortalSession(int $organizationId): array
+    {
+        $subscription = $this->subscriptionModel->getActiveSubscription($organizationId);
+        if (!$subscription || empty($subscription['stripe_customer_id'])) {
+            throw new \Exception('No saved payment method. Subscribe to a paid plan first.');
+        }
+
+        $frontendUrl = rtrim((string) (env('app.frontendURL') ?? 'http://localhost:5173'), '/');
+        $session = $this->getStripeClient()->billingPortal->sessions->create([
+            'customer' => $subscription['stripe_customer_id'],
+            'return_url' => $frontendUrl . '/billing',
+        ]);
+
+        return ['url' => $session->url];
+    }
+
+    private function planRequiresPayment(array $plan): bool
+    {
+        if (($plan['slug'] ?? '') === 'free') {
+            return false;
+        }
+
+        return (float) ($plan['price_monthly'] ?? 0) > 0
+            || (float) ($plan['price_yearly'] ?? 0) > 0
+            || (float) ($plan['base_price'] ?? 0) > 0
+            || (float) ($plan['price_per_user'] ?? 0) > 0;
     }
 }

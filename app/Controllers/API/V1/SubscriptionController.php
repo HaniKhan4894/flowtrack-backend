@@ -166,12 +166,38 @@ class SubscriptionController extends ResourceController
                 return $this->fail('session_id is required', 400);
             }
 
-            $subscription = $this->subscriptionService->confirmCheckoutSession((string)$data['session_id']);
+            $subscription = $this->subscriptionService->confirmCheckoutSession(
+                (string) $data['session_id'],
+                (int) ($this->request->getServer('FLOWTRACK_ORGANIZATION_ID') ?? 0)
+            );
 
             return $this->respond([
                 'success' => true,
                 'message' => 'Payment confirmed and subscription activated',
                 'data' => $subscription,
+            ]);
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+
+    /**
+     * POST /api/v1/subscriptions/billing-portal
+     * Stripe Customer Portal — update card, view invoices, cancel
+     */
+    public function billingPortal()
+    {
+        try {
+            $organizationId = (int) ($this->request->getServer('FLOWTRACK_ORGANIZATION_ID') ?? 0);
+            if (!$organizationId) {
+                return $this->fail('Unauthorized', 401);
+            }
+
+            $session = $this->subscriptionService->createBillingPortalSession($organizationId);
+
+            return $this->respond([
+                'success' => true,
+                'data' => $session,
             ]);
         } catch (\Exception $e) {
             return $this->fail($e->getMessage(), 400);

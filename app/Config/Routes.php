@@ -305,6 +305,7 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\API\V1'], function ($r
     $routes->post('subscriptions', 'SubscriptionController::subscribe', ['filter' => 'auth']);
     $routes->post('subscriptions/checkout-session', 'SubscriptionController::checkoutSession', ['filter' => 'auth']);
     $routes->post('subscriptions/confirm-checkout', 'SubscriptionController::confirmCheckout', ['filter' => 'auth']);
+    $routes->post('subscriptions/billing-portal', 'SubscriptionController::billingPortal', ['filter' => 'auth']);
     $routes->get('subscriptions/current', 'SubscriptionController::current', ['filter' => 'auth']);
     $routes->put('subscriptions/upgrade', 'SubscriptionController::upgrade', ['filter' => 'auth']);
     $routes->put('subscriptions/downgrade', 'SubscriptionController::downgrade', ['filter' => 'auth']);

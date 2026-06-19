@@ -46,6 +46,10 @@ export const billingService = {
         const response = await client.post('/subscriptions/confirm-checkout', { session_id: sessionId });
         return response.data;
     },
+    openBillingPortal: async (): Promise<{ data: { url: string } }> => {
+        const response = await client.post('/subscriptions/billing-portal');
+        return response.data;
+    },
     cancel: async (): Promise<any> => {
         const response = await client.post('/subscriptions/cancel');
         return response.data;
