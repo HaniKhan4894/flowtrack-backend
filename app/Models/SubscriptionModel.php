@@ -18,6 +18,12 @@ class SubscriptionModel extends Model
         'cancel_at_period_end', 'cancelled_at', 'stripe_subscription_id', 'stripe_customer_id'
     ];
 
+    protected $casts = [
+        'cancel_at_period_end' => 'boolean',
+        'user_count' => 'integer',
+        'amount' => 'float',
+    ];
+
     protected $useTimestamps = true;
     protected $dateFormat    = 'datetime';
     protected $createdField  = 'created_at';

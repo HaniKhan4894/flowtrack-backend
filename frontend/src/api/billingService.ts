@@ -14,6 +14,15 @@ export interface Subscription {
     user_count?: number;
 }
 
+function normalizeSubscription(raw: Subscription | null): Subscription | null {
+    if (!raw) return null;
+    const flag = raw.cancel_at_period_end;
+    return {
+        ...raw,
+        cancel_at_period_end: flag === true || flag === 1 || flag === '1',
+    };
+}
+
 export interface SubscriptionUsage {
     users: {
         current: number;
@@ -32,7 +41,10 @@ export interface SubscriptionUsage {
 export const billingService = {
     getSubscription: async (): Promise<{ data: Subscription | null }> => {
         const response = await client.get('/subscriptions/current');
-        return response.data;
+        return {
+            ...response.data,
+            data: normalizeSubscription(response.data?.data ?? null),
+        };
     },
     subscribe: async (planId: number, cycle: 'monthly' | 'yearly'): Promise<any> => {
         const response = await client.post('/subscriptions', { plan_id: planId, billing_cycle: cycle });
@@ -44,6 +56,9 @@ export const billingService = {
     },
     confirmCheckout: async (sessionId: string): Promise<any> => {
         const response = await client.post('/subscriptions/confirm-checkout', { session_id: sessionId });
+        if (response.data?.data) {
+            response.data.data = normalizeSubscription(response.data.data);
+        }
         return response.data;
     },
     openBillingPortal: async (): Promise<{ data: { url: string } }> => {
