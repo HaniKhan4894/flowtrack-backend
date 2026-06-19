@@ -14,12 +14,20 @@ export interface Subscription {
     user_count?: number;
 }
 
-function normalizeSubscription(raw: Subscription | null): Subscription | null {
+/** Raw API shape — MySQL booleans may arrive as 0/1 or "0"/"1". */
+type ApiSubscription = Omit<Subscription, 'cancel_at_period_end'> & {
+    cancel_at_period_end?: boolean | number | string;
+};
+
+function isTruthyFlag(value: unknown): boolean {
+    return value === true || value === 1 || value === '1';
+}
+
+function normalizeSubscription(raw: ApiSubscription | null): Subscription | null {
     if (!raw) return null;
-    const flag = raw.cancel_at_period_end;
     return {
         ...raw,
-        cancel_at_period_end: flag === true || flag === 1 || flag === '1',
+        cancel_at_period_end: isTruthyFlag(raw.cancel_at_period_end),
     };
 }
 
