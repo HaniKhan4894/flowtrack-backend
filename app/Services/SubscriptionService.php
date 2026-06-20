@@ -110,7 +110,7 @@ class SubscriptionService
         }
     }
 
-    public function createCheckoutSession(int $organizationId, int $planId, string $billingCycle = 'monthly', int $userCount = 1): array
+    public function createCheckoutSession(int $organizationId, int $planId, string $billingCycle = 'monthly', ?int $userCount = null): array
     {
         $plan = $this->planModel->find($planId);
         if (!$plan) {
@@ -121,35 +121,46 @@ class SubscriptionService
             throw new \Exception('The free plan does not require payment.');
         }
 
-        $priceId = $this->resolveStripePriceId($plan, $billingCycle);
-        $quantity = ($plan['pricing_model'] ?? 'fixed') === 'per_user'
-            ? max((int) ($plan['min_users'] ?? 1), $userCount)
-            : 1;
+        $userCount = $this->resolveBillableUserCount($organizationId, $plan);
+        $this->validatePlanUserCapacity($planId, $userCount);
+        $lineItems = $this->buildCheckoutLineItems($plan, $billingCycle, $userCount);
 
         $frontendUrl = rtrim((string) (env('app.frontendURL') ?? 'http://localhost:5173'), '/');
         $subscription = $this->subscriptionModel->getActiveSubscription($organizationId);
 
-        $sessionParams = [
-            'mode' => 'subscription',
-            'success_url' => $frontendUrl . '/billing?checkout=success&session_id={CHECKOUT_SESSION_ID}',
-            'cancel_url' => $frontendUrl . '/billing?checkout=cancelled',
-            'payment_method_types' => ['card'],
-            'line_items' => [[
-                'price' => $priceId,
-                'quantity' => $quantity,
-            ]],
+        $subscriptionData = [
             'metadata' => [
                 'organization_id' => (string) $organizationId,
                 'plan_id' => (string) $planId,
                 'billing_cycle' => $billingCycle,
                 'user_count' => (string) $userCount,
             ],
-            'subscription_data' => [
-                'metadata' => [
-                    'organization_id' => (string) $organizationId,
-                    'plan_id' => (string) $planId,
+        ];
+
+        if ($this->qualifiesForTrial($organizationId, $plan)) {
+            $trialDays = (int) ($plan['trial_days'] ?? 14);
+            $subscriptionData['trial_period_days'] = $trialDays;
+            $subscriptionData['trial_settings'] = [
+                'end_behavior' => [
+                    'missing_payment_method' => 'cancel',
                 ],
+            ];
+        }
+
+        $sessionParams = [
+            'mode' => 'subscription',
+            'success_url' => $frontendUrl . '/billing?checkout=success&session_id={CHECKOUT_SESSION_ID}',
+            'cancel_url' => $frontendUrl . '/billing?checkout=cancelled',
+            'payment_method_types' => ['card'],
+            'payment_method_collection' => 'always',
+            'line_items' => $lineItems,
+            'metadata' => [
+                'organization_id' => (string) $organizationId,
+                'plan_id' => (string) $planId,
+                'billing_cycle' => $billingCycle,
+                'user_count' => (string) $userCount,
             ],
+            'subscription_data' => $subscriptionData,
         ];
 
         if (!empty($subscription['stripe_customer_id'])) {
@@ -161,7 +172,67 @@ class SubscriptionService
         return [
             'id' => $session->id,
             'url' => $session->url,
+            'trial_days' => $this->qualifiesForTrial($organizationId, $plan) ? (int) ($plan['trial_days'] ?? 14) : 0,
+            'user_count' => $userCount,
+            'estimated_amount' => $this->calculatePrice($planId, $userCount, $billingCycle),
         ];
+    }
+
+    public function resolveBillableUserCount(int $organizationId, ?array $plan = null): int
+    {
+        $members = (int) $this->db->table('organization_members')
+            ->where('organization_id', $organizationId)
+            ->countAllResults();
+
+        $pending = (int) $this->db->table('organization_invitations')
+            ->where('organization_id', $organizationId)
+            ->countAllResults();
+
+        $count = max(1, $members + $pending);
+        $minUsers = (int) ($plan['min_users'] ?? 1);
+
+        return max($minUsers, $count);
+    }
+
+    private function qualifiesForTrial(int $organizationId, array $plan): bool
+    {
+        if ((int) ($plan['trial_days'] ?? 0) <= 0) {
+            return false;
+        }
+
+        $priorStripe = (int) $this->db->table('organization_subscriptions')
+            ->where('organization_id', $organizationId)
+            ->where('stripe_subscription_id IS NOT NULL', null, false)
+            ->countAllResults();
+
+        return $priorStripe === 0;
+    }
+
+    /**
+     * @return list<array{price: string, quantity: int}>
+     */
+    private function buildCheckoutLineItems(array $plan, string $billingCycle, int $userCount): array
+    {
+        if (($plan['pricing_model'] ?? 'fixed') === 'per_user') {
+            $items = [];
+            if ((float) ($plan['base_price'] ?? 0) > 0) {
+                $items[] = [
+                    'price' => $this->resolveStripeBasePriceId($plan, $billingCycle),
+                    'quantity' => 1,
+                ];
+            }
+            $items[] = [
+                'price' => $this->resolveStripePriceId($plan, $billingCycle),
+                'quantity' => max(1, $userCount),
+            ];
+
+            return $items;
+        }
+
+        return [[
+            'price' => $this->resolveStripePriceId($plan, $billingCycle),
+            'quantity' => 1,
+        ]];
     }
 
     public function confirmCheckoutSession(string $sessionId, ?int $expectedOrganizationId = null): array
@@ -446,6 +517,32 @@ class SubscriptionService
             'user_count' => $userCount,
             'amount' => $newAmount,
         ]);
+
+        if (!empty($subscription['stripe_subscription_id']) && (float) $newAmount > 0) {
+            $this->syncStripeSeatQuantity($subscription['stripe_subscription_id'], $userCount);
+        }
+    }
+
+    private function syncStripeSeatQuantity(string $stripeSubscriptionId, int $userCount): void
+    {
+        try {
+            $stripeSub = $this->getStripeClient()->subscriptions->retrieve($stripeSubscriptionId);
+            foreach ($stripeSub->items->data as $item) {
+                $component = $item->price->metadata['plan_component'] ?? '';
+                if ($component === 'seat') {
+                    $this->getStripeClient()->subscriptions->update($stripeSubscriptionId, [
+                        'items' => [[
+                            'id' => $item->id,
+                            'quantity' => max(1, $userCount),
+                        ]],
+                        'proration_behavior' => 'create_prorations',
+                    ]);
+                    break;
+                }
+            }
+        } catch (\Exception $e) {
+            log_message('error', 'Stripe seat quantity sync failed: ' . $e->getMessage());
+        }
     }
 
     /**
@@ -535,16 +632,29 @@ class SubscriptionService
     {
         $synced = [];
         foreach ($this->planModel->getActivePlans() as $plan) {
-            if ((float) ($plan['price_monthly'] ?? 0) <= 0 && (float) ($plan['price_yearly'] ?? 0) <= 0) {
+            if (!$this->planRequiresPayment($plan)) {
                 continue;
             }
 
             foreach (['monthly', 'yearly'] as $billingCycle) {
+                if (($plan['pricing_model'] ?? 'fixed') === 'per_user' && (float) ($plan['base_price'] ?? 0) > 0) {
+                    $basePriceId = $this->resolveStripeBasePriceId($plan, $billingCycle, true);
+                    $synced[] = [
+                        'plan_id' => (int) $plan['id'],
+                        'slug' => $plan['slug'],
+                        'billing_cycle' => $billingCycle,
+                        'component' => 'base',
+                        'price_id' => $basePriceId,
+                    ];
+                    $plan = $this->planModel->find((int) $plan['id']) ?? $plan;
+                }
+
                 $priceId = $this->resolveStripePriceId($plan, $billingCycle, true);
                 $synced[] = [
                     'plan_id' => (int) $plan['id'],
                     'slug' => $plan['slug'],
                     'billing_cycle' => $billingCycle,
+                    'component' => ($plan['pricing_model'] ?? 'fixed') === 'per_user' ? 'seat' : 'fixed',
                     'price_id' => $priceId,
                 ];
                 $plan = $this->planModel->find((int) $plan['id']) ?? $plan;
@@ -586,6 +696,87 @@ class SubscriptionService
         }
 
         return $this->createAndPersistStripePrice($plan, $billingCycle);
+    }
+
+    private function resolveStripeBasePriceId(array $plan, string $billingCycle, bool $forceCreate = false): string
+    {
+        $column = $billingCycle === 'yearly' ? 'stripe_base_price_id_yearly' : 'stripe_base_price_id_monthly';
+        $priceId = trim((string) ($plan[$column] ?? ''));
+        if ($priceId !== '') {
+            return $priceId;
+        }
+
+        $slug = strtoupper(str_replace('-', '_', (string) $plan['slug']));
+        $envKey = 'STRIPE_PRICE_' . $slug . '_BASE_' . ($billingCycle === 'yearly' ? 'YEARLY' : 'MONTHLY');
+        $fromEnv = trim((string) (
+            env($envKey)
+            ?? getenv($envKey)
+            ?? ($_ENV[$envKey] ?? '')
+            ?? ($_SERVER[$envKey] ?? '')
+        ));
+        if ($fromEnv !== '') {
+            $this->persistStripeBasePriceId((int) $plan['id'], $billingCycle, $fromEnv);
+            return $fromEnv;
+        }
+
+        if (!$forceCreate && !$this->shouldAutoCreateStripePrices()) {
+            throw new \Exception(
+                'Stripe base price is not configured for this plan. Set '
+                . $column
+                . ' on the plan, add '
+                . $envKey
+                . ' to .env, or run: php spark stripe:sync-plans'
+            );
+        }
+
+        return $this->createAndPersistStripeBasePrice($plan, $billingCycle);
+    }
+
+    private function stripeBaseUnitAmountForPlan(array $plan, string $billingCycle): int
+    {
+        $base = (float) ($plan['base_price'] ?? 0);
+        $amount = $billingCycle === 'yearly'
+            ? round($base * 12 * 0.9, 2)
+            : $base;
+
+        $cents = (int) round($amount * 100);
+        if ($cents <= 0) {
+            throw new \Exception('Cannot create a Stripe base price for a plan with zero base_price');
+        }
+
+        return $cents;
+    }
+
+    private function createAndPersistStripeBasePrice(array $plan, string $billingCycle): string
+    {
+        $stripe = $this->getStripeClient();
+        $productId = $this->findOrCreateStripeProduct($plan);
+        $interval = $billingCycle === 'yearly' ? 'year' : 'month';
+        $unitAmount = $this->stripeBaseUnitAmountForPlan($plan, $billingCycle);
+
+        $price = $stripe->prices->create([
+            'product' => $productId,
+            'currency' => 'usd',
+            'unit_amount' => $unitAmount,
+            'recurring' => ['interval' => $interval],
+            'metadata' => [
+                'plan_id' => (string) $plan['id'],
+                'plan_slug' => (string) $plan['slug'],
+                'billing_cycle' => $billingCycle,
+                'plan_component' => 'base',
+            ],
+        ]);
+
+        $priceId = (string) $price->id;
+        $this->persistStripeBasePriceId((int) $plan['id'], $billingCycle, $priceId);
+
+        return $priceId;
+    }
+
+    private function persistStripeBasePriceId(int $planId, string $billingCycle, string $priceId): void
+    {
+        $column = $billingCycle === 'yearly' ? 'stripe_base_price_id_yearly' : 'stripe_base_price_id_monthly';
+        $this->planModel->update($planId, [$column => $priceId]);
     }
 
     private function shouldAutoCreateStripePrices(): bool
@@ -664,6 +855,7 @@ class SubscriptionService
                 'plan_id' => (string) $plan['id'],
                 'plan_slug' => (string) $plan['slug'],
                 'billing_cycle' => $billingCycle,
+                'plan_component' => ($plan['pricing_model'] ?? 'fixed') === 'per_user' ? 'seat' : 'fixed',
             ],
         ]);
 
@@ -732,7 +924,11 @@ class SubscriptionService
         $metadata = $stripeSub->metadata ?? new \stdClass();
         $planId = $planId ?: (int) ($metadata->plan_id ?? 0);
         $billingCycle = $billingCycle ?: (($stripeSub->items->data[0]->price->recurring->interval ?? 'month') === 'year' ? 'yearly' : 'monthly');
-        $userCount = $userCount ?: (int) ($stripeSub->items->data[0]->quantity ?? 1);
+
+        if (!$userCount || $userCount <= 0) {
+            $userCount = $this->extractSeatQuantityFromStripeSubscription($stripeSub);
+        }
+        $userCount = max(1, $userCount);
 
         if (!$planId) {
             throw new \Exception('Plan ID missing from Stripe subscription');
@@ -749,6 +945,11 @@ class SubscriptionService
             default => 'cancelled',
         };
 
+        $trialEndsAt = null;
+        if (!empty($stripeSub->trial_end) && (int) $stripeSub->trial_end > 0) {
+            $trialEndsAt = date('Y-m-d H:i:s', (int) $stripeSub->trial_end);
+        }
+
         $current = $this->subscriptionModel->getActiveSubscription($organizationId);
         $payload = [
             'plan_id' => $planId,
@@ -756,6 +957,7 @@ class SubscriptionService
             'amount' => $amount,
             'billing_cycle' => $billingCycle,
             'status' => $status,
+            'trial_ends_at' => $trialEndsAt,
             'current_period_start' => $periodStart,
             'current_period_end' => $periodEnd,
             'cancel_at_period_end' => (bool) $stripeSub->cancel_at_period_end,
@@ -874,5 +1076,45 @@ class SubscriptionService
             || (float) ($plan['price_yearly'] ?? 0) > 0
             || (float) ($plan['base_price'] ?? 0) > 0
             || (float) ($plan['price_per_user'] ?? 0) > 0;
+    }
+
+    private function extractSeatQuantityFromStripeSubscription(object $stripeSub): int
+    {
+        foreach ($stripeSub->items->data as $item) {
+            $component = $item->price->metadata['plan_component'] ?? '';
+            if ($component === 'seat') {
+                return max(1, (int) ($item->quantity ?? 1));
+            }
+        }
+
+        return max(1, (int) ($stripeSub->items->data[0]->quantity ?? 1));
+    }
+
+    private function validatePlanUserCapacity(int $planId, int $userCount): void
+    {
+        $plan = $this->planModel->find($planId);
+        $maxUsers = $plan['max_users'] ?? null;
+
+        if ($maxUsers === null || $maxUsers === '') {
+            $fromFeature = $this->planModel->getFeatureValue($planId, 'max_users');
+            if ($fromFeature === null || $fromFeature === '' || strtolower((string) $fromFeature) === 'unlimited') {
+                return;
+            }
+            $maxUsers = (int) $fromFeature;
+        }
+
+        $limit = (int) $maxUsers;
+        if ($limit <= 0) {
+            return;
+        }
+
+        if ($userCount > $limit) {
+            throw new \Exception(sprintf(
+                'Your team has %d billable user%s but this plan supports up to %d. Choose a higher plan or remove pending invites.',
+                $userCount,
+                $userCount === 1 ? '' : 's',
+                $limit
+            ));
+        }
     }
 }

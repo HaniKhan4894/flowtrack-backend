@@ -1,4 +1,5 @@
 import client from './client';
+import { normalizeBillingSettings, type BillingSliderSettings } from '../features/billing/pricingMath';
 
 export interface Subscription {
     id: number;
@@ -8,6 +9,7 @@ export interface Subscription {
     amount: number;
     current_period_start?: string;
     current_period_end: string;
+    trial_ends_at?: string | null;
     cancel_at_period_end?: boolean;
     stripe_subscription_id?: string | null;
     stripe_customer_id?: string | null;
@@ -77,9 +79,12 @@ export const billingService = {
         const response = await client.post('/subscriptions/cancel');
         return response.data;
     },
-    getPlans: async (): Promise<{ data: any[] }> => {
+    getPlans: async (): Promise<{ data: any[]; billingSettings: BillingSliderSettings }> => {
         const response = await client.get('/plans');
-        return response.data;
+        return {
+            data: response.data?.data ?? [],
+            billingSettings: normalizeBillingSettings(response.data?.billing_settings),
+        };
     },
     getUsage: async (): Promise<{ data: SubscriptionUsage }> => {
         const response = await client.get('/subscriptions/usage');

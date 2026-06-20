@@ -161,7 +161,11 @@ class OrganizationService
         }
 
         $planModel = new PlanModel();
-        $maxUsers = $planModel->getFeatureValue((int) $subscription['plan_id'], 'max_users');
+        $plan = $planModel->find((int) $subscription['plan_id']);
+        $maxUsers = $plan['max_users'] ?? null;
+        if ($maxUsers === null || $maxUsers === '') {
+            $maxUsers = $planModel->getFeatureValue((int) $subscription['plan_id'], 'max_users');
+        }
         if ($maxUsers === null || $maxUsers === '' || $maxUsers === 'unlimited') {
             return;
         }

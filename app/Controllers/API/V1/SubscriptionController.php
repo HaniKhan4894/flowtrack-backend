@@ -5,6 +5,7 @@ namespace App\Controllers\API\V1;
 use CodeIgniter\RESTful\ResourceController;
 use App\Services\SubscriptionService;
 use App\Models\PlanModel;
+use App\Models\BillingSettingsModel;
 
 class SubscriptionController extends ResourceController
 {
@@ -28,18 +29,17 @@ class SubscriptionController extends ResourceController
     {
         try {
             $plans = $this->planModel->getActivePlans();
+            $billingSettings = (new BillingSettingsModel())->getSettings();
 
-            // Add features to each plan
             foreach ($plans as &$plan) {
-                $plan['features'] = $this->db->table('plan_features')
-                    ->where('plan_id', $plan['id'])
-                    ->get()
-                    ->getResultArray();
+                $plan = $this->planModel->enrichPlanForApi($plan);
             }
+            unset($plan);
 
             return $this->respond([
                 'success' => true,
-                'data' => $plans
+                'data' => $plans,
+                'billing_settings' => $billingSettings,
             ]);
 
         } catch (\Exception $e) {

@@ -22,12 +22,15 @@ class PlanModel extends Model
         'base_price',
         'price_per_user',
         'min_users',
+        'max_users',
         'trial_days',
         'is_active',
         'is_popular',
         'sort_order',
         'stripe_price_id_monthly',
         'stripe_price_id_yearly',
+        'stripe_base_price_id_monthly',
+        'stripe_base_price_id_yearly',
     ];
 
     protected $useTimestamps = true;
@@ -81,9 +84,85 @@ class PlanModel extends Model
         $feature = $this->db->table('plan_features')
             ->where('plan_id', $planId)
             ->where('feature_key', $featureKey)
+            ->where('is_enabled', 1)
             ->get()
             ->getRowArray();
 
         return $feature ? $feature['feature_value'] : null;
+    }
+
+    public function getPricingFeatures(int $planId): array
+    {
+        return $this->db->table('plan_features')
+            ->where('plan_id', $planId)
+            ->where('is_enabled', 1)
+            ->where('show_on_pricing', 1)
+            ->orderBy('sort_order', 'ASC')
+            ->orderBy('id', 'ASC')
+            ->get()
+            ->getResultArray();
+    }
+
+    /**
+     * Attach pricing features and align max_users display with plans.max_users column.
+     */
+    public function enrichPlanForApi(array $plan): array
+    {
+        $plan['features'] = $this->getPricingFeatures((int) $plan['id']);
+        $plan['features'] = $this->applyPlanMaxUsersToFeatures($plan, $plan['features']);
+
+        return $plan;
+    }
+
+    /**
+     * @param list<array<string, mixed>> $features
+     * @return list<array<string, mixed>>
+     */
+    public function applyPlanMaxUsersToFeatures(array $plan, array $features): array
+    {
+        $maxUsers = $plan['max_users'] ?? null;
+        $label = $this->maxUsersDisplayLabel($maxUsers);
+
+        $found = false;
+        foreach ($features as &$feature) {
+            if (($feature['feature_key'] ?? '') !== 'max_users') {
+                continue;
+            }
+            $found = true;
+            if ($maxUsers === null || $maxUsers === '') {
+                $feature['feature_value'] = 'unlimited';
+            } else {
+                $feature['feature_value'] = (string) (int) $maxUsers;
+            }
+            $feature['display_name'] = $label;
+        }
+        unset($feature);
+
+        if (!$found && $label !== '') {
+            array_unshift($features, [
+                'feature_key' => 'max_users',
+                'feature_value' => $maxUsers === null || $maxUsers === '' ? 'unlimited' : (string) (int) $maxUsers,
+                'display_name' => $label,
+                'is_enabled' => 1,
+                'show_on_pricing' => 1,
+                'sort_order' => 0,
+            ]);
+        }
+
+        return $features;
+    }
+
+    private function maxUsersDisplayLabel($maxUsers): string
+    {
+        if ($maxUsers === null || $maxUsers === '') {
+            return 'Unlimited team members';
+        }
+
+        $max = (int) $maxUsers;
+        if ($max === 1) {
+            return 'Single user only';
+        }
+
+        return 'Up to ' . $max . ' team members';
     }
 }

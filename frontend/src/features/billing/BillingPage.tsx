@@ -1,44 +1,27 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check, Sparkles, Shield, Loader2, PartyPopper, AlertTriangle, Calendar, CreditCard, RefreshCw, ExternalLink } from 'lucide-react';
+import { Shield, Loader2, PartyPopper, AlertTriangle, Calendar, CreditCard, RefreshCw, ExternalLink, Sparkles } from 'lucide-react';
 import { Button } from '../../components/ui';
 import { billingService, type Subscription } from '../../api/billingService';
 import { useSearchParams } from 'react-router-dom';
 import { formatApiDate } from '../../utils/date';
 import { formatPlanForDisplay, type ApiPlan, type DisplayPlan } from './billingPlanUtils';
-
-const FALLBACK_PLANS: DisplayPlan[] = [
-  {
-    id: 1, slug: 'free', name: 'Free', priceLabel: '$0', periodLabel: 'forever',
-    billingNote: 'No credit card required', description: 'Perfect for trying FlowTrack',
-    features: ['1 user', '2 projects', 'Basic time tracking', 'No screenshots'],
-    popular: false, isFree: true, trialDays: 0,
-  },
-  {
-    id: 2, slug: 'starter', name: 'Starter', priceLabel: '$4.99', periodLabel: '/month',
-    billingNote: 'Auto-renews monthly · cancel anytime', description: 'Small teams getting started',
-    features: ['Up to 5 members', 'Screenshot monitoring', 'Activity tracking', 'CSV export'],
-    popular: false, isFree: false, trialDays: 14,
-  },
-  {
-    id: 3, slug: 'professional', name: 'Professional', priceLabel: '$9.99', periodLabel: '/month',
-    billingNote: 'Auto-renews monthly · cancel anytime', description: 'Best value for growing teams',
-    features: ['Up to 25 members', 'Invoicing', 'Custom roles', 'Priority support'],
-    popular: true, isFree: false, trialDays: 14,
-  },
-  {
-    id: 4, slug: 'enterprise', name: 'Enterprise', priceLabel: '$19.99', periodLabel: '/month',
-    billingNote: 'Auto-renews monthly · cancel anytime', description: 'Larger teams, fair pricing',
-    features: ['Unlimited members', 'SSO & white-label', 'Dedicated support', 'Unlimited retention'],
-    popular: false, isFree: false, trialDays: 30,
-  },
-];
+import { PricingSlider } from './PricingSlider';
+import { PricingCards } from './PricingCards';
+import {
+  clampSliderUsers,
+  DEFAULT_BILLING_SETTINGS,
+  type BillingSliderSettings,
+} from './pricingMath';
 
 const BillingPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const [currentSub, setCurrentSub] = useState<Subscription | null>(null);
   const [apiPlans, setApiPlans] = useState<ApiPlan[]>([]);
+  const [sliderSettings, setSliderSettings] = useState<BillingSliderSettings>(DEFAULT_BILLING_SETTINGS);
+  const [billableUsers, setBillableUsers] = useState<number | undefined>(undefined);
+  const [sliderUsers, setSliderUsers] = useState(DEFAULT_BILLING_SETTINGS.slider_default);
   const [isLoading, setIsLoading] = useState(true);
   const [subscribingId, setSubscribingId] = useState<number | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
@@ -47,7 +30,24 @@ const BillingPage = () => {
 
   useEffect(() => {
     fetchSubscription();
-    billingService.getPlans().then((r) => setApiPlans(r.data ?? [])).catch(() => setApiPlans([]));
+    Promise.all([
+      billingService.getPlans(),
+      billingService.getUsage().catch(() => null),
+    ]).then(([plansRes, usageRes]) => {
+      const settings = plansRes.billingSettings;
+      setApiPlans(plansRes.data ?? []);
+      setSliderSettings(settings);
+
+      if (usageRes?.data) {
+        const members = usageRes.data.users?.members ?? 0;
+        const pending = usageRes.data.users?.pending_invites ?? 0;
+        const count = Math.max(1, members + pending);
+        setBillableUsers(count);
+        setSliderUsers(clampSliderUsers(Math.max(settings.slider_default, count), settings));
+      } else {
+        setSliderUsers(settings.slider_default);
+      }
+    }).catch(() => setApiPlans([]));
   }, []);
 
   useEffect(() => {
@@ -80,12 +80,12 @@ const BillingPage = () => {
     }
   };
 
-  const displayPlans: DisplayPlan[] = apiPlans.length
-    ? apiPlans.map((p) => formatPlanForDisplay(p, billingCycle))
-    : FALLBACK_PLANS;
+  const displayPlans: DisplayPlan[] = apiPlans.map((p) =>
+    formatPlanForDisplay(p, billingCycle, sliderUsers, { billableUsers, billingSettings: sliderSettings }),
+  );
 
   const handleSubscribe = async (plan: DisplayPlan) => {
-    if (plan.isFree || plan.id === currentSub?.plan_id) return;
+    if (plan.isFree || plan.id === currentSub?.plan_id || plan.disabled) return;
 
     setSubscribingId(plan.id);
     setError(null);
@@ -96,7 +96,8 @@ const BillingPage = () => {
       window.location.href = checkoutUrl;
     } catch (e: unknown) {
       console.error('Subscription failed', e);
-      setError('Could not start checkout. Please try again or contact support.');
+      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setError(msg || 'Could not start checkout. Please try again or contact support.');
     } finally {
       setSubscribingId(null);
     }
@@ -136,7 +137,7 @@ const BillingPage = () => {
             className="fixed top-8 left-1/2 -translate-x-1/2 z-50 bg-emerald-500 text-white px-8 py-4 rounded-3xl shadow-ai flex items-center gap-3"
           >
             <PartyPopper size={24} />
-            <span className="font-bold">Payment successful! Your subscription is active and will renew automatically.</span>
+            <span className="font-bold">You're all set! Your trial has started — billing begins after 14 days unless you cancel.</span>
           </motion.div>
         )}
       </AnimatePresence>
@@ -164,7 +165,28 @@ const BillingPage = () => {
         </div>
       )}
 
-      {currentSub && currentSub.status !== 'past_due' && currentSub.cancel_at_period_end && (
+      {currentSub?.status === 'trial' && (
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 bg-primary-500/10 border border-primary-500/30 rounded-2xl px-6 py-4">
+          <div className="flex items-start gap-4">
+            <Sparkles className="text-primary-400 shrink-0 mt-0.5" size={22} />
+            <div>
+              <p className="font-bold text-primary-200">14-day free trial active</p>
+              <p className="text-sm text-primary-100/80 mt-1">
+                {currentSub.trial_ends_at
+                  ? <>First charge on {formatApiDate(currentSub.trial_ends_at)}. Cancel before then from Manage billing — no charge.</>
+                  : <>Your card is on file. Cancel anytime from Manage billing before the trial ends — no charge.</>}
+              </p>
+            </div>
+          </div>
+          {hasPaidStripe && (
+            <Button variant="secondary" size="sm" onClick={openBillingPortal} isLoading={portalLoading}>
+              Cancel trial
+            </Button>
+          )}
+        </div>
+      )}
+
+      {currentSub && currentSub.status !== 'past_due' && currentSub.status !== 'trial' && currentSub.cancel_at_period_end && (
         <div className="flex items-start gap-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl px-6 py-4">
           <Calendar className="text-amber-400 shrink-0 mt-0.5" size={22} />
           <div>
@@ -186,12 +208,15 @@ const BillingPage = () => {
               <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Your subscription</p>
               <p className="text-xl font-bold text-white capitalize">{currentSub.status.replace('_', ' ')}</p>
               <p className="text-sm text-slate-400 mt-1">
-                {currentSub.cancel_at_period_end
-                  ? <span className="text-amber-400">Ends {formatApiDate(currentSub.current_period_end)}</span>
-                  : <>Next charge {formatApiDate(currentSub.current_period_end)}</>}
+                {currentSub.status === 'trial' && currentSub.trial_ends_at
+                  ? <span className="text-primary-400">Trial ends {formatApiDate(currentSub.trial_ends_at)}</span>
+                  : currentSub.cancel_at_period_end
+                    ? <span className="text-amber-400">Ends {formatApiDate(currentSub.current_period_end)}</span>
+                    : <>Next charge {formatApiDate(currentSub.current_period_end)}</>}
                 {' · '}{currentSub.billing_cycle}
                 {' · '}${Number(currentSub.amount).toFixed(2)}
-                {currentSub.stripe_subscription_id ? ' · recurring via Stripe' : ''}
+                {currentSub.user_count ? ` · ${currentSub.user_count} user${currentSub.user_count === 1 ? '' : 's'}` : ''}
+                {currentSub.stripe_subscription_id ? ' · via Stripe' : ''}
               </p>
             </div>
           </div>
@@ -208,12 +233,13 @@ const BillingPage = () => {
         <div className="flex items-start gap-4">
           <RefreshCw className="text-primary-400 shrink-0 mt-1" size={22} />
           <div className="space-y-2 text-sm text-slate-300">
-            <p className="font-bold text-white text-base">How recurring billing works</p>
+            <p className="font-bold text-white text-base">How billing works</p>
             <ul className="list-disc pl-5 space-y-1.5 text-slate-400">
-              <li>You pay once at checkout — Stripe saves your card securely.</li>
-              <li>Your plan <strong className="text-slate-200">renews automatically</strong> on the date shown above (monthly or yearly).</li>
-              <li>No manual payment each cycle — Stripe charges your card and sends a receipt by email.</li>
-              <li>Cancel anytime from <strong className="text-slate-200">Manage billing</strong>; you keep access until the period ends.</li>
+              <li>Paid plans include a <strong className="text-slate-200">14-day free trial</strong> — we collect your card at checkout but do not charge until the trial ends.</li>
+              <li>Pricing is <strong className="text-slate-200">per user</strong> — charged for actual members + pending invites after trial, not the slider preview.</li>
+              <li>Slider shows estimated cost; checkout always uses your real team size ({billableUsers ?? '…'} user{billableUsers === 1 ? '' : 's'}).</li>
+              <li>Cancel anytime from <strong className="text-slate-200">Manage billing</strong> before the trial ends to avoid any charge.</li>
+              <li>After trial, your plan <strong className="text-slate-200">renews automatically</strong> on the date shown above.</li>
               <li>If a renewal fails, status becomes <strong className="text-slate-200">past due</strong> — update your card to avoid downgrade.</li>
             </ul>
           </div>
@@ -223,7 +249,7 @@ const BillingPage = () => {
       <div className="text-center max-w-2xl mx-auto">
         <h1 className="text-4xl font-extrabold text-white mb-4">Simple, <span className="gradient-text">affordable</span> pricing</h1>
         <p className="text-slate-400">
-          Honest prices with no hidden fees. Start free, upgrade when you need more — every paid plan renews automatically until you cancel.
+          Per-user pricing below competitors. Drag the slider to preview your team cost — 14-day trial on every paid plan.
         </p>
 
         <div className="flex items-center justify-center gap-4 mt-8">
@@ -240,62 +266,39 @@ const BillingPage = () => {
             />
           </button>
           <span className={`text-sm ${billingCycle === 'yearly' ? 'text-white font-semibold' : 'text-slate-500'}`}>
-            Yearly <span className="text-emerald-400">(save ~10%)</span>
+            Yearly <span className="text-emerald-400">(save 10%)</span>
           </span>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {displayPlans.map((plan, i) => {
-          const isCurrent = currentSub?.plan_id === plan.id;
-          return (
-            <motion.div
-              key={plan.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.08 }}
-              className={`glass-card relative flex flex-col ${plan.popular ? 'border-primary-500/50 bg-primary-500/5 shadow-2xl shadow-primary-500/10' : ''} ${isCurrent ? 'ring-2 ring-emerald-500/50' : ''}`}
-            >
-              {plan.popular && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary-500 text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-widest shadow-ai flex items-center gap-1">
-                  <Sparkles size={10} /> Best value
-                </div>
-              )}
-
-              <div className="mb-6">
-                <h3 className="text-xl font-bold text-white mb-2">{plan.name}</h3>
-                <div className="flex items-baseline gap-1 mb-2">
-                  <span className="text-4xl font-extrabold text-white">{plan.priceLabel}</span>
-                  <span className="text-slate-500 text-sm">{plan.periodLabel}</span>
-                </div>
-                <p className="text-xs text-primary-300/90 mb-2">{plan.billingNote}</p>
-                <p className="text-slate-400 text-sm leading-relaxed">{plan.description}</p>
-              </div>
-
-              <div className="space-y-3 mb-8 flex-1">
-                {plan.features.map((feature) => (
-                  <div key={feature} className="flex items-start gap-3 text-sm text-slate-300">
-                    <div className="mt-0.5 p-0.5 rounded-full bg-primary-500/10 text-primary-400">
-                      <Check size={12} />
-                    </div>
-                    {feature}
-                  </div>
-                ))}
-              </div>
-
-              <Button
-                variant={isCurrent ? 'secondary' : 'primary'}
-                className="w-full"
-                disabled={isCurrent || plan.isFree || subscribingId !== null}
-                isLoading={subscribingId === plan.id}
-                onClick={() => handleSubscribe(plan)}
-              >
-                {isCurrent ? 'Current plan' : plan.isFree ? 'Included free' : `Subscribe · ${plan.priceLabel}${plan.periodLabel.includes('month') ? '' : '/mo'}`}
-              </Button>
-            </motion.div>
-          );
-        })}
+      <div className="glass-card p-6 md:p-8 max-w-3xl mx-auto">
+        <PricingSlider
+          userCount={sliderUsers}
+          settings={sliderSettings}
+          onChange={(n) => setSliderUsers(clampSliderUsers(n, sliderSettings))}
+        />
+        {billableUsers !== undefined && (
+          <p className="text-xs text-slate-500 mt-4 text-center">
+            Your org: <strong className="text-slate-300">{billableUsers} billable user{billableUsers === 1 ? '' : 's'}</strong>
+            {' '}(members + pending invites) — this is what you pay after trial.
+          </p>
+        )}
       </div>
+
+      {displayPlans.length > 0 ? (
+        <PricingCards
+          plans={displayPlans}
+          billingCycle={billingCycle}
+          currentPlanId={currentSub?.plan_id}
+          onSubscribe={handleSubscribe}
+          subscribingId={subscribingId}
+          mode="billing"
+        />
+      ) : (
+        <div className="flex justify-center py-12">
+          <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
+        </div>
+      )}
 
       <div className="glass-card bg-surface-100 p-8 flex flex-col md:flex-row items-center justify-between gap-8">
         <div className="flex items-center gap-6">

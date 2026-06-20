@@ -33,34 +33,7 @@ import {
   SITE_TAB_TITLE,
 } from '../../seo/site';
 import { buildLandingJsonLd, landingFaq } from '../../seo/structuredData';
-
-const packageCards = [
-  {
-    name: 'Free',
-    price: '$0',
-    subtitle: 'For solo users',
-    features: ['1 user · 2 projects', 'Basic timer', 'Desktop + Web'],
-  },
-  {
-    name: 'Starter',
-    price: '$12',
-    subtitle: 'Per month',
-    features: ['Up to 5 members', 'Screenshot monitoring', 'Proof-of-Work client portal'],
-  },
-  {
-    name: 'Professional',
-    price: '$10 + $5/user',
-    subtitle: 'Growing teams',
-    features: ['Faster screenshot capture', 'Payroll & Proof-of-Work invoicing', 'Custom roles & analytics'],
-    popular: true,
-  },
-  {
-    name: 'Enterprise',
-    price: 'Custom',
-    subtitle: 'Large organizations',
-    features: ['Priority screenshot capture', 'SSO & white-label', 'Dedicated support'],
-  },
-];
+import { PricingSection } from '../billing/PricingSection';
 
 const adoptionBreakdown = [
   { label: 'IDE & dev tools (Cursor, VS Code)', value: 88, color: 'from-indigo-500 to-blue-500' },
@@ -599,41 +572,7 @@ const LandingPage = () => {
         </section>
       )}
 
-      <section id="pricing" className="max-w-7xl mx-auto px-6 py-14 relative z-10 scroll-mt-24">
-        <SectionHeading
-          badge="Pricing"
-          title="Packages built for every stage"
-          description="Simple pricing, transparent features, and upgrade flexibility as your team grows."
-        />
-        <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-6">
-          {packageCards.map((pkg) => (
-            <div key={pkg.name} className={`glass-card h-full flex flex-col ${pkg.popular ? 'border-primary-500/40 bg-primary-500/5' : ''}`}>
-              <div className="min-h-7 flex items-center gap-2 mb-3">
-                {pkg.popular && (
-                  <span className="inline-flex items-center text-[10px] uppercase tracking-wider px-2 py-1 rounded-full bg-primary-500 text-white">Most Popular</span>
-                )}
-              </div>
-
-              <h3 className="text-2xl font-bold min-h-8">{pkg.name}</h3>
-              <div className="text-3xl font-extrabold mt-2 min-h-11">{pkg.price}</div>
-              <p className="text-slate-400 text-sm mt-1 min-h-10">{pkg.subtitle}</p>
-
-              <ul className="mt-5 space-y-2 flex-1">
-                {pkg.features.map((feature) => (
-                  <li key={feature} className="text-sm text-slate-200 flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-primary-400" />
-                    {feature}
-                  </li>
-                ))}
-              </ul>
-
-              <div className="mt-6">
-                <Link to="/register"><Button className="w-full">Get Started</Button></Link>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
+      <PricingSection />
 
       <section id="clients" className="max-w-7xl mx-auto px-6 py-14 relative z-10 scroll-mt-24" aria-labelledby="clients-heading">
         <SectionHeading
