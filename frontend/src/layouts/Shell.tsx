@@ -17,6 +17,7 @@ import { useTimerStore } from '../store/timerStore';
 import { timeService } from '../api/timeService';
 import { getNavItemsForUser, isSuperAdmin, canViewOrgPackage } from '../utils/access';
 import { hardRedirectToLogin, isDesktopApp } from '../utils/electronAuth';
+import { isDesktopForeground } from '../utils/desktopLifecycle';
 
 const SidebarItem = ({ icon: Icon, label, path, isCollapsed }: any) => {
   const location = useLocation();
@@ -76,19 +77,50 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
   };
 
   useEffect(() => {
+    let interval: ReturnType<typeof setInterval> | null = null;
+
     const loadNotifications = () => {
+      if (!isDesktopForeground()) return;
       notificationService.list().then((res) => setNotifications(res.data ?? [])).catch(() => setNotifications([]));
     };
     const loadUnread = () => {
+      if (!isDesktopForeground()) return;
       notificationService.unreadCount()
         .then((res) => setUnreadCount(Number(res.data?.count ?? res.count ?? 0)))
         .catch(() => setUnreadCount(0));
     };
 
-    loadNotifications();
-    loadUnread();
-    const interval = setInterval(loadUnread, 30000);
-    return () => clearInterval(interval);
+    const stopPolling = () => {
+      if (interval) {
+        clearInterval(interval);
+        interval = null;
+      }
+    };
+
+    const startPolling = () => {
+      if (!isDesktopForeground()) return;
+      stopPolling();
+      loadNotifications();
+      loadUnread();
+      interval = setInterval(loadUnread, 30000);
+    };
+
+    startPolling();
+
+    const onBackground = () => stopPolling();
+    const onForeground = () => startPolling();
+    const onShutdown = () => stopPolling();
+
+    window.addEventListener('flowtrack-app-background', onBackground);
+    window.addEventListener('flowtrack-app-foreground', onForeground);
+    window.addEventListener('flowtrack-app-shutdown', onShutdown);
+
+    return () => {
+      stopPolling();
+      window.removeEventListener('flowtrack-app-background', onBackground);
+      window.removeEventListener('flowtrack-app-foreground', onForeground);
+      window.removeEventListener('flowtrack-app-shutdown', onShutdown);
+    };
   }, []);
 
   return (

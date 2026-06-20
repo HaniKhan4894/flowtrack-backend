@@ -54,7 +54,7 @@ class AuthController extends ResourceController
     public function login()
     {
         try {
-            $data = $this->request->getJSON(true);
+            $data = $this->parseJsonBody();
 
             // Validation
             $rules = [
@@ -62,7 +62,7 @@ class AuthController extends ResourceController
                 'password' => 'required',
             ];
 
-            if (!$this->validate($rules)) {
+            if (!$this->validate($rules, $data)) {
                 return $this->failValidationErrors($this->validator->getErrors());
             }
 
@@ -80,9 +80,43 @@ class AuthController extends ResourceController
                 'data' => $result
             ]);
 
+        } catch (\InvalidArgumentException $e) {
+            return $this->fail($e->getMessage(), 400);
         } catch (\Exception $e) {
             return $this->fail($e->getMessage(), 401);
         }
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function parseJsonBody(): array
+    {
+        try {
+            $data = $this->request->getJSON(true);
+            if (is_array($data)) {
+                return $data;
+            }
+        } catch (\Throwable $e) {
+            // Body was not valid JSON — fall through to form/raw parsing.
+        }
+
+        $post = $this->request->getPost();
+        if (is_array($post) && $post !== []) {
+            return $post;
+        }
+
+        $raw = trim((string) $this->request->getBody());
+        if ($raw !== '') {
+            $decoded = json_decode($raw, true);
+            if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                return $decoded;
+            }
+        }
+
+        throw new \InvalidArgumentException(
+            'Request body must be valid JSON. Use Content-Type: application/json with {"email":"you@example.com","password":"your-password"}.'
+        );
     }
 
     /**

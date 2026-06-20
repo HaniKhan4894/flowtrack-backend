@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { timeService } from '../api/timeService';
 import { monitoringService } from '../api/monitoringService';
 import { syncElectronAuthToken } from '../utils/electronAuth';
+import { isDesktopForeground } from '../utils/desktopLifecycle';
 import { useAuthStore } from './authStore';
 import { type TimeEntry } from '../types';
 
@@ -29,8 +30,9 @@ function setTrackingSessionActive(active: boolean) {
 }
 
 function startResync() {
-    if (resyncInterval) return;
+    if (resyncInterval || !isDesktopForeground()) return;
     resyncInterval = setInterval(() => {
+        if (!isDesktopForeground()) return;
         const { isRunning } = useTimerStore.getState();
         if (isRunning) {
             useTimerStore.getState().loadActive().catch(() => undefined);
@@ -201,6 +203,18 @@ if (typeof window !== 'undefined') {
     setInterval(() => {
         useTimerStore.getState().tick();
     }, 1000);
+
+    const onBackground = () => stopResync();
+    const onShutdown = () => stopResync();
+    const onForeground = () => {
+        if (useTimerStore.getState().isRunning) {
+            startResync();
+        }
+    };
+
+    window.addEventListener('flowtrack-app-background', onBackground);
+    window.addEventListener('flowtrack-app-shutdown', onShutdown);
+    window.addEventListener('flowtrack-app-foreground', onForeground);
 
     if ('electronAPI' in window && window.electronAPI?.onSystemLockChange) {
         window.electronAPI.onSystemLockChange((locked: boolean) => {

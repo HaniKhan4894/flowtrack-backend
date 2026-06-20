@@ -22,6 +22,7 @@ declare global {
       onSystemLockChange: (callback: (locked: boolean) => void) => () => void;
       onSystemResume: (callback: () => void) => () => void;
       onTimerIdleChange: (callback: (state: 'paused' | 'resumed', data?: { idleMinutes?: number }) => void) => () => void;
+      onAppLifecycle: (callback: (state: 'hide' | 'show' | 'shutdown') => void) => () => void;
     };
   }
 }

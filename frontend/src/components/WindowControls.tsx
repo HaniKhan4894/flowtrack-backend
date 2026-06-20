@@ -47,8 +47,8 @@ export function WindowControls({ className = '' }: { className?: string }) {
         type="button"
         onClick={() => void api.windowClose?.()}
         className={`${btnClass} hover:bg-red-500 hover:text-white`}
-        title="Close"
-        aria-label="Close"
+        title="Minimize to tray"
+        aria-label="Minimize to tray"
       >
         <X className="h-3.5 w-3.5" strokeWidth={2.25} />
       </button>

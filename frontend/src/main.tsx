@@ -36,6 +36,7 @@ import AdminDashboardPage from './features/admin/AdminDashboardPage'
 import MemberTrackingPage from './features/team/MemberTrackingPage'
 import { canAccessPath, isSuperAdmin } from './utils/access'
 import { isDesktopApp } from './utils/electronAuth'
+import { initDesktopLifecycle } from './utils/desktopLifecycle'
 import { DesktopTitleBar } from './components/WindowControls'
 
 import { Loader2 } from 'lucide-react';
@@ -96,6 +97,8 @@ const RegisterRoute = () => {
 const FallbackRedirect = () => (
   <Navigate to={isDesktopApp() ? '/login' : '/app'} replace />
 );
+
+initDesktopLifecycle();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

@@ -70,4 +70,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
             ipcRenderer.removeListener('timer-idle-resumed', onResumed);
         };
     },
+
+    onAppLifecycle: (callback) => {
+        const onHide = () => callback('hide');
+        const onShow = () => callback('show');
+        const onShutdown = () => callback('shutdown');
+        ipcRenderer.on('app-hide', onHide);
+        ipcRenderer.on('app-show', onShow);
+        ipcRenderer.on('app-shutdown', onShutdown);
+        return () => {
+            ipcRenderer.removeListener('app-hide', onHide);
+            ipcRenderer.removeListener('app-show', onShow);
+            ipcRenderer.removeListener('app-shutdown', onShutdown);
+        };
+    },
 });

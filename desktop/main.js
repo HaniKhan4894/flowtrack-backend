@@ -35,6 +35,8 @@ let isPaused = false;
 let pausedByLock = false;
 let pausedByIdle = false;
 let tray = null;
+let shutdownDone = false;
+let windowVisible = false;
 const IDLE_RESUME_SEC = 12;
 const IDLE_CHECK_MS = 5 * 1000;
 const DISTRACTION_ALERT_MS = 5 * 1000;
@@ -276,7 +278,22 @@ function createWindow() {
         if (!appIsQuitting) {
             event.preventDefault();
             mainWindow.hide();
+            windowVisible = false;
+            pauseBackgroundActivity();
+            console.log('[App] Window hidden — background API sync paused. Use tray → Exit FlowTrack to quit.');
         }
+    });
+
+    mainWindow.on('hide', () => {
+        if (!appIsQuitting) {
+            windowVisible = false;
+            pauseBackgroundActivity();
+        }
+    });
+
+    mainWindow.on('show', () => {
+        windowVisible = true;
+        resumeBackgroundActivity();
     });
 
     mainWindow.on('maximize', () => {
@@ -300,6 +317,8 @@ function showMainWindow() {
     mainWindow.setSkipTaskbar(false);
     mainWindow.show();
     mainWindow.focus();
+    windowVisible = true;
+    resumeBackgroundActivity();
 }
 
 function setupTray() {
@@ -310,10 +329,11 @@ function setupTray() {
     }
     const icon = appIcon.resize({ width: 16, height: 16 });
     tray = new Tray(icon);
-    tray.setToolTip('FlowTrack');
+    tray.setToolTip('FlowTrack — running in background');
     tray.setContextMenu(Menu.buildFromTemplate([
         { label: 'Show FlowTrack', click: () => showMainWindow() },
-        { label: 'Quit', click: () => { appIsQuitting = true; app.quit(); } },
+        { type: 'separator' },
+        { label: 'Exit FlowTrack', click: () => requestQuit() },
     ]));
     tray.on('double-click', () => showMainWindow());
     tray.on('click', () => showMainWindow());
@@ -722,12 +742,64 @@ function stopMonitoringCapture() {
     stopDistractionMonitor();
 }
 
+function notifyRendererLifecycle(state) {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    const channel = state === 'show' ? 'app-show' : state === 'shutdown' ? 'app-shutdown' : 'app-hide';
+    mainWindow.webContents.send(channel);
+}
+
+function stopSessionRefreshLoop() {
+    if (sessionRefreshTimer) {
+        clearInterval(sessionRefreshTimer);
+        sessionRefreshTimer = null;
+    }
+}
+
+function pauseBackgroundActivity() {
+    stopSessionRefreshLoop();
+    notifyRendererLifecycle('hide');
+}
+
+function resumeBackgroundActivity() {
+    if (!currentSession.token) return;
+    startSessionRefreshLoop();
+    notifyRendererLifecycle('show');
+}
+
+function shutdownApp() {
+    if (shutdownDone) return;
+    shutdownDone = true;
+    appIsQuitting = true;
+
+    console.log('[App] Shutting down — stopping timers and background sync.');
+    clearDesktopSession();
+    stopSessionRefreshLoop();
+
+    if (tray) {
+        tray.destroy();
+        tray = null;
+    }
+
+    notifyRendererLifecycle('shutdown');
+
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.removeAllListeners('close');
+        mainWindow.destroy();
+        mainWindow = null;
+    }
+}
+
 function stopTokenRefreshLoop() {
     if (tokenRefreshTimer) { clearInterval(tokenRefreshTimer); tokenRefreshTimer = null; }
 }
 
 function stopIdleGuard() {
     if (idleGuardTimer) { clearInterval(idleGuardTimer); idleGuardTimer = null; }
+}
+
+function requestQuit() {
+    shutdownApp();
+    app.quit();
 }
 
 function stopMonitoringLoop() {
@@ -834,8 +906,9 @@ function startTokenRefreshLoop() {
 }
 
 function startSessionRefreshLoop() {
-    if (sessionRefreshTimer) return;
+    if (sessionRefreshTimer || !currentSession.token || !windowVisible || appIsQuitting) return;
     sessionRefreshTimer = setInterval(async () => {
+        if (!windowVisible || appIsQuitting || !currentSession.token) return;
         if (mainWindow && !mainWindow.isDestroyed()) {
             await refreshTokenViaRenderer();
         }
@@ -851,16 +924,21 @@ ipcMain.handle('get-app-version', () => app.getVersion());
 ipcMain.handle('set-auth-token', (_event, token) => {
     if (!token) {
         clearDesktopSession();
+        stopSessionRefreshLoop();
         console.log('[IPC] Auth cleared — desktop session stopped.');
         return { success: true };
     }
     currentSession.token = token;
+    if (windowVisible) {
+        startSessionRefreshLoop();
+    }
     console.log('[IPC] Auth token updated.');
     return { success: true };
 });
 
 ipcMain.handle('logout-session', () => {
     clearDesktopSession();
+    stopSessionRefreshLoop();
     console.log('[IPC] Full logout — desktop session cleared.');
     return { success: true };
 });
@@ -992,7 +1070,7 @@ app.whenReady().then(() => {
     console.log(`[Config] Frontend URL: ${FRONTEND_URL}`);
     createWindow();
     setupTray();
-    startSessionRefreshLoop();
+    windowVisible = true;
 
     powerMonitor.on('lock-screen', () => {
         if (!currentSession.isTracking || isPaused) return;
@@ -1021,10 +1099,10 @@ app.whenReady().then(() => {
     });
 
     powerMonitor.on('resume', () => {
-        if (mainWindow && !mainWindow.isDestroyed()) {
+        if (mainWindow && !mainWindow.isDestroyed() && windowVisible) {
             mainWindow.webContents.send('system-resume');
+            void refreshTokenViaRenderer();
         }
-        void refreshTokenViaRenderer();
         console.log('[Power] System resumed — refreshing auth session.');
     });
 
@@ -1034,20 +1112,20 @@ app.whenReady().then(() => {
     });
 
     if (mainWindow) {
-        mainWindow.on('show', () => {
-            if (mainWindow && !mainWindow.isDestroyed()) {
-                mainWindow.setSkipTaskbar(false);
-            }
-        });
         mainWindow.on('restore', () => showMainWindow());
     }
 });
 
 app.on('before-quit', () => {
-    appIsQuitting = true;
+    shutdownApp();
+});
+
+app.on('will-quit', () => {
+    shutdownApp();
 });
 
 app.on('window-all-closed', () => {
-    stopMonitoringLoop();
-    // Keep running in tray on Windows — only quit via tray/menu.
+    if (!appIsQuitting) {
+        pauseBackgroundActivity();
+    }
 });
