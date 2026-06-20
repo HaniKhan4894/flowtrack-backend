@@ -33,6 +33,7 @@ class SubscriptionController extends ResourceController
 
             foreach ($plans as &$plan) {
                 $plan = $this->planModel->enrichPlanForApi($plan);
+                $plan['is_popular'] = (bool) ($plan['is_popular'] ?? false);
             }
             unset($plan);
 

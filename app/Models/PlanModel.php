@@ -38,6 +38,11 @@ class PlanModel extends Model
     protected $createdField  = 'created_at';
     protected $updatedField  = 'updated_at';
 
+    protected array $casts = [
+        'is_active'  => 'boolean',
+        'is_popular' => 'boolean',
+    ];
+
     /**
      * Get all active plans
      */

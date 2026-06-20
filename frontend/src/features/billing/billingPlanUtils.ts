@@ -51,6 +51,10 @@ export interface FormatPlanOptions {
   billingSettings?: BillingSliderSettings;
 }
 
+export function isPopularFlag(value: unknown): boolean {
+  return value === true || value === 1 || value === '1';
+}
+
 export function getPlanMaxUsers(plan: ApiPlan): number | null {
   if (plan.max_users != null && plan.max_users !== undefined && Number(plan.max_users) > 0) {
     return Number(plan.max_users);
@@ -158,7 +162,7 @@ export function formatPlanForDisplay(
       trialHint,
       description: plan.description || '',
       features: pickPricingFeatureLabels(plan),
-      popular: !!plan.is_popular,
+      popular: isPopularFlag(plan.is_popular),
       isFree: false,
       trialDays,
       maxUsers,
@@ -186,7 +190,7 @@ export function formatPlanForDisplay(
     trialHint: trialDays > 0 ? 'Cancel anytime before you\'re charged.' : undefined,
     description: plan.description || '',
     features: pickPricingFeatureLabels(plan),
-    popular: !!plan.is_popular,
+    popular: isPopularFlag(plan.is_popular),
     isFree: false,
     trialDays,
     maxUsers,
