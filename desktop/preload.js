@@ -84,4 +84,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
             ipcRenderer.removeListener('app-shutdown', onShutdown);
         };
     },
+
+    onTimerReminderResume: (callback) => {
+        const handler = () => callback();
+        ipcRenderer.on('timer-reminder-resume', handler);
+        return () => ipcRenderer.removeListener('timer-reminder-resume', handler);
+    },
 });

@@ -46,6 +46,7 @@
             "activityTracker.js",
             "systemInput.js",
             "networkInfo.js",
+            "timerReminderPrompt.js",
             "preload.js",
             "config.js",
             "icon.png",

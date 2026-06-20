@@ -8,6 +8,7 @@ const { API_BASE_URL, FRONTEND_URL, getApiHeaders } = require('./config');
 const activityTracker = require('./activityTracker');
 const systemInput = require('./systemInput');
 const networkInfo = require('./networkInfo');
+const timerReminderPrompt = require('./timerReminderPrompt');
 
 // ──────────────────────────────────────────────
 //  Config
@@ -21,6 +22,15 @@ let activityTrackingEnabled = true;
 let idleThresholdSec = 5 * 60;
 let keepIdleTimeMode = 'prompt';
 let idleGuardTimer = null;
+let timerReminderEnabled = true;
+let pausedWorkReminderState = {
+    activeSince: null,
+    snoozeUntil: 0,
+};
+
+const PAUSED_WORK_ACTIVE_SEC = 30;
+const PAUSED_WORK_REMINDER_MS = 90 * 1000;
+const PAUSED_WORK_SNOOZE_MS = 15 * 60 * 1000;
 
 // ──────────────────────────────────────────────
 //  State
@@ -70,6 +80,68 @@ let currentSession = {
     isTracking: false,
 };
 
+function resetPausedWorkReminder() {
+    pausedWorkReminderState.activeSince = null;
+    timerReminderPrompt.close();
+}
+
+function handleTimerReminderResponse(action) {
+    resetPausedWorkReminder();
+    if (action === 'yes') {
+        if (!currentSession.isTracking || !isPaused) return;
+        pausedByLock = false;
+        pausedByIdle = false;
+        isPaused = false;
+        startMonitoringLoop();
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('timer-reminder-resume');
+        }
+        showDesktopNotification('FlowTrack', 'Timer resumed — tracking your work again.');
+        console.log('[TimerReminder] User chose Yes — timer resumed.');
+        return;
+    }
+    pausedWorkReminderState.snoozeUntil = Date.now() + PAUSED_WORK_SNOOZE_MS;
+    console.log('[TimerReminder] User chose No — snoozed for 15 minutes.');
+}
+
+async function checkPausedWorkReminder() {
+    if (!timerReminderEnabled || !currentSession.isTracking || !isPaused || pausedByIdle || pausedByLock) {
+        resetPausedWorkReminder();
+        return;
+    }
+    if (Date.now() < pausedWorkReminderState.snoozeUntil) {
+        pausedWorkReminderState.activeSince = null;
+        return;
+    }
+    if (timerReminderPrompt.isOpen()) return;
+
+    const systemIdleSec = powerMonitor.getSystemIdleTime();
+    if (systemIdleSec >= PAUSED_WORK_ACTIVE_SEC) {
+        pausedWorkReminderState.activeSince = null;
+        return;
+    }
+
+    const { appName, windowTitle } = await getForegroundApp();
+    if (isInternalTrackerApp(appName, windowTitle)) {
+        pausedWorkReminderState.activeSince = null;
+        return;
+    }
+
+    const now = Date.now();
+    if (!pausedWorkReminderState.activeSince) {
+        pausedWorkReminderState.activeSince = now;
+        return;
+    }
+
+    if (now - pausedWorkReminderState.activeSince < PAUSED_WORK_REMINDER_MS) {
+        return;
+    }
+
+    pausedWorkReminderState.activeSince = null;
+    timerReminderPrompt.show(handleTimerReminderResponse);
+    console.log('[TimerReminder] Prompt shown — working while timer paused.');
+}
+
 function clearDesktopSession() {
     currentSession.token = null;
     currentSession.timeEntryId = null;
@@ -77,6 +149,7 @@ function clearDesktopSession() {
     isPaused = false;
     pausedByLock = false;
     pausedByIdle = false;
+    resetPausedWorkReminder();
     stopMonitoringLoop();
 }
 
@@ -772,6 +845,7 @@ function shutdownApp() {
     appIsQuitting = true;
 
     console.log('[App] Shutting down — stopping timers and background sync.');
+    resetPausedWorkReminder();
     clearDesktopSession();
     stopSessionRefreshLoop();
 
@@ -862,7 +936,10 @@ function startIdleGuard() {
             return;
         }
 
-        if (isPaused) return;
+        if (isPaused) {
+            void checkPausedWorkReminder();
+            return;
+        }
 
         if (systemIdleSec >= idleThresholdSec) {
             handleIdlePause();
@@ -958,9 +1035,11 @@ ipcMain.handle('start-tracking', (_event, { timeEntryId, token, screenshotInterv
     const idleMinutes = Number(cfg.idle_timeout_minutes ?? 5);
     idleThresholdSec = Math.max(60, idleMinutes * 60);
     keepIdleTimeMode = cfg.keep_idle_time || 'prompt';
+    timerReminderEnabled = cfg.timer_reminder_enabled !== false;
     isPaused = false;
     pausedByLock = false;
     pausedByIdle = false;
+    resetPausedWorkReminder();
     startMonitoringLoop();
     startTokenRefreshLoop();
     startIdleGuard();
@@ -975,6 +1054,7 @@ ipcMain.handle('stop-tracking', () => {
     isPaused = false;
     pausedByLock = false;
     pausedByIdle = false;
+    resetPausedWorkReminder();
     stopMonitoringLoop();
     console.log('[IPC] Tracking stopped.');
     return { success: true };
@@ -987,6 +1067,8 @@ ipcMain.handle('pause-tracking', () => {
     pausedByLock = false;
     pausedByIdle = false;
     isPaused = true;
+    pausedWorkReminderState.activeSince = null;
+    pausedWorkReminderState.snoozeUntil = 0;
     stopMonitoringCapture();
     startTokenRefreshLoop();
     startIdleGuard();
@@ -1000,6 +1082,7 @@ ipcMain.handle('resume-tracking', () => {
     pausedByLock = false;
     pausedByIdle = false;
     isPaused = false;
+    resetPausedWorkReminder();
     startMonitoringLoop();
     return { success: true };
 });

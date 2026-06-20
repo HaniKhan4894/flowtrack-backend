@@ -216,6 +216,15 @@ if (typeof window !== 'undefined') {
     window.addEventListener('flowtrack-app-shutdown', onShutdown);
     window.addEventListener('flowtrack-app-foreground', onForeground);
 
+    if ('electronAPI' in window && window.electronAPI?.onTimerReminderResume) {
+        window.electronAPI.onTimerReminderResume(() => {
+            const store = useTimerStore.getState();
+            if (store.isRunning && store.isPaused) {
+                store.resume().catch(() => undefined);
+            }
+        });
+    }
+
     if ('electronAPI' in window && window.electronAPI?.onSystemLockChange) {
         window.electronAPI.onSystemLockChange((locked: boolean) => {
             const store = useTimerStore.getState();
