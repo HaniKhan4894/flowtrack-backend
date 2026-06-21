@@ -111,10 +111,19 @@ class OrganizationController extends ResourceController
             $filters = array_filter($filters, fn($value) => $value !== null);
 
             $result = $this->organizationService->getMembers($id, $filters);
+            $activeMap = (new \App\Services\AdvancedMonitoringService())->getActiveSessionsMap((int) $id);
+            $members = array_map(function ($member) use ($activeMap) {
+                $uid = (int) ($member['user_id'] ?? 0);
+                $member['advanced_monitoring_active'] = isset($activeMap[$uid]);
+                if (isset($activeMap[$uid])) {
+                    $member['advanced_monitoring_session'] = $activeMap[$uid];
+                }
+                return $member;
+            }, $result['data']);
 
             return $this->respond([
                 'success' => true,
-                'data' => $result['data'],
+                'data' => $members,
                 'pagination' => $result['pagination']
             ]);
 

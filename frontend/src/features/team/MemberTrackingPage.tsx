@@ -5,11 +5,14 @@ import { timeService } from '../../api/timeService';
 import { screenshotService } from '../../api/screenshotService';
 import { activityService } from '../../api/activityService';
 import { teamService } from '../../api/teamService';
+import { useAuthStore } from '../../store/authStore';
+import { hasPermission } from '../../utils/access';
 import { getAppDisplayName } from '../../utils/appIcons';
 import { getBrowserTabDisplayName } from '../../utils/browserTabName';
 
 const MemberTrackingPage = () => {
   const { userId } = useParams<{ userId: string }>();
+  const { user } = useAuthStore();
   const [memberName, setMemberName] = useState('');
   const [timeEntries, setTimeEntries] = useState<any[]>([]);
   const [screenshots, setScreenshots] = useState<any[]>([]);
@@ -115,7 +118,12 @@ const MemberTrackingPage = () => {
             </p>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          {hasPermission(user, 'monitoring.advanced') && (
+            <Link to={`/team/member/${userId}/advanced-monitoring`} className="text-xs font-bold text-rose-400 hover:underline flex items-center gap-1">
+              Advanced report <ExternalLink size={12} />
+            </Link>
+          )}
           <Link to={`/screenshots?user=${userId}`} className="text-xs font-bold text-primary-400 hover:underline flex items-center gap-1">
             All screenshots <ExternalLink size={12} />
           </Link>

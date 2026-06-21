@@ -88,6 +88,9 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\API\V1'], function ($r
     $routes->put('organizations/(:num)/members/(:num)', 'OrganizationController::updateMember/$1/$2', ['filter' => 'permission:users.edit']);
     $routes->get('organizations/(:num)/members/(:num)/monitoring', 'OrganizationController::getMemberMonitoring/$1/$2', ['filter' => 'permission:users.edit']);
     $routes->put('organizations/(:num)/members/(:num)/monitoring', 'OrganizationController::updateMemberMonitoring/$1/$2', ['filter' => 'permission:users.edit']);
+    $routes->get('organizations/(:num)/members/(:num)/advanced-monitoring', 'AdvancedMonitoringController::show/$1/$2', ['filter' => 'permission:monitoring.advanced']);
+    $routes->post('organizations/(:num)/members/(:num)/advanced-monitoring', 'AdvancedMonitoringController::enable/$1/$2', ['filter' => 'permission:monitoring.advanced']);
+    $routes->post('organizations/(:num)/members/(:num)/advanced-monitoring/close', 'AdvancedMonitoringController::close/$1/$2', ['filter' => 'permission:monitoring.advanced']);
     $routes->get('monitoring/settings', 'MonitoringController::mySettings', ['filter' => 'auth']);
     $routes->get('invitations/validate', 'OrganizationController::validateInvitation');
 
@@ -257,6 +260,7 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\API\V1'], function ($r
     $routes->get('reports/org-productivity', 'ReportController::orgProductivity', ['filter' => 'permission:reports.view_team']);
     $routes->get('reports/project-profitability', 'ReportController::projectProfitability', ['filter' => 'permission:reports.view_team']);
     $routes->get('reports/idle-breakdown', 'ReportController::idleBreakdown', ['filter' => 'permission:reports.view_team']);
+    $routes->get('reports/advanced-monitoring', 'AdvancedMonitoringController::report', ['filter' => 'permission:monitoring.advanced']);
     $routes->post('reports/export', 'ReportController::export', ['filter' => 'permission:reports.export']);
 
     $routes->group('insights', ['filter' => ['auth', 'permission:reports.view_own']], function ($routes) {

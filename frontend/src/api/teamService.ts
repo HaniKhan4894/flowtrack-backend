@@ -1,5 +1,6 @@
 import client from './client';
 import type { User, MemberMonitoringSettings } from '../types';
+import type { AdvancedMonitoringSession, AdvancedMonitoringStatus } from './advancedMonitoringService';
 import { useAuthStore } from '../store/authStore';
 
 export interface TeamMember extends User {
@@ -12,6 +13,8 @@ export interface TeamMember extends User {
     screenshot_disabled_until?: string | null;
     screenshot_disabled_from?: string | null;
     screenshot_disabled_to?: string | null;
+    advanced_monitoring_active?: boolean;
+    advanced_monitoring_session?: AdvancedMonitoringSession | null;
 }
 
 export interface TeamGroup {
@@ -61,6 +64,27 @@ export const teamService = {
 
     updateMonitoring: async (userId: string | number, settings: Partial<MemberMonitoringSettings>): Promise<{ data: MemberMonitoringSettings }> => {
         const response = await client.put(`/organizations/${getOrgId()}/members/${userId}/monitoring`, settings);
+        return response.data;
+    },
+
+    getAdvancedMonitoring: async (userId: string | number): Promise<{ data: AdvancedMonitoringStatus }> => {
+        const response = await client.get(`/organizations/${getOrgId()}/members/${userId}/advanced-monitoring`);
+        return response.data;
+    },
+
+    enableAdvancedMonitoring: async (
+        userId: string | number,
+        payload: { reason?: string; screenshot_frequency_minutes?: number; notify_member?: boolean },
+    ) => {
+        const response = await client.post(`/organizations/${getOrgId()}/members/${userId}/advanced-monitoring`, payload);
+        return response.data;
+    },
+
+    closeAdvancedMonitoring: async (
+        userId: string | number,
+        payload: { result_summary?: string; notify_member?: boolean },
+    ) => {
+        const response = await client.post(`/organizations/${getOrgId()}/members/${userId}/advanced-monitoring/close`, payload);
         return response.data;
     },
 

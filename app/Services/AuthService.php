@@ -513,8 +513,16 @@ class AuthService
                 $user['features'] = $features;
 
                 $settingsService = new OrganizationSettingsService();
-                $effectiveTracking = $settingsService->getEffectiveTrackingConfig($organizationId);
+                $effectiveTracking = $settingsService->getEffectiveTrackingConfigForMember($organizationId, $userId);
                 $user['tracking_config'] = $effectiveTracking;
+                $activeAdvanced = (new AdvancedMonitoringService())->getActiveSession($organizationId, $userId);
+                $user['advanced_monitoring'] = $activeAdvanced ? [
+                    'active' => true,
+                    'session_id' => (int) $activeAdvanced['id'],
+                    'started_at' => $activeAdvanced['started_at'],
+                    'reason' => $activeAdvanced['reason'] ?? null,
+                    'screenshot_frequency_minutes' => (int) ($activeAdvanced['screenshot_frequency_minutes'] ?? 1),
+                ] : null;
                 if (!empty($effectiveTracking['screenshot_enabled'])) {
                     $user['features']['screenshot_interval'] = (int) ($effectiveTracking['screenshot_frequency_minutes'] ?? $features['screenshot_interval'] ?? 0);
                 } else {
@@ -522,7 +530,15 @@ class AuthService
                 }
             } elseif ($organizationId > 0) {
                 $settingsService = new OrganizationSettingsService();
-                $user['tracking_config'] = $settingsService->getEffectiveTrackingConfig($organizationId);
+                $user['tracking_config'] = $settingsService->getEffectiveTrackingConfigForMember($organizationId, $userId);
+                $activeAdvanced = (new AdvancedMonitoringService())->getActiveSession($organizationId, $userId);
+                $user['advanced_monitoring'] = $activeAdvanced ? [
+                    'active' => true,
+                    'session_id' => (int) $activeAdvanced['id'],
+                    'started_at' => $activeAdvanced['started_at'],
+                    'reason' => $activeAdvanced['reason'] ?? null,
+                    'screenshot_frequency_minutes' => (int) ($activeAdvanced['screenshot_frequency_minutes'] ?? 1),
+                ] : null;
             }
         }
 

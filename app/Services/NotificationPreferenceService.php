@@ -13,6 +13,8 @@ class NotificationPreferenceService
     public const EVENT_TIME_ENTRY_STARTED = 'time_entry_started';
     public const EVENT_INVOICE_CREATED = 'invoice_created';
     public const EVENT_INVOICE_SENT = 'invoice_sent';
+    public const EVENT_ADVANCED_MONITORING_ENABLED = 'advanced_monitoring_enabled';
+    public const EVENT_ADVANCED_MONITORING_RESULT = 'advanced_monitoring_result';
 
     protected NotificationPreferenceModel $preferenceModel;
 
@@ -31,6 +33,8 @@ class NotificationPreferenceService
             ['key' => self::EVENT_INVOICE_CREATED, 'label' => 'Invoice created'],
             ['key' => self::EVENT_INVOICE_SENT, 'label' => 'Invoice sent'],
             ['key' => self::EVENT_PAYROLL_FINALIZED, 'label' => 'Payroll finalized'],
+            ['key' => self::EVENT_ADVANCED_MONITORING_ENABLED, 'label' => 'Advanced monitoring enabled on you'],
+            ['key' => self::EVENT_ADVANCED_MONITORING_RESULT, 'label' => 'Advanced monitoring review result'],
         ];
     }
 

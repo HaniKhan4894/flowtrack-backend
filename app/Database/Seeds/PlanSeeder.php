@@ -146,6 +146,7 @@ class PlanSeeder extends Seeder
             ['plan_id' => 3, 'feature_key' => 'custom_roles', 'feature_value' => 'true', 'display_name' => 'Custom roles & permissions'],
             ['plan_id' => 3, 'feature_key' => 'api_access', 'feature_value' => 'full', 'display_name' => 'Full API access'],
             ['plan_id' => 3, 'feature_key' => 'webhooks', 'feature_value' => 'true', 'display_name' => 'Webhook integrations'],
+            ['plan_id' => 3, 'feature_key' => 'advanced_monitoring', 'feature_value' => 'true', 'display_name' => 'Advanced member monitoring'],
             ['plan_id' => 3, 'feature_key' => 'support', 'feature_value' => 'priority', 'display_name' => 'Priority support'],
             ['plan_id' => 3, 'feature_key' => 'data_retention', 'feature_value' => '365', 'display_name' => '1 year data retention'],
         ]);
@@ -167,6 +168,7 @@ class PlanSeeder extends Seeder
             ['plan_id' => 4, 'feature_key' => 'custom_roles', 'feature_value' => 'true', 'display_name' => 'Custom roles & permissions'],
             ['plan_id' => 4, 'feature_key' => 'api_access', 'feature_value' => 'full', 'display_name' => 'Full API access'],
             ['plan_id' => 4, 'feature_key' => 'webhooks', 'feature_value' => 'true', 'display_name' => 'Webhook integrations'],
+            ['plan_id' => 4, 'feature_key' => 'advanced_monitoring', 'feature_value' => 'true', 'display_name' => 'Advanced member monitoring'],
             ['plan_id' => 4, 'feature_key' => 'white_label', 'feature_value' => 'true', 'display_name' => 'White-label branding'],
             ['plan_id' => 4, 'feature_key' => 'custom_domain', 'feature_value' => 'true', 'display_name' => 'Custom domain'],
             ['plan_id' => 4, 'feature_key' => 'sso', 'feature_value' => 'true', 'display_name' => 'Single Sign-On (SSO)'],

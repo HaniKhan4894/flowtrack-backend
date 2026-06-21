@@ -273,4 +273,33 @@ class NotificationService
 
         return $result ?? [];
     }
+
+    public function notifyAdvancedMonitoringEnabled(int $userId, ?string $reason, string $startedByName): ?array
+    {
+        $message = $startedByName . ' enabled advanced monitoring on your account due to suspicious or low activity concerns.';
+        if ($reason) {
+            $message .= ' Reason: ' . $reason;
+        }
+
+        return $this->create(
+            $userId,
+            'warning',
+            'Advanced Monitoring Enabled',
+            $message,
+            ['type' => 'advanced_monitoring_enabled'],
+            NotificationPreferenceService::EVENT_ADVANCED_MONITORING_ENABLED
+        );
+    }
+
+    public function notifyAdvancedMonitoringResult(int $userId, string $summary): ?array
+    {
+        return $this->create(
+            $userId,
+            'info',
+            'Advanced Monitoring Review Complete',
+            $summary,
+            ['type' => 'advanced_monitoring_result'],
+            NotificationPreferenceService::EVENT_ADVANCED_MONITORING_RESULT
+        );
+    }
 }

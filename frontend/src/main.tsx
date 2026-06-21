@@ -34,6 +34,7 @@ import { Shell } from './layouts/Shell'
 import { useAuthStore } from './store/authStore'
 import AdminDashboardPage from './features/admin/AdminDashboardPage'
 import MemberTrackingPage from './features/team/MemberTrackingPage'
+import AdvancedMonitoringReportPage from './features/team/AdvancedMonitoringReportPage'
 import { canAccessPath, isSuperAdmin } from './utils/access'
 import { isDesktopApp } from './utils/electronAuth'
 import { initDesktopLifecycle } from './utils/desktopLifecycle'
@@ -127,6 +128,7 @@ createRoot(document.getElementById('root')!).render(
         <Route path="/billing" element={<RoleRoute path="/billing"><BillingPage /></RoleRoute>} />
         <Route path="/team" element={<RoleRoute path="/team"><TeamPage /></RoleRoute>} />
         <Route path="/team/member/:userId" element={<MemberTrackingRoute><MemberTrackingPage /></MemberTrackingRoute>} />
+        <Route path="/team/member/:userId/advanced-monitoring" element={<MemberTrackingRoute><AdvancedMonitoringReportPage /></MemberTrackingRoute>} />
         <Route path="/settings" element={<RoleRoute path="/settings"><SettingsPage /></RoleRoute>} />
         <Route path="/analytics" element={<RoleRoute path="/analytics"><AnalyticsPage /></RoleRoute>} />
         <Route path="/insights" element={<RoleRoute path="/insights"><InsightsPage /></RoleRoute>} />

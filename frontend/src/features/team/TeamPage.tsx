@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { UserPlus, Mail, Shield, Trash2, Search, Filter, X, Loader2, CheckCircle2, SlidersHorizontal, UsersRound, Target, Pencil } from 'lucide-react';
+import { UserPlus, Mail, Shield, Trash2, Search, Filter, X, Loader2, CheckCircle2, SlidersHorizontal, UsersRound, Target, Pencil, ShieldAlert, Info, ExternalLink } from 'lucide-react';
 import { teamService, type TeamMember, type TeamGroup } from '../../api/teamService';
+import type { AdvancedMonitoringStatus } from '../../api/advancedMonitoringService';
 import { reportService } from '../../api/reportService';
 import { billingService, type SubscriptionUsage } from '../../api/billingService';
 import { Button, Input } from '../../components/ui';
 import { useAuthStore } from '../../store/authStore';
-import { canManageTeam, canViewMemberTracking } from '../../utils/access';
+import { canManageTeam, canViewMemberTracking, hasPermission } from '../../utils/access';
 import { Link } from 'react-router-dom';
 import type { MemberMonitoringSettings } from '../../types';
 import axios from 'axios';
@@ -25,6 +26,13 @@ const TeamPage = () => {
   const [showInvitationModal, setShowInvitationModal] = useState(false);
   const [monitorMember, setMonitorMember] = useState<TeamMember | null>(null);
   const [monitorSettings, setMonitorSettings] = useState<MemberMonitoringSettings | null>(null);
+  const [advancedData, setAdvancedData] = useState<AdvancedMonitoringStatus | null>(null);
+  const [advancedReason, setAdvancedReason] = useState('');
+  const [advancedFrequency, setAdvancedFrequency] = useState(1);
+  const [advancedNotify, setAdvancedNotify] = useState(false);
+  const [closeSummary, setCloseSummary] = useState('');
+  const [closeNotify, setCloseNotify] = useState(false);
+  const [savingAdvanced, setSavingAdvanced] = useState(false);
   const [savingMonitoring, setSavingMonitoring] = useState(false);
   const [activeUserIds, setActiveUserIds] = useState<Set<number>>(new Set());
   const [teams, setTeams] = useState<TeamGroup[]>([]);
@@ -104,12 +112,30 @@ const TeamPage = () => {
       navigator.clipboard.writeText(invitationLink);
   };
 
+  const canManageAdvanced = hasPermission(user, 'monitoring.advanced');
+
   const openMonitoring = async (member: TeamMember) => {
     const memberUserId = member.user_id ?? member.id;
     try {
-      const resp = await teamService.getMonitoring(memberUserId);
+      const requests: Promise<unknown>[] = [teamService.getMonitoring(memberUserId)];
+      if (canManageAdvanced) {
+        requests.push(teamService.getAdvancedMonitoring(memberUserId));
+      }
+      const results = await Promise.all(requests);
+      const monResp = results[0] as Awaited<ReturnType<typeof teamService.getMonitoring>>;
       setMonitorMember(member);
-      setMonitorSettings(resp.data);
+      setMonitorSettings(monResp.data);
+      if (canManageAdvanced && results[1]) {
+        const advResp = results[1] as Awaited<ReturnType<typeof teamService.getAdvancedMonitoring>>;
+        setAdvancedData(advResp.data);
+        setAdvancedFrequency(advResp.data.active?.screenshot_frequency_minutes ?? 1);
+        setAdvancedReason('');
+        setAdvancedNotify(false);
+        setCloseSummary('');
+        setCloseNotify(false);
+      } else {
+        setAdvancedData(null);
+      }
     } catch (e) {
       console.error('Failed to load monitoring settings', e);
     }
@@ -132,11 +158,54 @@ const TeamPage = () => {
   };
 
   const monitoringStatus = (member: TeamMember) => {
+    if (member.advanced_monitoring_active) {
+      return { label: 'Advanced', className: 'text-rose-300 bg-rose-500/10 border-rose-500/30' };
+    }
     const tracking = member.tracking_enabled !== false;
     const screenshots = member.screenshots_enabled !== false;
     if (!tracking) return { label: 'Tracker off', className: 'text-rose-400 bg-rose-500/10 border-rose-500/20' };
     if (!screenshots) return { label: 'No screenshots', className: 'text-amber-400 bg-amber-500/10 border-amber-500/20' };
     return { label: 'Active', className: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' };
+  };
+
+  const enableAdvancedMonitoring = async () => {
+    if (!monitorMember) return;
+    setSavingAdvanced(true);
+    try {
+      const memberUserId = monitorMember.user_id ?? monitorMember.id;
+      await teamService.enableAdvancedMonitoring(memberUserId, {
+        reason: advancedReason,
+        screenshot_frequency_minutes: advancedFrequency,
+        notify_member: advancedNotify,
+      });
+      const advResp = await teamService.getAdvancedMonitoring(memberUserId);
+      setAdvancedData(advResp.data);
+      fetchMembers();
+    } catch (e) {
+      console.error('Failed to enable advanced monitoring', e);
+      alert('Could not enable advanced monitoring. Check plan and permissions.');
+    } finally {
+      setSavingAdvanced(false);
+    }
+  };
+
+  const closeAdvancedMonitoring = async () => {
+    if (!monitorMember) return;
+    setSavingAdvanced(true);
+    try {
+      const memberUserId = monitorMember.user_id ?? monitorMember.id;
+      await teamService.closeAdvancedMonitoring(memberUserId, {
+        result_summary: closeSummary,
+        notify_member: closeNotify,
+      });
+      const advResp = await teamService.getAdvancedMonitoring(memberUserId);
+      setAdvancedData(advResp.data);
+      fetchMembers();
+    } catch (e) {
+      console.error('Failed to close advanced monitoring', e);
+    } finally {
+      setSavingAdvanced(false);
+    }
   };
 
   const filteredMembers = members.filter(m => {
@@ -686,6 +755,100 @@ const TeamPage = () => {
                   </div>
                 </div>
                 <p className="text-xs text-slate-500">Use the window above to disable screenshots during a specific period (e.g. client meeting).</p>
+
+                {canManageAdvanced && advancedData && (
+                  <div className="rounded-2xl border border-rose-500/20 bg-rose-500/5 p-5 space-y-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <h3 className="font-bold text-white flex items-center gap-2">
+                          <ShieldAlert size={18} className="text-rose-400" />
+                          Advanced Monitoring
+                        </h3>
+                        <p className="text-xs text-slate-400 mt-1 flex items-start gap-1">
+                          <Info size={12} className="mt-0.5 shrink-0" />
+                          Intensifies screenshot capture and activity tracking for suspicious or low-activity members. Use when you need deeper visibility before taking action.
+                        </p>
+                      </div>
+                      {advancedData.active && (
+                        <Link
+                          to={`/team/member/${monitorMember.user_id ?? monitorMember.id}/advanced-monitoring`}
+                          className="text-xs font-bold text-primary-400 hover:underline flex items-center gap-1 shrink-0"
+                        >
+                          View report <ExternalLink size={12} />
+                        </Link>
+                      )}
+                    </div>
+
+                    {!advancedData.plan_available ? (
+                      <p className="text-sm text-amber-300">Upgrade to Professional or Enterprise to use advanced monitoring.</p>
+                    ) : advancedData.active ? (
+                      <div className="space-y-4">
+                        <div className="rounded-xl bg-black/20 border border-rose-500/20 p-4 text-sm text-rose-100">
+                          Active since {new Date(advancedData.active.started_at).toLocaleString()}
+                          {advancedData.active.reason ? ` · ${advancedData.active.reason}` : ''}
+                          <div className="text-xs text-rose-200/70 mt-1">
+                            Screenshot frequency: every {advancedData.active.screenshot_frequency_minutes} min (random within window)
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-sm font-bold text-slate-400 uppercase tracking-wider">Review result summary</label>
+                          <textarea
+                            value={closeSummary}
+                            onChange={(e) => setCloseSummary(e.target.value)}
+                            rows={3}
+                            placeholder="Optional summary sent to the member if you notify them..."
+                            className="w-full bg-[#12141C] border border-white/10 rounded-xl px-4 py-3 text-white text-sm"
+                          />
+                        </div>
+                        <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+                          <input type="checkbox" checked={closeNotify} onChange={(e) => setCloseNotify(e.target.checked)} className="accent-primary-500" />
+                          Notify member with result summary
+                        </label>
+                        <Button type="button" variant="secondary" className="w-full" isLoading={savingAdvanced} onClick={closeAdvancedMonitoring}>
+                          End advanced monitoring
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <label className="text-sm font-bold text-slate-400 uppercase tracking-wider">Reason (internal note)</label>
+                          <textarea
+                            value={advancedReason}
+                            onChange={(e) => setAdvancedReason(e.target.value)}
+                            rows={2}
+                            placeholder="e.g. Low productivity, suspicious idle patterns..."
+                            className="w-full bg-[#12141C] border border-white/10 rounded-xl px-4 py-3 text-white text-sm"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-sm font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                            Screenshot frequency (minutes)
+                            <span title="Captures at a random time within each interval so the member cannot predict when the next screenshot is taken." className="text-slate-500 cursor-help">
+                              <Info size={14} />
+                            </span>
+                          </label>
+                          <input
+                            type="range"
+                            min={1}
+                            max={5}
+                            value={advancedFrequency}
+                            onChange={(e) => setAdvancedFrequency(Number(e.target.value))}
+                            className="w-full accent-rose-500"
+                          />
+                          <span className="text-sm text-slate-300">{advancedFrequency} min · random capture within window</span>
+                        </div>
+                        <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+                          <input type="checkbox" checked={advancedNotify} onChange={(e) => setAdvancedNotify(e.target.checked)} className="accent-primary-500" />
+                          Notify member that advanced monitoring is enabled
+                        </label>
+                        <p className="text-[10px] text-slate-500">If checked, the member receives an in-app warning explaining that monitoring has been intensified.</p>
+                        <Button type="button" className="w-full bg-rose-600 hover:bg-rose-500" isLoading={savingAdvanced} onClick={enableAdvancedMonitoring}>
+                          Enable advanced monitoring
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="pt-6 flex gap-4">

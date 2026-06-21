@@ -8,6 +8,7 @@ import {
   Bell,
   Settings,
   Shield,
+  ShieldAlert,
 } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
@@ -333,6 +334,19 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
 
         {/* Page Content */}
         <div className="flex-1 glass rounded-3xl p-8 overflow-y-auto">
+          {user?.advanced_monitoring?.active && (
+            <div className="mb-6 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-5 py-4 flex items-start gap-3">
+              <ShieldAlert className="text-rose-400 shrink-0 mt-0.5" size={20} />
+              <div>
+                <p className="font-semibold text-rose-100">Advanced monitoring is active on your account</p>
+                <p className="text-sm text-rose-200/80 mt-1">
+                  Your organization has intensified activity and screenshot monitoring
+                  {user.advanced_monitoring.started_at ? ` since ${new Date(user.advanced_monitoring.started_at).toLocaleString()}` : ''}.
+                  {user.advanced_monitoring.reason ? ` Note: ${user.advanced_monitoring.reason}` : ''}
+                </p>
+              </div>
+            </div>
+          )}
           {children}
         </div>
       </main>

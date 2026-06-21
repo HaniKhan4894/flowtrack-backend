@@ -75,6 +75,13 @@ export interface User {
     plan?: PlanInfo | null;
     features?: PlanFeatures | null;
     tracking_config?: OrgTrackingSettings | null;
+    advanced_monitoring?: {
+        active: boolean;
+        session_id: number;
+        started_at: string;
+        reason?: string | null;
+        screenshot_frequency_minutes?: number;
+    } | null;
     profile_photo?: string;
     avatar_url?: string;
     onboarding?: OnboardingProgress | null;

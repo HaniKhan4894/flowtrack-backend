@@ -191,6 +191,29 @@ class OrganizationSettingsService
         return $effective;
     }
 
+    public function getEffectiveTrackingConfigForMember(int $organizationId, int $userId): array
+    {
+        $effective = $this->getEffectiveTrackingConfig($organizationId);
+        $session = (new AdvancedMonitoringService())->getActiveSession($organizationId, $userId);
+
+        if (!$session) {
+            return $effective;
+        }
+
+        $caps = $this->getPlanCaps($organizationId);
+        $planMin = max(1, (int) ($caps['screenshot_interval_min'] ?? 1));
+        $overrideFreq = max($planMin, min(60, (int) ($session['screenshot_frequency_minutes'] ?? 1)));
+
+        $effective['screenshot_enabled'] = true;
+        $effective['activity_tracking_enabled'] = true;
+        $effective['url_tracking_enabled'] = true;
+        $effective['screenshot_frequency_minutes'] = $overrideFreq;
+        $effective['advanced_monitoring'] = true;
+        $effective['advanced_monitoring_session_id'] = (int) $session['id'];
+
+        return $effective;
+    }
+
     /**
      * When enabled, regular members cannot view their own screenshots.
      * Users with screenshots.view_team (managers/admins) remain exempt.
