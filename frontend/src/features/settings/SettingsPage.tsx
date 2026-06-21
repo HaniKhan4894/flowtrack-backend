@@ -36,6 +36,15 @@ const CURRENCY_OPTIONS = [
   { value: 'AUD', label: 'AUD — Australian Dollar' },
 ];
 
+function mergeSelectedCity(
+  cities: City[],
+  city?: { id: number; name: string } | null,
+): City[] {
+  if (!city?.id) return cities;
+  if (cities.some((c) => c.id === city.id)) return cities;
+  return [{ id: city.id, name: city.name, state_id: 0, country_id: 0, country_code: '' }, ...cities];
+}
+
 const SettingsPage = () => {
   const { user, setUser } = useAuthStore();
   const [activeTab, setActiveTab] = useState('profile');
@@ -67,6 +76,7 @@ const SettingsPage = () => {
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const selectedCityRef = useRef<{ id: number; name: string } | null>(null);
 
   const [securityForm, setSecurityForm] = useState({
     current_password: '',
@@ -160,13 +170,14 @@ const SettingsPage = () => {
         currency: org.currency ?? 'USD',
         default_daily_hours: String(org.settings?.default_daily_hours ?? 8),
       });
+      selectedCityRef.current = org.city ?? null;
       if (org.country_id) {
         const statesResp = await locationService.getStates(org.country_id);
         setStates(statesResp.data);
       }
       if (org.state_id) {
-        const citiesResp = await locationService.searchCities(org.state_id);
-        setCities(citiesResp.data);
+        const citiesResp = await locationService.searchCities(org.state_id, undefined, org.city_id ?? undefined);
+        setCities(mergeSelectedCity(citiesResp.data ?? [], org.city));
       }
     } catch (e) {
       console.error(e);
@@ -195,13 +206,17 @@ const SettingsPage = () => {
     }
     setCitiesLoading(true);
     const timer = setTimeout(() => {
-      locationService.searchCities(Number(orgForm.state_id), citySearch || undefined)
-        .then((r) => setCities(r.data ?? []))
+      locationService.searchCities(
+        Number(orgForm.state_id),
+        citySearch || undefined,
+        orgForm.city_id ? Number(orgForm.city_id) : undefined,
+      )
+        .then((r) => setCities(mergeSelectedCity(r.data ?? [], selectedCityRef.current)))
         .catch(() => setCities([]))
         .finally(() => setCitiesLoading(false));
     }, 300);
     return () => clearTimeout(timer);
-  }, [orgForm.state_id, citySearch]);
+  }, [orgForm.state_id, citySearch, orgForm.city_id]);
 
   useEffect(() => {
     let objectUrl: string | null = null;
@@ -529,6 +544,8 @@ const SettingsPage = () => {
         settings: { default_daily_hours: parseFloat(orgForm.default_daily_hours) || 8 },
       };
       const resp = await organizationService.update(user.organization_id, payload);
+      selectedCityRef.current = resp.data.city ?? null;
+      setCities((prev) => mergeSelectedCity(prev, resp.data.city));
       const tz = timezones.find((t) => t.id === Number(orgForm.timezone_id));
       if (user) {
         setUser({

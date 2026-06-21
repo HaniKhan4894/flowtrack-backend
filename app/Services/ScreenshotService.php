@@ -105,15 +105,26 @@ class ScreenshotService
             ->findAll();
     }
 
-    public function deleteScreenshot(int $id, int $userId): bool
+    public function deleteScreenshot(int $id, int $userId, int $organizationId): bool
     {
         $screenshot = $this->screenshotModel->find($id);
 
-        if (!$screenshot || $screenshot['user_id'] != $userId) {
+        if (!$screenshot) {
             throw new \Exception('Screenshot not found or unauthorized');
         }
 
-        // Mark as deleted (soft delete)
+        $isOwner = (int) ($screenshot['user_id'] ?? 0) === $userId;
+        if (!$isOwner) {
+            if (!$this->canViewScreenshot($userId, $organizationId, $screenshot)) {
+                throw new \Exception('Screenshot not found or unauthorized');
+            }
+
+            $permissionService = new PermissionService();
+            if (!$permissionService->userHasPermission($userId, $organizationId, 'screenshots.delete')) {
+                throw new \Exception('Screenshot not found or unauthorized');
+            }
+        }
+
         return $this->screenshotModel->update($id, ['deleted_by_user' => true]);
     }
 

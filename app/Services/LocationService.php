@@ -41,7 +41,7 @@ class LocationService
             ->findAll();
     }
 
-    public function searchCities(int $stateId, ?string $query = null, int $page = 1, int $perPage = 30): array
+    public function searchCities(int $stateId, ?string $query = null, int $page = 1, int $perPage = 30, ?int $includeId = null): array
     {
         $builder = $this->cityModel
             ->select('id, name, state_id, country_id, country_code')
@@ -55,6 +55,17 @@ class LocationService
         $offset = ($page - 1) * $perPage;
         $total = $builder->countAllResults(false);
         $data = $builder->orderBy('name', 'ASC')->limit($perPage, $offset)->findAll();
+
+        if ($includeId && !in_array($includeId, array_column($data, 'id'), true)) {
+            $included = $this->cityModel
+                ->select('id, name, state_id, country_id, country_code')
+                ->where('id', $includeId)
+                ->where('state_id', $stateId)
+                ->first();
+            if ($included) {
+                array_unshift($data, $included);
+            }
+        }
 
         return [
             'data' => $data,

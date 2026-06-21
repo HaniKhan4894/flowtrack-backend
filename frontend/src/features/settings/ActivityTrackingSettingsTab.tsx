@@ -120,7 +120,7 @@ export function ActivityTrackingSettingsTab({ organizationId, onSaved }: Props) 
         <Row label="Only while timer is on">
           <Toggle checked={tracking.screenshot_only_while_timer} onChange={(v) => setTracking((p) => ({ ...p, screenshot_only_while_timer: v }))} />
         </Row>
-        <Row label={`Frequency (minutes)${minInterval > 0 ? ` — plan min ${minInterval}` : ''}`}>
+        <Row label={`Frequency (minutes)${minInterval > 0 ? ` — plan min ${minInterval}` : ''}`} hint="Captures at a random time within each interval window so users cannot predict when the next screenshot is taken.">
           <input
             type="range"
             min={Math.max(1, minInterval || 1)}

@@ -245,12 +245,15 @@ class ScreenshotController extends ResourceController
                 return $this->fail('Screenshots are hidden from users in your organization.', 403);
             }
 
+            $permissionService = new \App\Services\PermissionService();
+            $canManageTeamScreenshots = $permissionService->userHasPermission($userId, $organizationId, 'screenshots.view_team');
+
             $tracking = $settingsService->getEffectiveTrackingConfig($organizationId);
-            if (!empty($tracking['screenshot_disallow_deleting'])) {
+            if (!empty($tracking['screenshot_disallow_deleting']) && !$canManageTeamScreenshots) {
                 return $this->fail('Deleting screenshots is disabled by organization policy.', 403);
             }
 
-            $deleted = $this->screenshotService->deleteScreenshot($id, $userId);
+            $deleted = $this->screenshotService->deleteScreenshot($id, $userId, $organizationId);
 
             if (!$deleted) {
                 return $this->fail('Failed to delete screenshot', 400);

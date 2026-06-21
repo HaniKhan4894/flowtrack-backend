@@ -548,9 +548,9 @@ async function uploadScreenshot(jpegBuffer, activityLevel, screenIndex = 0, retr
 function randomScreenshotDelay() {
     const minutes = Number(planScreenshotIntervalMinutes) || 0;
     if (minutes > 0) {
-        const baseMs = minutes * 60 * 1000;
-        const jitter = Math.floor(baseMs * 0.1);
-        return baseMs + Math.floor(Math.random() * jitter);
+        const windowMs = minutes * 60 * 1000;
+        const minMs = Math.min(30 * 1000, windowMs);
+        return minMs + Math.floor(Math.random() * (windowMs - minMs + 1));
     }
     return Math.floor(Math.random() * (SCREENSHOT_MAX_MS - SCREENSHOT_MIN_MS + 1)) + SCREENSHOT_MIN_MS;
 }
@@ -951,7 +951,7 @@ function startMonitoringLoop() {
     if (!currentSession.isTracking || isPaused) return;
     if (screenshotTimer) return;
 
-    console.log(`[Monitoring] Starting screenshot loop (interval: ${planScreenshotIntervalMinutes || 'random 1-4'} min)...`);
+    console.log(`[Monitoring] Starting screenshot loop (random within ${planScreenshotIntervalMinutes || '1-4'} min window)...`);
 
     scheduleNextScreenshot();
 

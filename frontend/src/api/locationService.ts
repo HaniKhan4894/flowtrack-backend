@@ -10,8 +10,11 @@ export const locationService = {
         const response = await client.get('/locations/states', { params: { country_id: countryId } });
         return response.data;
     },
-    searchCities: async (stateId: number, q?: string, page = 1): Promise<{ data: City[]; pagination: any }> => {
-        const response = await client.get('/locations/cities', { params: { state_id: stateId, q, page, per_page: 30 } });
+    searchCities: async (stateId: number, q?: string, includeId?: number, page = 1): Promise<{ data: City[]; pagination: any }> => {
+        const params: Record<string, string | number> = { state_id: stateId, page, per_page: 30 };
+        if (q) params.q = q;
+        if (includeId) params.include_id = includeId;
+        const response = await client.get('/locations/cities', { params });
         return response.data;
     },
     getTimezones: async (): Promise<{ data: TimezoneOption[]; grouped: Record<string, TimezoneOption[]> }> => {

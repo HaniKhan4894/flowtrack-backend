@@ -43,11 +43,13 @@ class LocationController extends ResourceController
             return $this->fail('state_id is required', 400);
         }
 
+        $includeId = (int) ($this->request->getGet('include_id') ?? 0);
         $result = $this->locationService->searchCities(
             $stateId,
             $this->request->getGet('q'),
             (int) ($this->request->getGet('page') ?? 1),
-            (int) ($this->request->getGet('per_page') ?? 30)
+            (int) ($this->request->getGet('per_page') ?? 30),
+            $includeId > 0 ? $includeId : null
         );
 
         return $this->respond([
