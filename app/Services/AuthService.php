@@ -614,6 +614,8 @@ class AuthService
         $user['permissions'] = $permissionSlugs;
         $user['monitoring'] = $monitoring;
         $user['is_super_admin'] = !empty($user['is_super_admin']);
+        // MySQLi returns tinyints as strings ("0"/"1"); "0" is truthy in JS.
+        $user['two_factor_enabled'] = !empty($user['two_factor_enabled']);
 
         $teamScopeService = new TeamScopeService();
         $onboardingService = new OnboardingService();
@@ -726,6 +728,10 @@ class AuthService
     private function sanitizeUser(array $user): array
     {
         unset($user['password_hash'], $user['deleted_at'], $user['two_factor_secret']);
+
+        if (array_key_exists('two_factor_enabled', $user)) {
+            $user['two_factor_enabled'] = !empty($user['two_factor_enabled']);
+        }
 
         // Normalize organization_id for frontend context-dependent calls (team invite, etc.)
         if (!array_key_exists('organization_id', $user) || empty($user['organization_id'])) {
