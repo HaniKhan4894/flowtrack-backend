@@ -102,7 +102,16 @@ class OAuthService
             ],
         ]);
 
-        $body = json_decode((string) $response->getBody(), true);
+        $raw = (string) $response->getBody();
+        $body = json_decode($raw, true);
+
+        // GitHub may return a form-encoded body (access_token=...&scope=...).
+        if (!is_array($body)) {
+            $parsed = [];
+            parse_str($raw, $parsed);
+            $body = $parsed;
+        }
+
         if (!is_array($body) || empty($body['access_token'])) {
             $error = is_array($body) ? ($body['error_description'] ?? $body['error'] ?? null) : null;
             throw new \RuntimeException('Failed to obtain ' . $provider . ' access token' . ($error ? ': ' . $error : '.'));
