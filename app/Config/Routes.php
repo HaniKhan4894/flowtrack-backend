@@ -267,6 +267,23 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\API\V1'], function ($r
     $routes->get('reports/advanced-monitoring', 'AdvancedMonitoringController::report', ['filter' => 'permission:monitoring.advanced']);
     $routes->post('reports/export', 'ReportController::export', ['filter' => 'permission:reports.export']);
 
+    // AI engine
+    $routes->group('ai', ['filter' => 'auth'], function ($routes) {
+        $routes->get('status', 'AiController::status');
+        $routes->post('ask', 'AiController::ask');
+        $routes->get('weekly-narrative', 'AiController::weeklyNarrative');
+    });
+
+    // Per-organization integrations (OpenAI, and future OAuth providers)
+    $routes->group('integrations', ['filter' => 'auth'], function ($routes) {
+        $routes->get('/', 'IntegrationController::index', ['filter' => 'permission:settings.view']);
+        $routes->get('(:segment)', 'IntegrationController::show/$1', ['filter' => 'permission:settings.view']);
+        $routes->put('(:segment)', 'IntegrationController::update/$1', ['filter' => 'permission:settings.edit']);
+        $routes->post('(:segment)/connect', 'IntegrationController::connect/$1', ['filter' => 'permission:settings.edit']);
+        $routes->post('(:segment)/toggle', 'IntegrationController::toggle/$1', ['filter' => 'permission:settings.edit']);
+        $routes->delete('(:segment)', 'IntegrationController::delete/$1', ['filter' => 'permission:settings.edit']);
+    });
+
     $routes->group('insights', ['filter' => ['auth', 'permission:reports.view_own']], function ($routes) {
         $routes->get('weekly-summary', 'InsightsController::weeklySummary');
         $routes->get('benchmarks', 'InsightsController::benchmarks');

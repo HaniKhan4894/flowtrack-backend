@@ -36,7 +36,10 @@ class OAuthService
             throw new \RuntimeException(ucfirst($provider) . ' login is not configured on the server.');
         }
 
-        $state = $this->createState($provider, $invitationToken);
+        $state = $this->createState($provider, [
+            'purpose'          => 'login',
+            'invitation_token' => $invitationToken,
+        ]);
 
         $params = [
             'client_id'     => $cfg['client_id'],
@@ -55,6 +58,57 @@ class OAuthService
     }
 
     /**
+     * Build an authorization URL for connecting a provider as an ORG-LEVEL
+     * integration (reuses the same OAuth app / callback as login; the state
+     * carries the org + user + purpose so the callback can branch).
+     */
+    public function getIntegrationAuthorizationUrl(string $provider, int $organizationId, int $userId): string
+    {
+        $cfg = $this->requireProvider($provider);
+
+        if ($cfg['client_id'] === '') {
+            throw new \RuntimeException(ucfirst($provider) . ' is not configured on the server.');
+        }
+
+        $state = $this->createState($provider, [
+            'purpose'         => 'integration',
+            'organization_id' => $organizationId,
+            'user_id'         => $userId,
+        ]);
+
+        $params = [
+            'client_id'     => $cfg['client_id'],
+            'redirect_uri'  => $cfg['redirect_uri'],
+            'response_type' => 'code',
+            'scope'         => $cfg['integration_scope'] ?? $cfg['scope'],
+            'state'         => $state,
+        ];
+
+        if ($provider === 'google') {
+            $params['access_type'] = 'offline';
+            $params['prompt'] = 'consent';
+        }
+
+        return $cfg['authorize_url'] . '?' . http_build_query($params);
+    }
+
+    /**
+     * Exchange the code and return both the access token and normalized profile
+     * (used when connecting an org integration, where we must store the token).
+     *
+     * @return array{access_token:string, profile:array}
+     */
+    public function completeIntegration(string $provider, string $code): array
+    {
+        $accessToken = $this->exchangeCodeForToken($provider, $code);
+        $profile = $provider === 'github'
+            ? $this->fetchGithubProfile($accessToken)
+            : $this->fetchGoogleProfile($accessToken);
+
+        return ['access_token' => $accessToken, 'profile' => $profile];
+    }
+
+    /**
      * Validate the returned state token and return its decoded payload.
      *
      * @return array{provider:string, invitation_token:?string}
@@ -68,7 +122,10 @@ class OAuthService
 
         return [
             'provider'         => $provider,
+            'purpose'          => $data['purpose'] ?? 'login',
             'invitation_token' => $data['invitation_token'] ?? null,
+            'organization_id'  => isset($data['organization_id']) ? (int) $data['organization_id'] : null,
+            'user_id'          => isset($data['user_id']) ? (int) $data['user_id'] : null,
         ];
     }
 
@@ -198,14 +255,14 @@ class OAuthService
         ];
     }
 
-    private function createState(string $provider, ?string $invitationToken): string
+    private function createState(string $provider, array $extra = []): string
     {
-        return $this->jwt->generateAccessToken([
-            'oauth_state'      => true,
-            'provider'         => $provider,
-            'invitation_token' => $invitationToken,
-            'nonce'            => bin2hex(random_bytes(8)),
-        ], 600);
+        return $this->jwt->generateAccessToken(array_merge([
+            'oauth_state' => true,
+            'provider'    => $provider,
+            'purpose'     => 'login',
+            'nonce'       => bin2hex(random_bytes(8)),
+        ], $extra), 600);
     }
 
     private function requireProvider(string $provider): array

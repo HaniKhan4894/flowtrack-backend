@@ -40,6 +40,9 @@ class OAuth extends BaseConfig
                 'userinfo_url'   => 'https://api.github.com/user',
                 'emails_url'     => 'https://api.github.com/user/emails',
                 'scope'          => 'read:user user:email',
+                // Broader scope when connecting GitHub as an org integration
+                // (lets us read repos/commits for later features).
+                'integration_scope' => 'read:user user:email repo',
             ],
         ];
     }

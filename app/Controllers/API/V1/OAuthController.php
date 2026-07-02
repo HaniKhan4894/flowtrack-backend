@@ -5,17 +5,20 @@ namespace App\Controllers\API\V1;
 use CodeIgniter\RESTful\ResourceController;
 use App\Services\OAuthService;
 use App\Services\AuthService;
+use App\Services\IntegrationService;
 
 class OAuthController extends ResourceController
 {
     protected $format = 'json';
     protected OAuthService $oauthService;
     protected AuthService $authService;
+    protected IntegrationService $integrationService;
 
     public function __construct()
     {
         $this->oauthService = new OAuthService();
         $this->authService = new AuthService();
+        $this->integrationService = new IntegrationService();
     }
 
     /**
@@ -62,6 +65,12 @@ class OAuthController extends ResourceController
 
         try {
             $stateData = $this->oauthService->validateState($provider, $state);
+
+            // Branch: connecting an org integration vs. logging a user in.
+            if (($stateData['purpose'] ?? 'login') === 'integration') {
+                return $this->completeIntegrationConnect($provider, $code, $stateData);
+            }
+
             $profile = $this->oauthService->fetchProfile($provider, $code);
 
             $result = $this->authService->handleOAuthLogin(
@@ -80,6 +89,43 @@ class OAuthController extends ResourceController
         } catch (\Throwable $e) {
             return $this->redirectToFrontend(['oauth_error' => $e->getMessage()]);
         }
+    }
+
+    /**
+     * Store the org's connected provider account (token + profile) and bounce
+     * back to the Integrations settings page.
+     */
+    private function completeIntegrationConnect(string $provider, string $code, array $stateData)
+    {
+        $orgId = (int) ($stateData['organization_id'] ?? 0);
+        $userId = (int) ($stateData['user_id'] ?? 0);
+
+        if (!$orgId) {
+            return $this->redirectToFrontend(['integration_error' => 'Missing organization context.'], '/settings');
+        }
+
+        $result = $this->oauthService->completeIntegration($provider, $code);
+        $profile = $result['profile'];
+
+        $displayName = trim(($profile['first_name'] ?? '') . ' ' . ($profile['last_name'] ?? ''));
+
+        $this->integrationService->saveOAuth(
+            $orgId,
+            $provider,
+            (string) ($profile['provider_user_id'] ?? ''),
+            ['access_token' => $result['access_token']],
+            [
+                'account_name'  => $displayName !== '' ? $displayName : ($profile['email'] ?? $provider),
+                'account_email' => $profile['email'] ?? null,
+                'avatar_url'    => $profile['avatar_url'] ?? null,
+            ],
+            $userId ?: null
+        );
+
+        return $this->redirectToFrontend([
+            'connected' => $provider,
+            'tab'       => 'integrations',
+        ], '/settings');
     }
 
     private function redirectToFrontend(array $params, string $path = '/login')

@@ -16,6 +16,7 @@ import { hasPermission, canViewUnusualActivity } from '../../utils/access';
 import { useAuthStore } from '../../store/authStore';
 import { getApiErrorMessage } from '../../utils/apiError';
 import { UnusualActivityPanel } from './UnusualActivityPanel';
+import AskFlowTrack from './AskFlowTrack';
 
 type Tab = 'weekly' | 'benchmarks' | 'patterns' | 'coach' | 'risks' | 'unusual';
 
@@ -94,6 +95,8 @@ const InsightsPage = () => {
           </h1>
           <p className="text-slate-400 mt-1">Weekly summaries, benchmarks, work patterns, and delivery forecasting.</p>
         </div>
+
+        {canViewTeam && <AskFlowTrack />}
 
         <div className="flex flex-wrap gap-2">
           {visibleTabs.map((t) => (
