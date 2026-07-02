@@ -14,8 +14,12 @@ interface AuthResponse {
 }
 
 export const authService = {
-    login: async (email: string, password: string): Promise<AuthResponse> => {
-        const response = await client.post<AuthResponse>('/auth/login', { email, password });
+    login: async (email: string, password: string, totpCode?: string): Promise<AuthResponse> => {
+        const payload: Record<string, string> = { email, password };
+        if (totpCode) {
+            payload.totp_code = totpCode;
+        }
+        const response = await client.post<AuthResponse>('/auth/login', payload);
         return response.data;
     },
 

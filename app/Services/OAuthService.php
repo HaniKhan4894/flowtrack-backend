@@ -1,0 +1,210 @@
+<?php
+
+namespace App\Services;
+
+use App\Libraries\JWTHandler;
+use Config\OAuth as OAuthConfig;
+
+/**
+ * Handles the OAuth 2.0 authorization-code flow for social login providers
+ * (Google, GitHub). Stateless: the CSRF "state" is a short-lived signed JWT.
+ */
+class OAuthService
+{
+    protected OAuthConfig $config;
+    protected JWTHandler $jwt;
+
+    public function __construct()
+    {
+        $this->config = new OAuthConfig();
+        $this->jwt = new JWTHandler();
+    }
+
+    public function isSupported(string $provider): bool
+    {
+        return $this->config->provider($provider) !== null;
+    }
+
+    /**
+     * Build the provider authorization URL the user should be redirected to.
+     */
+    public function getAuthorizationUrl(string $provider, ?string $invitationToken = null): string
+    {
+        $cfg = $this->requireProvider($provider);
+
+        if ($cfg['client_id'] === '') {
+            throw new \RuntimeException(ucfirst($provider) . ' login is not configured on the server.');
+        }
+
+        $state = $this->createState($provider, $invitationToken);
+
+        $params = [
+            'client_id'     => $cfg['client_id'],
+            'redirect_uri'  => $cfg['redirect_uri'],
+            'response_type' => 'code',
+            'scope'         => $cfg['scope'],
+            'state'         => $state,
+        ];
+
+        if ($provider === 'google') {
+            $params['access_type'] = 'online';
+            $params['prompt'] = 'select_account';
+        }
+
+        return $cfg['authorize_url'] . '?' . http_build_query($params);
+    }
+
+    /**
+     * Validate the returned state token and return its decoded payload.
+     *
+     * @return array{provider:string, invitation_token:?string}
+     */
+    public function validateState(string $provider, string $state): array
+    {
+        $data = $this->jwt->getUserFromToken($state);
+        if (!$data || ($data['oauth_state'] ?? null) !== true || ($data['provider'] ?? null) !== $provider) {
+            throw new \RuntimeException('Invalid or expired OAuth state.');
+        }
+
+        return [
+            'provider'         => $provider,
+            'invitation_token' => $data['invitation_token'] ?? null,
+        ];
+    }
+
+    /**
+     * Exchange the authorization code for a normalized user profile.
+     *
+     * @return array{provider_user_id:string, email:?string, email_verified:bool, first_name:string, last_name:string, avatar_url:?string}
+     */
+    public function fetchProfile(string $provider, string $code): array
+    {
+        $accessToken = $this->exchangeCodeForToken($provider, $code);
+
+        return $provider === 'github'
+            ? $this->fetchGithubProfile($accessToken)
+            : $this->fetchGoogleProfile($accessToken);
+    }
+
+    private function exchangeCodeForToken(string $provider, string $code): string
+    {
+        $cfg = $this->requireProvider($provider);
+        $client = \Config\Services::curlrequest(['timeout' => 20, 'http_errors' => false]);
+
+        $response = $client->post($cfg['token_url'], [
+            'headers' => ['Accept' => 'application/json'],
+            'form_params' => [
+                'client_id'     => $cfg['client_id'],
+                'client_secret' => $cfg['client_secret'],
+                'code'          => $code,
+                'redirect_uri'  => $cfg['redirect_uri'],
+                'grant_type'    => 'authorization_code',
+            ],
+        ]);
+
+        $body = json_decode((string) $response->getBody(), true);
+        if (!is_array($body) || empty($body['access_token'])) {
+            $error = is_array($body) ? ($body['error_description'] ?? $body['error'] ?? null) : null;
+            throw new \RuntimeException('Failed to obtain ' . $provider . ' access token' . ($error ? ': ' . $error : '.'));
+        }
+
+        return (string) $body['access_token'];
+    }
+
+    private function fetchGoogleProfile(string $accessToken): array
+    {
+        $cfg = $this->requireProvider('google');
+        $client = \Config\Services::curlrequest(['timeout' => 20, 'http_errors' => false]);
+
+        $response = $client->get($cfg['userinfo_url'], [
+            'headers' => ['Authorization' => 'Bearer ' . $accessToken],
+        ]);
+
+        $data = json_decode((string) $response->getBody(), true);
+        if (!is_array($data) || empty($data['sub'])) {
+            throw new \RuntimeException('Failed to fetch Google profile.');
+        }
+
+        return [
+            'provider_user_id' => (string) $data['sub'],
+            'email'            => $data['email'] ?? null,
+            'email_verified'   => (bool) ($data['email_verified'] ?? false),
+            'first_name'       => (string) ($data['given_name'] ?? ''),
+            'last_name'        => (string) ($data['family_name'] ?? ''),
+            'avatar_url'       => $data['picture'] ?? null,
+        ];
+    }
+
+    private function fetchGithubProfile(string $accessToken): array
+    {
+        $cfg = $this->requireProvider('github');
+        $headers = [
+            'Authorization' => 'Bearer ' . $accessToken,
+            'Accept'        => 'application/vnd.github+json',
+            'User-Agent'    => 'FlowTrack-OAuth',
+        ];
+        $client = \Config\Services::curlrequest(['timeout' => 20, 'http_errors' => false]);
+
+        $response = $client->get($cfg['userinfo_url'], ['headers' => $headers]);
+        $data = json_decode((string) $response->getBody(), true);
+        if (!is_array($data) || empty($data['id'])) {
+            throw new \RuntimeException('Failed to fetch GitHub profile.');
+        }
+
+        $email = $data['email'] ?? null;
+        $emailVerified = false;
+
+        // GitHub often hides the email on the profile; resolve the primary email.
+        if (!$email && !empty($cfg['emails_url'])) {
+            $emailsResponse = $client->get($cfg['emails_url'], ['headers' => $headers]);
+            $emails = json_decode((string) $emailsResponse->getBody(), true);
+            if (is_array($emails)) {
+                foreach ($emails as $entry) {
+                    if (!empty($entry['primary'])) {
+                        $email = $entry['email'] ?? null;
+                        $emailVerified = (bool) ($entry['verified'] ?? false);
+                        break;
+                    }
+                }
+            }
+        }
+
+        $name = trim((string) ($data['name'] ?? ''));
+        $firstName = $name;
+        $lastName = '';
+        if ($name !== '' && strpos($name, ' ') !== false) {
+            [$firstName, $lastName] = explode(' ', $name, 2);
+        }
+        if ($firstName === '') {
+            $firstName = (string) ($data['login'] ?? 'GitHub User');
+        }
+
+        return [
+            'provider_user_id' => (string) $data['id'],
+            'email'            => $email,
+            'email_verified'   => $emailVerified,
+            'first_name'       => $firstName,
+            'last_name'        => $lastName,
+            'avatar_url'       => $data['avatar_url'] ?? null,
+        ];
+    }
+
+    private function createState(string $provider, ?string $invitationToken): string
+    {
+        return $this->jwt->generateAccessToken([
+            'oauth_state'      => true,
+            'provider'         => $provider,
+            'invitation_token' => $invitationToken,
+            'nonce'            => bin2hex(random_bytes(8)),
+        ], 600);
+    }
+
+    private function requireProvider(string $provider): array
+    {
+        $cfg = $this->config->provider($provider);
+        if ($cfg === null) {
+            throw new \RuntimeException('Unsupported OAuth provider: ' . $provider);
+        }
+        return $cfg;
+    }
+}

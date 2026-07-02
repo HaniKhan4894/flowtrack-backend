@@ -8,8 +8,11 @@ import { authService } from '../../api/authService';
 import { useAuthStore } from '../../store/authStore';
 import { isDesktopApp } from '../../utils/electronAuth';
 import { getSavedLoginCredentials, persistAuthTokens, saveLoginCredentials } from '../../utils/authStorage';
+import { startOAuthLogin } from '../../utils/oauth';
 import SeoHead from '../../seo/SeoHead';
 import { getApiErrorMessage } from '../../utils/apiError';
+
+const TWO_FACTOR_REQUIRED = 'Two-factor authentication code is required';
 
 const LoginPage = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -22,6 +25,8 @@ const LoginPage = () => {
   const savedCredentials = getSavedLoginCredentials();
   const [email, setEmail] = useState(savedCredentials?.email ?? '');
   const [password, setPassword] = useState(savedCredentials?.password ?? '');
+  const [requiresTwoFactor, setRequiresTwoFactor] = useState(false);
+  const [totpCode, setTotpCode] = useState('');
   
   const successMessage = location.state?.message 
     ?? (new URLSearchParams(location.search).get('signed_out') ? 'Signed out successfully. Log in with your account.' : null);
@@ -45,12 +50,15 @@ const LoginPage = () => {
     setIsLoading(true);
     setError(null);
 
-    const formData = new FormData(e.currentTarget);
-    const submittedEmail = (formData.get('email') as string).trim();
-    const submittedPassword = formData.get('password') as string;
+    const submittedEmail = email.trim();
+    const submittedPassword = password;
 
     try {
-      const response = await authService.login(submittedEmail, submittedPassword);
+      const response = await authService.login(
+        submittedEmail,
+        submittedPassword,
+        requiresTwoFactor ? totpCode.trim() : undefined,
+      );
       persistAuthTokens({
         access_token: response.data.tokens.access_token,
         refresh_token: response.data.tokens.refresh_token,
@@ -66,7 +74,13 @@ const LoginPage = () => {
 
       navigate('/app', { replace: true });
     } catch (err: unknown) {
-      setError(getApiErrorMessage(err, 'Invalid email or password.'));
+      const message = getApiErrorMessage(err, 'Invalid email or password.');
+      if (message === TWO_FACTOR_REQUIRED) {
+        setRequiresTwoFactor(true);
+        setError(null);
+      } else {
+        setError(message);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -166,9 +180,29 @@ const LoginPage = () => {
               </div>
             </div>
 
+            {requiresTwoFactor && (
+              <div className="space-y-1">
+                <Input
+                  label="Authentication Code"
+                  name="totp_code"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  placeholder="123456"
+                  value={totpCode}
+                  onChange={(e) => setTotpCode(e.target.value)}
+                  autoFocus
+                  required
+                />
+                <p className="text-xs text-slate-500">
+                  Enter the 6-digit code from your authenticator app.
+                </p>
+              </div>
+            )}
+
             <Button type="submit" className="w-full" isLoading={isLoading}>
               <LogIn className="w-4 h-4 mr-2" />
-              Sign In to FlowTrack
+              {requiresTwoFactor ? 'Verify & Sign In' : 'Sign In to FlowTrack'}
             </Button>
 
             {!desktop && (
@@ -183,11 +217,21 @@ const LoginPage = () => {
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
-                  <Button variant="secondary" type="button" className="w-full px-0">
+                  <Button
+                    variant="secondary"
+                    type="button"
+                    className="w-full px-0"
+                    onClick={() => startOAuthLogin('github')}
+                  >
                     <Github className="w-4 h-4 mr-2" />
                     GitHub
                   </Button>
-                  <Button variant="secondary" type="button" className="w-full px-0">
+                  <Button
+                    variant="secondary"
+                    type="button"
+                    className="w-full px-0"
+                    onClick={() => startOAuthLogin('google')}
+                  >
                     <Mail className="w-4 h-4 mr-2" />
                     Google
                   </Button>

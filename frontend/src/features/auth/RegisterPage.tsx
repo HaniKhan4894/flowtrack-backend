@@ -5,6 +5,7 @@ import { UserPlus, Github, Mail, Sparkles, ArrowRight } from 'lucide-react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { authService } from '../../api/authService';
 import { useAuthStore } from '../../store/authStore';
+import { startOAuthLogin } from '../../utils/oauth';
 import { DesktopTitleBar } from '../../components/WindowControls';
 import SeoHead from '../../seo/SeoHead';
 import { getApiErrorMessage } from '../../utils/apiError';
@@ -132,10 +133,20 @@ const RegisterPage = () => {
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <Button variant="secondary" type="button" className="w-full px-0">
+              <Button
+                variant="secondary"
+                type="button"
+                className="w-full px-0"
+                onClick={() => startOAuthLogin('github', invitationToken)}
+              >
                 <Github className="w-4 h-4 mr-2" /> GitHub
               </Button>
-              <Button variant="secondary" type="button" className="w-full px-0">
+              <Button
+                variant="secondary"
+                type="button"
+                className="w-full px-0"
+                onClick={() => startOAuthLogin('google', invitationToken)}
+              >
                 <Mail className="w-4 h-4 mr-2" /> Google
               </Button>
             </div>

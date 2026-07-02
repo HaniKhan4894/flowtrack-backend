@@ -37,6 +37,10 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\API\V1'], function ($r
     $routes->post('auth/verify-email', 'AuthController::verifyEmail');
     $routes->post('auth/resend-verification', 'AuthController::resendVerification');
 
+    // Social login (OAuth) — Google & GitHub
+    $routes->get('auth/(:segment)/redirect', 'OAuthController::redirect/$1');
+    $routes->get('auth/(:segment)/callback', 'OAuthController::callback/$1');
+
     // Public webhook (no auth)
     $routes->post('webhooks/stripe', 'StripeWebhookController::handle');
 

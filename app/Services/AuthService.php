@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\UserModel;
 use App\Models\RefreshTokenModel;
+use App\Models\OAuthAccountModel;
 use App\Libraries\JWTHandler;
 use App\Services\EmailVerificationService;
 use App\Models\SubscriptionModel;
@@ -141,6 +142,10 @@ class AuthService
             throw new \Exception('Invalid credentials');
         }
 
+        if (empty($user['password_hash'])) {
+            throw new \Exception('This account uses social login. Please sign in with Google or GitHub, or set a password via "Forgot password".');
+        }
+
         if (!password_verify($password, $user['password_hash'])) {
             throw new \Exception('Invalid credentials');
         }
@@ -167,6 +172,154 @@ class AuthService
         return [
             'user' => $this->buildAuthProfile((int) $user['id']) ?? $this->sanitizeUser($user),
             'tokens' => $tokens
+        ];
+    }
+
+    /**
+     * Log in (or register) a user via an OAuth provider profile.
+     *
+     * @param array{provider_user_id:string, email:?string, email_verified:bool, first_name:string, last_name:string, avatar_url:?string} $profile
+     */
+    public function handleOAuthLogin(
+        string $provider,
+        array $profile,
+        ?string $invitationToken = null,
+        ?string $deviceInfo = null,
+        ?string $ipAddress = null
+    ): array {
+        $oauthModel = new OAuthAccountModel();
+
+        // 1) Already linked — just log in.
+        $linked = $oauthModel->findByProvider($provider, $profile['provider_user_id']);
+        if ($linked) {
+            $user = $this->userModel->find($linked['user_id']);
+            if (!$user) {
+                throw new \Exception('Linked account no longer exists');
+            }
+            if (!$user['is_active']) {
+                throw new \Exception('Account is inactive');
+            }
+
+            return [
+                'user' => $this->buildAuthProfile((int) $user['id']) ?? $this->sanitizeUser($user),
+                'tokens' => $this->generateTokens($user, $deviceInfo, $ipAddress),
+            ];
+        }
+
+        $email = !empty($profile['email']) ? strtolower(trim($profile['email'])) : null;
+
+        // 2) Link to an existing account with the same email.
+        if ($email) {
+            $existing = $this->userModel->where('email', $email)->first();
+            if ($existing) {
+                if (!$existing['is_active']) {
+                    throw new \Exception('Account is inactive');
+                }
+
+                $oauthModel->insert([
+                    'user_id'          => (int) $existing['id'],
+                    'provider'         => $provider,
+                    'provider_user_id' => $profile['provider_user_id'],
+                    'email'            => $email,
+                    'avatar_url'       => $profile['avatar_url'] ?? null,
+                ]);
+
+                $updates = [];
+                if (empty($existing['email_verified_at']) && $profile['email_verified']) {
+                    $updates['email_verified_at'] = date('Y-m-d H:i:s');
+                }
+                if (empty($existing['avatar_url']) && !empty($profile['avatar_url'])) {
+                    $updates['avatar_url'] = $profile['avatar_url'];
+                }
+                if ($updates) {
+                    $this->userModel->update($existing['id'], $updates);
+                    $existing = $this->userModel->find($existing['id']);
+                }
+
+                return [
+                    'user' => $this->buildAuthProfile((int) $existing['id']) ?? $this->sanitizeUser($existing),
+                    'tokens' => $this->generateTokens($existing, $deviceInfo, $ipAddress),
+                ];
+            }
+        }
+
+        // 3) New user — needs an email address to create the account.
+        if (!$email) {
+            throw new \Exception('Your ' . ucfirst($provider) . ' account did not share an email address. Please sign up with email and password instead.');
+        }
+
+        $invitationToken = $invitationToken ? trim($invitationToken) : null;
+
+        $this->db->transStart();
+        try {
+            $userData = [
+                'email'             => $email,
+                'first_name'        => $profile['first_name'] ?: 'User',
+                'last_name'         => $profile['last_name'] ?: '',
+                'avatar_url'        => $profile['avatar_url'] ?? null,
+                'email_verified_at' => $profile['email_verified'] ? date('Y-m-d H:i:s') : null,
+            ];
+
+            $invite = null;
+            if ($invitationToken) {
+                $invite = $this->db->table('organization_invitations')
+                    ->where('token', $invitationToken)
+                    ->where('expires_at >=', date('Y-m-d H:i:s'))
+                    ->get()
+                    ->getRowArray();
+
+                if (!$invite) {
+                    throw new \Exception('Invitation is invalid or expired');
+                }
+                if (strcasecmp((string) $invite['email'], $email) !== 0) {
+                    throw new \Exception('This invitation was sent to a different email address');
+                }
+
+                $userData['role'] = (string) ($invite['role'] ?? 'member');
+                // Joining via an invitation implicitly verifies the email.
+                $userData['email_verified_at'] = date('Y-m-d H:i:s');
+                $user = $this->userService->createUser($userData);
+
+                $this->organizationService->addMember(
+                    (int) $invite['organization_id'],
+                    (int) $user['id'],
+                    (string) $invite['role'],
+                    null
+                );
+                $this->db->table('organization_invitations')->where('id', $invite['id'])->delete();
+            } else {
+                $userData['role'] = 'owner';
+                $user = $this->userService->createUser($userData);
+
+                $orgName = trim(($userData['first_name'] ?: 'User') . "'s Team");
+                $this->organizationService->createOrganization((int) $user['id'], [
+                    'name' => $orgName,
+                ]);
+            }
+
+            $oauthModel->insert([
+                'user_id'          => (int) $user['id'],
+                'provider'         => $provider,
+                'provider_user_id' => $profile['provider_user_id'],
+                'email'            => $email,
+                'avatar_url'       => $profile['avatar_url'] ?? null,
+            ]);
+
+            if ($this->db->transStatus() === false) {
+                throw new \Exception('Social sign-in failed. Please try again.');
+            }
+
+            $this->db->transComplete();
+        } catch (\Exception $e) {
+            $this->db->transRollback();
+            throw $e;
+        }
+
+        $freshUser = $this->userModel->find($user['id']) ?? $user;
+
+        return [
+            'user' => $this->buildAuthProfile((int) $freshUser['id']) ?? $this->sanitizeUser($freshUser),
+            'tokens' => $this->generateTokens($freshUser, $deviceInfo, $ipAddress),
         ];
     }
 
@@ -342,7 +495,8 @@ class AuthService
             throw new \Exception('User not found');
         }
 
-        if (!password_verify($password, $user['password_hash'])) {
+        // Social-login users have no password; the TOTP code alone gates disabling.
+        if (!empty($user['password_hash']) && !password_verify($password, $user['password_hash'])) {
             throw new \Exception('Invalid password');
         }
 

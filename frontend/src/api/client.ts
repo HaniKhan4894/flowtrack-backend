@@ -9,6 +9,8 @@ const apiBaseUrl =
 
 const usesNgrok = apiBaseUrl.includes('ngrok');
 
+export const API_BASE_URL = apiBaseUrl;
+
 const client = axios.create({
     baseURL: apiBaseUrl,
     headers: {
