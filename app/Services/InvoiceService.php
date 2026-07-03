@@ -467,25 +467,27 @@ class InvoiceService
         $builder = $this->invoiceModel->builder();
 
         if (isset($filters['organization_id'])) {
-            $builder->where('organization_id', $filters['organization_id']);
+            $builder->where('invoices.organization_id', $filters['organization_id']);
         }
 
         if (isset($filters['status'])) {
-            $builder->where('status', $filters['status']);
+            $builder->where('invoices.status', $filters['status']);
         }
 
         if (isset($filters['project_id'])) {
-            $builder->where('project_id', $filters['project_id']);
+            $builder->where('invoices.project_id', $filters['project_id']);
         }
 
         $page = $filters['page'] ?? 1;
         $perPage = $filters['per_page'] ?? 20;
         $offset = ($page - 1) * $perPage;
 
+        $builder
+            ->select('invoices.*, projects.name as project_name')
+            ->join('projects', 'projects.id = invoices.project_id', 'left');
+
         $total = $builder->countAllResults(false);
         $invoices = $builder
-            ->select('invoices.*, projects.name as project_name')
-            ->join('projects', 'projects.id = invoices.project_id', 'left')
             ->orderBy('invoices.created_at', 'DESC')
             ->limit($perPage, $offset)
             ->get()
