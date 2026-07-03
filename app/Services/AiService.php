@@ -220,9 +220,8 @@ SYS;
         $body = json_decode((string) $response->getBody(), true);
 
         if ($status >= 400 || !is_array($body)) {
-            $detail = is_array($body) ? ($body['error']['message'] ?? null) : null;
             log_message('error', 'AI API error (' . $status . '): ' . (string) $response->getBody());
-            throw new \RuntimeException($detail ? ('AI error: ' . $detail) : 'The AI service returned an error.');
+            throw new \RuntimeException($this->friendlyError($status, is_array($body) ? $body : []));
         }
 
         $content = $body['choices'][0]['message']['content'] ?? '';
@@ -243,6 +242,48 @@ SYS;
     public function chatForOrg(int $organizationId, array $messages, array $options = []): string
     {
         return $this->chat($this->requireConfig($organizationId), $messages, $options);
+    }
+
+    /**
+     * Translate an OpenAI-compatible API error into a clear, actionable message.
+     *
+     * @param array<string,mixed> $body Decoded JSON error body (may be empty).
+     */
+    private function friendlyError(int $status, array $body): string
+    {
+        $error = is_array($body['error'] ?? null) ? $body['error'] : [];
+        $code = (string) ($error['code'] ?? $error['type'] ?? '');
+        $detail = (string) ($error['message'] ?? '');
+
+        // Quota / billing exhausted (OpenAI returns 429 with insufficient_quota).
+        if ($code === 'insufficient_quota' || stripos($detail, 'exceeded your current quota') !== false) {
+            return 'Your OpenAI key has run out of quota. Please add credits or update billing '
+                . 'in your OpenAI account, then try again. (Settings → Integrations to review the key.)';
+        }
+
+        // Invalid / revoked API key.
+        if ($status === 401 || $code === 'invalid_api_key') {
+            return 'Your OpenAI API key was rejected. Please re-enter a valid key in '
+                . 'Settings → Integrations.';
+        }
+
+        // Rate limited (but quota still available).
+        if ($status === 429) {
+            return 'The OpenAI API is rate-limiting requests right now. Please wait a moment and try again.';
+        }
+
+        // Model not found / not accessible for this account.
+        if ($code === 'model_not_found' || stripos($detail, 'does not have access to model') !== false) {
+            return 'The selected AI model is not available for your OpenAI account. '
+                . 'Pick a different model in Settings → Integrations.';
+        }
+
+        // Upstream/server error from the provider.
+        if ($status >= 500) {
+            return 'The AI provider is having temporary issues. Please try again shortly.';
+        }
+
+        return $detail !== '' ? ('AI error: ' . $detail) : 'The AI service returned an error.';
     }
 
     /**

@@ -20,6 +20,13 @@ import {
   ClipboardList,
   Gauge,
   Globe,
+  Brain,
+  CalendarClock,
+  Fingerprint,
+  Webhook,
+  LineChart,
+  MessageSquare,
+  Radio,
 } from 'lucide-react';
 import { Button } from '../../components/ui';
 import { useAuthStore } from '../../store/authStore';
@@ -34,12 +41,6 @@ import {
 } from '../../seo/site';
 import { buildLandingJsonLd, landingFaq } from '../../seo/structuredData';
 import { PricingSection } from '../billing/PricingSection';
-
-const adoptionBreakdown = [
-  { label: 'IDE & dev tools (Cursor, VS Code)', value: 88, color: 'from-indigo-500 to-blue-500' },
-  { label: 'Desktop foreground app tracking', value: 94, color: 'from-cyan-500 to-sky-500' },
-  { label: 'Browser tab focus (Chrome, Edge)', value: 82, color: 'from-fuchsia-500 to-violet-500' },
-];
 
 const platformPillars = [
   {
@@ -66,10 +67,10 @@ const platformPillars = [
     title: 'Business & Intelligence',
     accent: 'text-cyan-400',
     items: [
-      'Proof-of-Work Client Portal with Billable Integrity Score',
-      'Weekly productivity summaries for managers',
-      'Performance benchmarks by project, role, and sprint',
-      'AI work patterns, coach tips, and delivery risk alerts',
+      'Proof-of-Work portal + signed verifiable work certificate',
+      'AI Autopilot timesheets and daily standups',
+      'Predictive budget-overrun & deadline forecasting',
+      'Public API, signed webhooks, and no-code automations',
     ],
   },
 ];
@@ -201,6 +202,53 @@ const coreFeatures = [
   },
 ];
 
+const advancedFeatures = [
+  {
+    icon: Brain,
+    title: 'AI Autopilot Timesheets',
+    description: 'Open your day and the whole timesheet is pre-drafted from activity, Git commits, Jira, and calendar. Approve or tweak — no manual entry.',
+    accent: 'text-fuchsia-400',
+    ring: 'ring-fuchsia-400/20',
+    tag: 'Flagship',
+  },
+  {
+    icon: Fingerprint,
+    title: 'Verifiable Work Certificate',
+    description: 'An anti-fraud integrity engine scores every entry, then issues a cryptographically signed certificate clients can verify independently — no login.',
+    accent: 'text-emerald-400',
+    ring: 'ring-emerald-400/20',
+    tag: 'Trust',
+  },
+  {
+    icon: CalendarClock,
+    title: 'Calendar Sync',
+    description: 'Connect Google or Outlook and turn meetings into billable time entries automatically — feeding straight into Autopilot.',
+    accent: 'text-sky-400',
+    ring: 'ring-sky-400/20',
+  },
+  {
+    icon: LineChart,
+    title: 'Predictive Forecasting',
+    description: 'Stop reporting the past. FlowTrack projects budget-overrun dates and deadline-miss probability per project and sprint, with an AI briefing.',
+    accent: 'text-violet-400',
+    ring: 'ring-violet-400/20',
+  },
+  {
+    icon: Webhook,
+    title: 'Public API, Webhooks & Automations',
+    description: 'API keys, signed webhooks, and a no-code “if this then that” builder — make FlowTrack the hub every other tool plugs into.',
+    accent: 'text-amber-400',
+    ring: 'ring-amber-400/20',
+  },
+  {
+    icon: MessageSquare,
+    title: 'Slack & Teams Command Center',
+    description: 'Start/stop timers, get standups, and approve timesheets right from Slack. Alerts and digests post to Slack or Teams automatically.',
+    accent: 'text-cyan-400',
+    ring: 'ring-cyan-400/20',
+  },
+];
+
 function SectionHeading({
   badge,
   title,
@@ -292,6 +340,7 @@ const LandingPage = () => {
 
           <nav className="hidden md:flex items-center gap-8 text-sm text-slate-400" aria-label="Primary navigation">
             <a href="#features" className="hover:text-white transition-colors">Features</a>
+            <a href="#advanced" className="hover:text-white transition-colors">AI &amp; Platform</a>
             <a href="#proof-pack" className="hover:text-white transition-colors">Proof Pack</a>
             <a href="#pricing" className="hover:text-white transition-colors">Pricing</a>
             {(desktopWinUrl || desktopMacUrl) && (
@@ -330,8 +379,10 @@ const LandingPage = () => {
               <span className="gradient-text">clarity</span>, speed, and accountability.
             </h1>
             <p className="text-slate-300 text-lg mb-8 max-w-xl leading-relaxed">
-              FlowTrack gives you time tracking, screen evidence, analytics, team visibility, and billing workflows — plus a{' '}
-              <span className="text-emerald-300 font-medium">Proof-of-Work Client Portal</span> so clients verify work before they pay.
+              Time tracking, screen evidence, analytics, and billing — supercharged with{' '}
+              <span className="text-fuchsia-300 font-medium">AI Autopilot timesheets</span>,{' '}
+              <span className="text-violet-300 font-medium">predictive forecasting</span>, and a{' '}
+              <span className="text-emerald-300 font-medium">verifiable Proof-of-Work portal</span> clients trust before they pay.
             </p>
             <div className="flex flex-wrap gap-3 mb-10">
               <Link to="/register"><Button size="lg">Start Free Trial <ArrowRight className="w-4 h-4 ml-2" /></Button></Link>
@@ -391,7 +442,7 @@ const LandingPage = () => {
               <SectionHeading
                 badge="Proof-of-Work Portal"
                 title="Verify before you pay — built into every client invoice"
-                description="Hubstaff shows activity. FlowTrack closes the loop: clients open one portal link, review verified work evidence, approve the invoice, and record payment."
+                description="Most tools stop at showing activity. FlowTrack closes the loop: clients open one portal link, review verified work evidence, approve the invoice, and record payment."
                 align="left"
               />
               <ul className="space-y-3">
@@ -500,6 +551,60 @@ const LandingPage = () => {
               <p className="text-sm text-slate-400 leading-relaxed">{feature.description}</p>
             </motion.div>
           ))}
+        </div>
+      </section>
+
+      <section id="advanced" className="max-w-7xl mx-auto px-6 py-14 relative z-10 scroll-mt-24">
+        <div className="relative overflow-hidden rounded-[2rem] border border-fuchsia-500/20 bg-gradient-to-br from-fuchsia-600/10 via-background to-violet-600/10 p-8 md:p-12">
+          <div className="pointer-events-none absolute -right-20 -top-20 h-56 w-56 rounded-full bg-fuchsia-500/15 blur-3xl" />
+          <div className="pointer-events-none absolute -bottom-24 left-10 h-52 w-52 rounded-full bg-violet-500/15 blur-3xl" />
+
+          <div className="relative">
+            <SectionHeading
+              badge="AI & Platform"
+              title="Beyond time tracking"
+              description="Most tools just record hours. FlowTrack removes the busywork, proves the work, predicts delivery, and plugs into everything you already use."
+            />
+
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+              {advancedFeatures.map((feature, index) => (
+                <motion.div
+                  key={feature.title}
+                  initial={{ opacity: 0, y: 14 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true, amount: 0.3 }}
+                  transition={{ duration: 0.4, delay: index * 0.06 }}
+                  className="group relative rounded-2xl border border-white/10 bg-white/[0.03] p-6 transition hover:border-white/20 hover:bg-white/[0.05]"
+                >
+                  {feature.tag && (
+                    <span className="absolute right-4 top-4 rounded-full border border-white/10 bg-white/5 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-300">
+                      {feature.tag}
+                    </span>
+                  )}
+                  <div className={`mb-4 inline-flex h-11 w-11 items-center justify-center rounded-xl bg-white/5 ring-1 ${feature.ring} ${feature.accent}`}>
+                    <feature.icon className="w-5 h-5" />
+                  </div>
+                  <h3 className="text-lg font-bold mb-2">{feature.title}</h3>
+                  <p className="text-sm text-slate-400 leading-relaxed">{feature.description}</p>
+                </motion.div>
+              ))}
+            </div>
+
+            <div className="mt-10 flex flex-wrap items-center justify-center gap-6 text-sm text-slate-400">
+              <span className="inline-flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-fuchsia-400" />
+                Bring your own AI key (BYOK) — no markup
+              </span>
+              <span className="inline-flex items-center gap-2">
+                <Radio className="w-4 h-4 text-cyan-400" />
+                Real-time in-app notifications
+              </span>
+              <span className="inline-flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                Tamper-evident proof-of-work ledger
+              </span>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -649,28 +754,6 @@ const LandingPage = () => {
             ))}
           </div>
 
-          <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-6">
-            <h3 className="text-xl font-bold mb-5">Intelligence Coverage Breakdown</h3>
-            <div className="space-y-5">
-              {adoptionBreakdown.map((item) => (
-                <div key={item.label}>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm text-slate-200">{item.label}</span>
-                    <span className="text-sm font-bold text-white">{item.value}%</span>
-                  </div>
-                  <div className="h-2.5 rounded-full bg-white/10 overflow-hidden">
-                    <motion.div
-                      initial={{ width: 0 }}
-                      whileInView={{ width: `${item.value}%` }}
-                      viewport={{ once: true, amount: 0.6 }}
-                      transition={{ duration: 1, ease: 'easeOut' }}
-                      className={`h-full bg-gradient-to-r ${item.color}`}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
       </section>
 
