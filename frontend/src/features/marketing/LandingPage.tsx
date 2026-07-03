@@ -1,6 +1,6 @@
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Link, Navigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   Activity,
   ArrowRight,
@@ -249,6 +249,69 @@ const advancedFeatures = [
   },
 ];
 
+const rotatingWords = [
+  'clarity',
+  'speed',
+  'accountability',
+  'AI autopilot',
+  'verifiable proof',
+  'smart timesheets',
+  'calendar sync',
+  'delivery forecasts',
+  'real-time insights',
+  'proof-of-work',
+];
+
+function RotatingWord() {
+  const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setIndex((i) => (i + 1) % rotatingWords.length);
+    }, 3000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const word = rotatingWords[index];
+
+  // Fixed-height, overflow-hidden line so nothing below ever shifts.
+  return (
+    <span className="relative block h-[1.2em] overflow-hidden mt-1">
+      <AnimatePresence mode="wait">
+        <motion.span
+          key={index}
+          className="absolute left-0 top-0 whitespace-nowrap"
+          initial="hidden"
+          animate="visible"
+          exit="exit"
+          variants={{
+            hidden: {},
+            visible: { transition: { staggerChildren: 0.045 } },
+            exit: { opacity: 0, transition: { duration: 0.25, ease: 'easeIn' } },
+          }}
+        >
+          {word.split('').map((char, i) => (
+            <motion.span
+              key={`${index}-${i}`}
+              className="gradient-text inline-block"
+              variants={{
+                hidden: { opacity: 0, y: '0.35em' },
+                visible: {
+                  opacity: 1,
+                  y: '0em',
+                  transition: { duration: 0.35, ease: [0.22, 1, 0.36, 1] },
+                },
+              }}
+            >
+              {char === ' ' ? '\u00A0' : char}
+            </motion.span>
+          ))}
+        </motion.span>
+      </AnimatePresence>
+    </span>
+  );
+}
+
 function SectionHeading({
   badge,
   title,
@@ -375,8 +438,8 @@ const LandingPage = () => {
               Built for serious teams
             </div>
             <h1 id="hero-heading" className="text-5xl md:text-6xl lg:text-[3.4rem] font-extrabold leading-[1.08] mb-5">
-              Run your team with{' '}
-              <span className="gradient-text">clarity</span>, speed, and accountability.
+              Run your team with
+              <RotatingWord />
             </h1>
             <p className="text-slate-300 text-lg mb-8 max-w-xl leading-relaxed">
               Time tracking, screen evidence, analytics, and billing — supercharged with{' '}
