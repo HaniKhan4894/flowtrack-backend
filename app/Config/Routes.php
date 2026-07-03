@@ -282,6 +282,12 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\API\V1'], function ($r
         // GitHub developer activity (available to any authenticated member).
         $routes->get('github/activity', 'GithubController::activity');
         $routes->post('github/log-time', 'GithubController::logTime');
+        // Slack messaging.
+        $routes->post('slack/test', 'SlackController::test');
+        $routes->post('slack/send', 'SlackController::send');
+        // Jira issues → tracked time.
+        $routes->get('jira/issues', 'JiraController::issues');
+        $routes->post('jira/log-time', 'JiraController::logTime');
         $routes->get('(:segment)', 'IntegrationController::show/$1', ['filter' => 'permission:settings.view']);
         $routes->put('(:segment)', 'IntegrationController::update/$1', ['filter' => 'permission:settings.edit']);
         $routes->post('(:segment)/connect', 'IntegrationController::connect/$1', ['filter' => 'permission:settings.edit']);

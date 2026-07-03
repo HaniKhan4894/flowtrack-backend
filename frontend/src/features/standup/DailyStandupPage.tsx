@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { MessageSquare, Loader2, Wand2, Clock, Gauge, ListChecks, AlertCircle } from 'lucide-react';
+import { MessageSquare, Loader2, Wand2, Clock, Gauge, ListChecks, AlertCircle, Slack, Check } from 'lucide-react';
 import { aiService, type AiStandupResult } from '../../api/aiService';
+import { slackService } from '../../api/slackService';
 import { teamService, type TeamMember } from '../../api/teamService';
 import { useAuthStore } from '../../store/authStore';
 import { canViewTeam } from '../../utils/access';
@@ -52,6 +53,8 @@ const DailyStandupPage = () => {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<AiStandupResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [slackState, setSlackState] = useState<'idle' | 'sending' | 'sent'>('idle');
+  const [slackNote, setSlackNote] = useState<string | null>(null);
 
   useEffect(() => {
     aiService.status().then((r) => setAiEnabled(!!r.data.enabled)).catch(() => setAiEnabled(false));
@@ -64,6 +67,8 @@ const DailyStandupPage = () => {
     setLoading(true);
     setError(null);
     setResult(null);
+    setSlackState('idle');
+    setSlackNote(null);
     try {
       const r = await aiService.standup(date, selectedUserId || undefined);
       setResult(r.data);
@@ -71,6 +76,22 @@ const DailyStandupPage = () => {
       setError(getApiErrorMessage(e, 'Could not generate the standup'));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const sendToSlack = async () => {
+    if (!result) return;
+    setSlackState('sending');
+    setSlackNote(null);
+    try {
+      // Slack mrkdwn uses single asterisks for bold.
+      const text = `*Standup — ${result.user.name} (${result.date})*\n\n`
+        + result.standup.replace(/\*\*(.+?)\*\*/g, '*$1*');
+      await slackService.send(text);
+      setSlackState('sent');
+    } catch (e) {
+      setSlackState('idle');
+      setSlackNote(getApiErrorMessage(e, 'Could not send to Slack'));
     }
   };
 
@@ -160,10 +181,27 @@ const DailyStandupPage = () => {
                 <h3 className="text-white font-bold">{result.user.name}</h3>
                 <p className="text-xs text-slate-500">{result.date}</p>
               </div>
-              <span className="text-[10px] text-slate-500 uppercase font-bold bg-white/5 px-2 py-1 rounded-lg">
-                {result.model}
-              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={sendToSlack}
+                  disabled={slackState === 'sending' || slackState === 'sent'}
+                  className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg bg-[#4A154B] text-white hover:opacity-90 disabled:opacity-60 transition-all"
+                >
+                  {slackState === 'sending' ? (
+                    <Loader2 size={13} className="animate-spin" />
+                  ) : slackState === 'sent' ? (
+                    <Check size={13} />
+                  ) : (
+                    <Slack size={13} />
+                  )}
+                  {slackState === 'sent' ? 'Sent' : 'Send to Slack'}
+                </button>
+                <span className="text-[10px] text-slate-500 uppercase font-bold bg-white/5 px-2 py-1 rounded-lg">
+                  {result.model}
+                </span>
+              </div>
             </div>
+            {slackNote && <p className="text-amber-400 text-xs mb-3">{slackNote}</p>}
             <Markdown text={result.standup} />
           </div>
 

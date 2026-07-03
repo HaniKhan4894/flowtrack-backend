@@ -89,23 +89,153 @@ class OAuthService
             $params['prompt'] = 'consent';
         }
 
+        if ($provider === 'jira') {
+            // Atlassian 3LO requires the audience + consent prompt.
+            $params['audience'] = 'api.atlassian.com';
+            $params['prompt'] = 'consent';
+        }
+
         return $cfg['authorize_url'] . '?' . http_build_query($params);
     }
 
     /**
-     * Exchange the code and return both the access token and normalized profile
-     * (used when connecting an org integration, where we must store the token).
+     * Exchange the code and return a normalized, storable integration payload.
      *
-     * @return array{access_token:string, profile:array}
+     * @return array{external_account_id:string, account_name:string, secrets:array<string,mixed>, settings:array<string,mixed>}
      */
     public function completeIntegration(string $provider, string $code): array
+    {
+        switch ($provider) {
+            case 'slack':
+                return $this->completeSlack($code);
+            case 'jira':
+                return $this->completeJira($code);
+            default:
+                return $this->completeProfileProvider($provider, $code);
+        }
+    }
+
+    /**
+     * GitHub / Google style: token + Bearer profile.
+     */
+    private function completeProfileProvider(string $provider, string $code): array
     {
         $accessToken = $this->exchangeCodeForToken($provider, $code);
         $profile = $provider === 'github'
             ? $this->fetchGithubProfile($accessToken)
             : $this->fetchGoogleProfile($accessToken);
 
-        return ['access_token' => $accessToken, 'profile' => $profile];
+        $displayName = trim(($profile['first_name'] ?? '') . ' ' . ($profile['last_name'] ?? ''));
+
+        return [
+            'external_account_id' => (string) ($profile['provider_user_id'] ?? ''),
+            'account_name'        => $displayName !== '' ? $displayName : ($profile['login'] ?? $profile['email'] ?? $provider),
+            'secrets'             => ['access_token' => $accessToken],
+            'settings'            => array_filter([
+                'login'         => $profile['login'] ?? null,
+                'account_email' => $profile['email'] ?? null,
+                'avatar_url'    => $profile['avatar_url'] ?? null,
+            ], fn ($v) => $v !== null),
+        ];
+    }
+
+    /**
+     * Slack OAuth v2: exchange returns a bot token + (optional) incoming webhook.
+     */
+    private function completeSlack(string $code): array
+    {
+        $cfg = $this->requireProvider('slack');
+        $client = \Config\Services::curlrequest(['timeout' => 20, 'http_errors' => false]);
+
+        $response = $client->post($cfg['token_url'], [
+            'headers' => ['Accept' => 'application/json'],
+            'form_params' => [
+                'client_id'     => $cfg['client_id'],
+                'client_secret' => $cfg['client_secret'],
+                'code'          => $code,
+                'redirect_uri'  => $cfg['redirect_uri'],
+            ],
+        ]);
+
+        $body = json_decode((string) $response->getBody(), true);
+        if (!is_array($body) || empty($body['ok'])) {
+            $err = is_array($body) ? ($body['error'] ?? null) : null;
+            throw new \RuntimeException('Slack authorization failed' . ($err ? ': ' . $err : '.'));
+        }
+
+        $team = $body['team'] ?? [];
+        $webhook = $body['incoming_webhook'] ?? [];
+
+        return [
+            'external_account_id' => (string) ($team['id'] ?? ''),
+            'account_name'        => (string) ($team['name'] ?? 'Slack workspace'),
+            'secrets'             => array_filter([
+                'access_token' => $body['access_token'] ?? null,
+                'webhook_url'  => $webhook['url'] ?? null,
+            ], fn ($v) => $v !== null && $v !== ''),
+            'settings'            => array_filter([
+                'team_name'    => $team['name'] ?? null,
+                'team_id'      => $team['id'] ?? null,
+                'account_name' => $team['name'] ?? null,
+                'channel'      => $webhook['channel'] ?? null,
+                'channel_id'   => $webhook['channel_id'] ?? null,
+            ], fn ($v) => $v !== null),
+        ];
+    }
+
+    /**
+     * Atlassian (Jira) 3LO: JSON token exchange, then resolve the accessible site.
+     */
+    private function completeJira(string $code): array
+    {
+        $cfg = $this->requireProvider('jira');
+        $client = \Config\Services::curlrequest(['timeout' => 20, 'http_errors' => false]);
+
+        $response = $client->post($cfg['token_url'], [
+            'headers' => ['Accept' => 'application/json', 'Content-Type' => 'application/json'],
+            'body' => json_encode([
+                'grant_type'    => 'authorization_code',
+                'client_id'     => $cfg['client_id'],
+                'client_secret' => $cfg['client_secret'],
+                'code'          => $code,
+                'redirect_uri'  => $cfg['redirect_uri'],
+            ]),
+        ]);
+
+        $body = json_decode((string) $response->getBody(), true);
+        if (!is_array($body) || empty($body['access_token'])) {
+            $err = is_array($body) ? ($body['error_description'] ?? $body['error'] ?? null) : null;
+            throw new \RuntimeException('Jira authorization failed' . ($err ? ': ' . $err : '.'));
+        }
+
+        $access = (string) $body['access_token'];
+        $expiresIn = (int) ($body['expires_in'] ?? 3600);
+
+        $resResp = $client->get($cfg['resources_url'], [
+            'headers' => ['Authorization' => 'Bearer ' . $access, 'Accept' => 'application/json'],
+        ]);
+        $resources = json_decode((string) $resResp->getBody(), true);
+        if (!is_array($resources) || empty($resources[0]['id'])) {
+            throw new \RuntimeException('No accessible Jira sites were granted. Please try again and select a site.');
+        }
+
+        $site = $resources[0];
+
+        return [
+            'external_account_id' => (string) $site['id'],
+            'account_name'        => (string) ($site['name'] ?? $site['url'] ?? 'Jira'),
+            'secrets'             => array_filter([
+                'access_token'  => $access,
+                'refresh_token' => $body['refresh_token'] ?? null,
+            ], fn ($v) => $v !== null),
+            'settings'            => array_filter([
+                'cloud_id'     => $site['id'],
+                'site_name'    => $site['name'] ?? null,
+                'site_url'     => $site['url'] ?? null,
+                'account_name' => $site['name'] ?? null,
+                'expires_at'   => date('Y-m-d H:i:s', time() + $expiresIn),
+            ], fn ($v) => $v !== null),
+        ];
     }
 
     /**

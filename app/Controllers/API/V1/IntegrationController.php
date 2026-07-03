@@ -19,7 +19,7 @@ class IntegrationController extends ResourceController
     private const API_KEY_PROVIDERS = ['openai'];
 
     /** Providers the org connects via OAuth. */
-    private const OAUTH_PROVIDERS = ['github'];
+    private const OAUTH_PROVIDERS = ['github', 'slack', 'jira'];
 
     public function __construct()
     {

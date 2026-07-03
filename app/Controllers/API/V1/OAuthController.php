@@ -105,21 +105,13 @@ class OAuthController extends ResourceController
         }
 
         $result = $this->oauthService->completeIntegration($provider, $code);
-        $profile = $result['profile'];
-
-        $displayName = trim(($profile['first_name'] ?? '') . ' ' . ($profile['last_name'] ?? ''));
 
         $this->integrationService->saveOAuth(
             $orgId,
             $provider,
-            (string) ($profile['provider_user_id'] ?? ''),
-            ['access_token' => $result['access_token']],
-            [
-                'account_name'  => $displayName !== '' ? $displayName : ($profile['login'] ?? $profile['email'] ?? $provider),
-                'login'         => $profile['login'] ?? null,
-                'account_email' => $profile['email'] ?? null,
-                'avatar_url'    => $profile['avatar_url'] ?? null,
-            ],
+            ($result['external_account_id'] ?? '') !== '' ? $result['external_account_id'] : null,
+            $result['secrets'] ?? [],
+            array_merge(['account_name' => $result['account_name'] ?? $provider], $result['settings'] ?? []),
             $userId ?: null
         );
 

@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import {
   Sparkles, Github, GitCommit, GitPullRequest, Loader2, Plus, RefreshCw,
-  Check, ExternalLink, Wand2,
+  Check, ExternalLink, Wand2, Trello,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { aiService, type AiSuggestion } from '../../api/aiService';
 import { githubService, type GithubActivity } from '../../api/githubService';
+import { jiraService, type JiraIssuesResult } from '../../api/jiraService';
 import { timeService } from '../../api/timeService';
 import { getApiErrorMessage } from '../../utils/apiError';
 import type { Project } from '../../api/projectService';
@@ -47,11 +48,57 @@ const DevAiPanel = ({ projects, onLogged }: Props) => {
   const [ghLoggedKeys, setGhLoggedKeys] = useState<Set<string>>(new Set());
   const [ghBusyKey, setGhBusyKey] = useState<string | null>(null);
 
+  // Jira state
+  const [jira, setJira] = useState<JiraIssuesResult | null>(null);
+  const [jiraLoading, setJiraLoading] = useState(true);
+  const [jiraError, setJiraError] = useState<string | null>(null);
+  const [jiraProjectId, setJiraProjectId] = useState('');
+  const [jiraMinutes, setJiraMinutes] = useState(30);
+  const [pushWorklog, setPushWorklog] = useState(true);
+  const [jiraLoggedKeys, setJiraLoggedKeys] = useState<Set<string>>(new Set());
+  const [jiraBusyKey, setJiraBusyKey] = useState<string | null>(null);
+
   useEffect(() => {
     aiService.status().then((r) => setAiEnabled(!!r.data.enabled)).catch(() => setAiEnabled(false));
     loadGithub();
+    loadJira();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const loadJira = async () => {
+    setJiraLoading(true);
+    setJiraError(null);
+    try {
+      const r = await jiraService.issues();
+      setJira(r.data);
+    } catch (e) {
+      setJiraError(getApiErrorMessage(e, 'Failed to load Jira issues'));
+      setJira(null);
+    } finally {
+      setJiraLoading(false);
+    }
+  };
+
+  const logJira = async (key: string, issue: { key: string; summary: string; url: string; project: string }) => {
+    setJiraBusyKey(key);
+    try {
+      await jiraService.logTime({
+        issue_key: issue.key,
+        summary: issue.summary,
+        url: issue.url,
+        project: issue.project,
+        project_id: jiraProjectId ? Number(jiraProjectId) : undefined,
+        duration_minutes: jiraMinutes,
+        push_worklog: pushWorklog,
+      });
+      setJiraLoggedKeys((prev) => new Set(prev).add(key));
+      onLogged();
+    } catch (e) {
+      setJiraError(getApiErrorMessage(e, 'Failed to log time'));
+    } finally {
+      setJiraBusyKey(null);
+    }
+  };
 
   const loadGithub = async () => {
     setGhLoading(true);
@@ -357,6 +404,114 @@ const DevAiPanel = ({ projects, onLogged }: Props) => {
             </>
           ) : (
             <p className="text-slate-500 text-sm">No recent commits or pull requests found.</p>
+          )}
+        </div>
+      </div>
+
+      {/* Jira issues */}
+      <div className="glass rounded-3xl border border-white/5 shadow-ai overflow-hidden">
+        <div className="p-6 border-b border-white/5 bg-white/[0.02] flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-xl bg-[#0052CC] flex items-center justify-center text-white">
+              <Trello size={20} />
+            </div>
+            <div>
+              <h3 className="font-bold text-white text-sm uppercase tracking-wider">Jira Issues</h3>
+              <p className="text-xs text-slate-500">Log time against your assigned issues.</p>
+            </div>
+          </div>
+          <button
+            onClick={loadJira}
+            disabled={jiraLoading}
+            className="p-2 text-slate-500 hover:text-white hover:bg-white/5 rounded-lg transition-all"
+            title="Refresh"
+          >
+            <RefreshCw size={16} className={jiraLoading ? 'animate-spin' : ''} />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-3 min-h-[120px]">
+          {jiraError && <p className="text-rose-400 text-sm">{jiraError}</p>}
+
+          {jiraLoading ? (
+            <div className="flex items-center gap-2 text-slate-400 text-sm">
+              <Loader2 size={16} className="animate-spin" /> Loading Jira…
+            </div>
+          ) : jira && !jira.connected ? (
+            <div className="text-sm text-slate-400">
+              Jira isn't connected yet.{' '}
+              <Link to="/settings?tab=integrations" className="text-primary-400 font-bold hover:underline">
+                Connect it in Settings → Integrations
+              </Link>{' '}
+              to log time against your issues.
+            </div>
+          ) : jira && jira.issues.length > 0 ? (
+            <>
+              <div className="flex flex-wrap items-center gap-2 pb-1">
+                <span className="text-[10px] text-slate-500 uppercase font-bold">Log as</span>
+                <select
+                  value={jiraProjectId}
+                  onChange={(e) => setJiraProjectId(e.target.value)}
+                  className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-slate-300 outline-none focus:border-primary-500/50"
+                >
+                  <option value="">No project</option>
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+                <select
+                  value={jiraMinutes}
+                  onChange={(e) => setJiraMinutes(Number(e.target.value))}
+                  className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-slate-300 outline-none focus:border-primary-500/50"
+                >
+                  {[15, 30, 45, 60, 90, 120].map((m) => (
+                    <option key={m} value={m}>{m} min</option>
+                  ))}
+                </select>
+                <label className="flex items-center gap-1.5 text-xs text-slate-400 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={pushWorklog}
+                    onChange={(e) => setPushWorklog(e.target.checked)}
+                    className="rounded border-white/20"
+                  />
+                  Push worklog to Jira
+                </label>
+              </div>
+
+              {jira.issues.map((issue) => {
+                const key = `j:${issue.key}`;
+                return (
+                  <div key={key} className="rounded-2xl border border-white/10 bg-white/[0.02] p-3 flex items-center gap-3">
+                    <Trello size={16} className="text-sky-400 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-white text-sm truncate">{issue.summary || issue.key}</p>
+                      <p className="text-[11px] text-slate-500 truncate">
+                        {issue.key} · {issue.status}{issue.project ? ` · ${issue.project}` : ''}
+                        {issue.url && (
+                          <a href={issue.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 ml-2 text-slate-400 hover:text-primary-400">
+                            <ExternalLink size={11} />
+                          </a>
+                        )}
+                      </p>
+                    </div>
+                    {jiraLoggedKeys.has(key) ? (
+                      <span className="flex items-center gap-1 text-emerald-400 text-xs font-bold"><Check size={14} /> Logged</span>
+                    ) : (
+                      <button
+                        onClick={() => logJira(key, issue)}
+                        disabled={jiraBusyKey === key}
+                        className="flex items-center gap-1 bg-white/5 hover:bg-white/10 border border-white/10 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0"
+                      >
+                        {jiraBusyKey === key ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />} Log
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </>
+          ) : (
+            <p className="text-slate-500 text-sm">No assigned Jira issues found.</p>
           )}
         </div>
       </div>

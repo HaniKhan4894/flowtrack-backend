@@ -44,6 +44,28 @@ class OAuth extends BaseConfig
                 // (lets us read repos/commits for later features).
                 'integration_scope' => 'read:user user:email repo',
             ],
+            'slack' => [
+                'client_id'      => (string) (env('SLACK_CLIENT_ID') ?: ''),
+                'client_secret'  => (string) (env('SLACK_CLIENT_SECRET') ?: ''),
+                'redirect_uri'   => $this->resolveRedirectUri('SLACK_REDIRECT_URI', 'slack'),
+                'authorize_url'  => 'https://slack.com/oauth/v2/authorize',
+                'token_url'      => 'https://slack.com/api/oauth.v2.access',
+                // Bot scopes: post messages + receive an incoming webhook to a channel.
+                'scope'             => 'incoming-webhook,chat:write',
+                'integration_scope' => 'incoming-webhook,chat:write',
+            ],
+            'jira' => [
+                'client_id'      => (string) (env('JIRA_CLIENT_ID') ?: ''),
+                'client_secret'  => (string) (env('JIRA_CLIENT_SECRET') ?: ''),
+                'redirect_uri'   => $this->resolveRedirectUri('JIRA_REDIRECT_URI', 'jira'),
+                'authorize_url'  => 'https://auth.atlassian.com/authorize',
+                'token_url'      => 'https://auth.atlassian.com/oauth/token',
+                'resources_url'  => 'https://api.atlassian.com/oauth/token/accessible-resources',
+                'api_base'       => 'https://api.atlassian.com/ex/jira',
+                // offline_access → refresh token so we can keep the connection alive.
+                'scope'             => 'read:jira-work read:jira-user write:jira-work offline_access',
+                'integration_scope' => 'read:jira-work read:jira-user write:jira-work offline_access',
+            ],
         ];
     }
 
