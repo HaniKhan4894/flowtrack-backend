@@ -115,7 +115,8 @@ class OAuthController extends ResourceController
             (string) ($profile['provider_user_id'] ?? ''),
             ['access_token' => $result['access_token']],
             [
-                'account_name'  => $displayName !== '' ? $displayName : ($profile['email'] ?? $provider),
+                'account_name'  => $displayName !== '' ? $displayName : ($profile['login'] ?? $profile['email'] ?? $provider),
+                'login'         => $profile['login'] ?? null,
                 'account_email' => $profile['email'] ?? null,
                 'avatar_url'    => $profile['avatar_url'] ?? null,
             ],

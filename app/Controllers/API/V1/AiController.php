@@ -2,7 +2,9 @@
 
 namespace App\Controllers\API\V1;
 
+use App\Services\AiCategorizationService;
 use App\Services\AiService;
+use App\Services\AiStandupService;
 use App\Services\PermissionService;
 use CodeIgniter\RESTful\ResourceController;
 
@@ -69,6 +71,53 @@ class AiController extends ResourceController
             }
 
             $result = $this->aiService->weeklyNarrative($orgId, $userId);
+            return $this->respond(['success' => true, 'data' => $result]);
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+
+    /**
+     * GET /api/v1/ai/categorize?date=YYYY-MM-DD
+     * Suggests time entries for the current user's own activity on a day.
+     */
+    public function categorize()
+    {
+        try {
+            [$orgId, $userId] = $this->requireContext();
+
+            $date = (string) ($this->request->getGet('date') ?? '');
+            if ($date === '' || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+                $date = date('Y-m-d');
+            }
+
+            $result = (new AiCategorizationService())->suggest($orgId, $userId, $date);
+            return $this->respond(['success' => true, 'data' => $result]);
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+
+    /**
+     * GET /api/v1/ai/standup?date=YYYY-MM-DD&user_id=123
+     * Own standup by default; managers (reports.view_team) may target a member.
+     */
+    public function standup()
+    {
+        try {
+            [$orgId, $userId] = $this->requireContext();
+
+            $targetId = (int) ($this->request->getGet('user_id') ?? 0) ?: $userId;
+            if ($targetId !== $userId && $response = $this->requireTeamReports($orgId, $userId)) {
+                return $response;
+            }
+
+            $date = (string) ($this->request->getGet('date') ?? '');
+            if ($date === '' || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+                $date = date('Y-m-d');
+            }
+
+            $result = (new AiStandupService())->forUser($orgId, $targetId, $date);
             return $this->respond(['success' => true, 'data' => $result]);
         } catch (\Exception $e) {
             return $this->fail($e->getMessage(), 400);

@@ -272,16 +272,33 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\API\V1'], function ($r
         $routes->get('status', 'AiController::status');
         $routes->post('ask', 'AiController::ask');
         $routes->get('weekly-narrative', 'AiController::weeklyNarrative');
+        $routes->get('categorize', 'AiController::categorize');
+        $routes->get('standup', 'AiController::standup');
     });
 
     // Per-organization integrations (OpenAI, and future OAuth providers)
     $routes->group('integrations', ['filter' => 'auth'], function ($routes) {
         $routes->get('/', 'IntegrationController::index', ['filter' => 'permission:settings.view']);
+        // GitHub developer activity (available to any authenticated member).
+        $routes->get('github/activity', 'GithubController::activity');
+        $routes->post('github/log-time', 'GithubController::logTime');
         $routes->get('(:segment)', 'IntegrationController::show/$1', ['filter' => 'permission:settings.view']);
         $routes->put('(:segment)', 'IntegrationController::update/$1', ['filter' => 'permission:settings.edit']);
         $routes->post('(:segment)/connect', 'IntegrationController::connect/$1', ['filter' => 'permission:settings.edit']);
         $routes->post('(:segment)/toggle', 'IntegrationController::toggle/$1', ['filter' => 'permission:settings.edit']);
         $routes->delete('(:segment)', 'IntegrationController::delete/$1', ['filter' => 'permission:settings.edit']);
+    });
+
+    // Wellbeing / burnout suite (Phase 5)
+    $routes->group('wellbeing', ['filter' => 'auth'], function ($routes) {
+        $routes->get('me', 'WellbeingController::me');
+        $routes->get('team', 'WellbeingController::team');
+    });
+
+    // Proof-of-work ledger (Phase 6)
+    $routes->group('ledger', ['filter' => 'auth'], function ($routes) {
+        $routes->get('/', 'LedgerController::index');
+        $routes->get('verify', 'LedgerController::verify');
     });
 
     $routes->group('insights', ['filter' => ['auth', 'permission:reports.view_own']], function ($routes) {

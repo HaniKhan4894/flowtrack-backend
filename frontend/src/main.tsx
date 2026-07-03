@@ -29,6 +29,9 @@ import PayrollRunDetailPage from './features/payroll/PayrollRunDetailPage'
 import ClientsPage from './features/clients/ClientsPage'
 import LeavePage from './features/leave/LeavePage'
 import InsightsPage from './features/insights/InsightsPage'
+import DailyStandupPage from './features/standup/DailyStandupPage'
+import WellbeingPage from './features/wellbeing/WellbeingPage'
+import ProofOfWorkPage from './features/proof/ProofOfWorkPage'
 import ClientPortalPage from './features/portal/ClientPortalPage'
 
 import { Shell } from './layouts/Shell'
@@ -134,6 +137,9 @@ createRoot(document.getElementById('root')!).render(
         <Route path="/settings" element={<RoleRoute path="/settings"><SettingsPage /></RoleRoute>} />
         <Route path="/analytics" element={<RoleRoute path="/analytics"><AnalyticsPage /></RoleRoute>} />
         <Route path="/insights" element={<RoleRoute path="/insights"><InsightsPage /></RoleRoute>} />
+        <Route path="/standup" element={<RoleRoute path="/standup"><DailyStandupPage /></RoleRoute>} />
+        <Route path="/wellbeing" element={<RoleRoute path="/wellbeing"><WellbeingPage /></RoleRoute>} />
+        <Route path="/proof-of-work" element={<RoleRoute path="/proof-of-work"><ProofOfWorkPage /></RoleRoute>} />
         <Route path="/invoices" element={<RoleRoute path="/invoices"><InvoicesPage /></RoleRoute>} />
         <Route path="/invoices/:id" element={<RoleRoute path="/invoices"><InvoiceDetailPage /></RoleRoute>} />
         <Route path="/clients" element={<RoleRoute path="/clients"><ClientsPage /></RoleRoute>} />

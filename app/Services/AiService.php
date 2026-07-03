@@ -236,6 +236,16 @@ SYS;
     }
 
     /**
+     * Run a chat completion using an organization's resolved AI config.
+     *
+     * @param array<int, array{role:string, content:string}> $messages
+     */
+    public function chatForOrg(int $organizationId, array $messages, array $options = []): string
+    {
+        return $this->chat($this->requireConfig($organizationId), $messages, $options);
+    }
+
+    /**
      * @return array{api_key:string, base_url:string, model:string, max_tokens:int, temperature:float, timeout:int, source:string}
      */
     private function requireConfig(int $organizationId): array

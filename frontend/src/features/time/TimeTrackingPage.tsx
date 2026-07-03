@@ -6,6 +6,7 @@ import { timeService } from '../../api/timeService';
 import { projectService, type Project } from '../../api/projectService';
 import { taskService } from '../../api/taskService';
 import { reportService } from '../../api/reportService';
+import DevAiPanel from './DevAiPanel';
 import { useAuthStore } from '../../store/authStore';
 import { hasPermission, isOrgAdmin, canManageProjects } from '../../utils/access';
 import { getApiErrorMessage } from '../../utils/apiError';
@@ -251,6 +252,8 @@ const TimeTrackingPage = () => {
           </button>
         </div>
       </div>
+
+      {canManualEntry && <DevAiPanel projects={projects} onLogged={fetchEntries} />}
 
       <div className="glass rounded-3xl overflow-hidden border border-white/5 shadow-ai">
         <div className="p-6 border-b border-white/5 bg-white/[0.02] space-y-4">

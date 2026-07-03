@@ -167,6 +167,8 @@ class TimeEntryService
             log_message('error', 'Timer stopped notification failed: ' . $e->getMessage());
         }
 
+        $this->recordToLedger((int) $entry['organization_id'], $userId, $entryId, 'record');
+
         return $entry;
     }
 
@@ -322,7 +324,10 @@ class TimeEntryService
 
             $this->db->transComplete();
 
-            return $this->formatTimeEntry($this->timeEntryModel->find($entryId));
+            $entry = $this->formatTimeEntry($this->timeEntryModel->find($entryId));
+            $this->recordToLedger($organizationId, $userId, $entryId, 'record');
+
+            return $entry;
 
         } catch (\Exception $e) {
             $this->db->transRollback();
@@ -371,6 +376,10 @@ class TimeEntryService
 
         if (!empty($updates)) {
             $this->timeEntryModel->update($entryId, $updates);
+            // Only completed entries are ledgered; amend keeps the chain honest.
+            if (!empty($entry['ended_at'])) {
+                $this->recordToLedger($organizationId, (int) $entry['user_id'], $entryId, 'amend');
+            }
         }
 
         return $this->formatTimeEntry($this->timeEntryModel->find($entryId));
@@ -389,7 +398,22 @@ class TimeEntryService
             throw new \Exception('Stop the timer before deleting this entry');
         }
 
+        // Record the deletion in the ledger *before* the row disappears.
+        $this->recordToLedger($organizationId, (int) $entry['user_id'], $entryId, 'delete');
+
         return $this->timeEntryModel->delete($entryId);
+    }
+
+    /**
+     * Append to the proof-of-work ledger. Never let ledger issues break tracking.
+     */
+    private function recordToLedger(int $organizationId, int $userId, int $entryId, string $action): void
+    {
+        try {
+            (new LedgerService())->appendTimeEntry($organizationId, $userId, $entryId, $action);
+        } catch (\Throwable $e) {
+            log_message('error', 'Ledger append failed: ' . $e->getMessage());
+        }
     }
 
     private function assertCanEditEntry(int $actorUserId, int $organizationId, array $entry): void

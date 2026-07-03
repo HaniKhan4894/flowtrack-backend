@@ -16,6 +16,9 @@ import {
   Building2,
   CalendarDays,
   ClipboardList,
+  MessageSquare,
+  HeartPulse,
+  FileCheck,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -56,6 +59,14 @@ const ALL_NAV_ITEMS: NavItem[] = [
   },
   { icon: Sparkles, label: 'Analytics', path: '/analytics', permission: 'reports.view_own' },
   { icon: Brain, label: 'Insights', path: '/insights', permission: 'reports.view_own' },
+  { icon: MessageSquare, label: 'Standup', path: '/standup', permission: 'reports.view_own' },
+  { icon: HeartPulse, label: 'Wellbeing', path: '/wellbeing', permission: 'reports.view_own' },
+  {
+    icon: FileCheck,
+    label: 'Proof of Work',
+    path: '/proof-of-work',
+    showIf: (user) => canViewTeam(user),
+  },
   { icon: CreditCard, label: 'Billing', path: '/billing', permission: 'settings.billing' },
 ];
 
@@ -76,6 +87,9 @@ const PATH_PERMISSIONS: Record<string, string | string[]> = {
   '/team': '__team_nav__',
   '/analytics': ['reports.view_own', 'reports.view_team'],
   '/insights': ['reports.view_own', 'reports.view_team'],
+  '/standup': ['reports.view_own', 'reports.view_team'],
+  '/wellbeing': ['reports.view_own', 'reports.view_team'],
+  '/proof-of-work': 'reports.view_team',
   '/billing': 'settings.billing',
   '/settings': [],
   '/admin': '__super_admin__',

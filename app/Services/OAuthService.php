@@ -247,6 +247,7 @@ class OAuthService
 
         return [
             'provider_user_id' => (string) $data['id'],
+            'login'            => $data['login'] ?? null,
             'email'            => $email,
             'email_verified'   => $emailVerified,
             'first_name'       => $firstName,
