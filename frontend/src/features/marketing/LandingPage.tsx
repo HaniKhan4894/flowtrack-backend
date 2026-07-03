@@ -256,7 +256,6 @@ const rotatingWords = [
   'AI autopilot',
   'verifiable proof',
   'smart timesheets',
-  'calendar sync',
   'delivery forecasts',
   'real-time insights',
   'proof-of-work',
