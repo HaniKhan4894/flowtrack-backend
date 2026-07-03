@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Sparkles, Loader2, CheckCircle2, Trash2, Eye, EyeOff, Github, Slack, Trello, Send } from 'lucide-react';
+import { Sparkles, Loader2, CheckCircle2, Trash2, Eye, EyeOff, Github, Slack, Trello, Send, CalendarDays, MessageSquare } from 'lucide-react';
 import { integrationsService, type Integration } from '../../api/integrationsService';
 import { slackService } from '../../api/slackService';
+import { teamsService } from '../../api/teamsService';
 import { getApiErrorMessage } from '../../utils/apiError';
 
 const OPENAI_MODELS = ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini', 'gpt-4.1'];
@@ -25,12 +26,20 @@ const IntegrationsSettings = () => {
   const [github, setGithub] = useState<Integration>(emptyIntegration('github', 'oauth'));
   const [slack, setSlack] = useState<Integration>(emptyIntegration('slack', 'oauth'));
   const [jira, setJira] = useState<Integration>(emptyIntegration('jira', 'oauth'));
+  const [googleCalendar, setGoogleCalendar] = useState<Integration>(emptyIntegration('google_calendar', 'oauth'));
+  const [microsoft, setMicrosoft] = useState<Integration>(emptyIntegration('microsoft', 'oauth'));
+  const [teams, setTeams] = useState<Integration>(emptyIntegration('teams', 'api_key'));
+
+  const [teamsWebhook, setTeamsWebhook] = useState('');
+  const [testingTeams, setTestingTeams] = useState(false);
 
   const [apiKey, setApiKey] = useState('');
   const [showKey, setShowKey] = useState(false);
   const [model, setModel] = useState('gpt-4o-mini');
   const [connecting, setConnecting] = useState<string | null>(null);
   const [testingSlack, setTestingSlack] = useState(false);
+  const [slackMessage, setSlackMessage] = useState('');
+  const [postingSlack, setPostingSlack] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -43,6 +52,9 @@ const IntegrationsSettings = () => {
       setGithub(gh);
       setSlack(byProvider.get('slack') ?? emptyIntegration('slack', 'oauth'));
       setJira(byProvider.get('jira') ?? emptyIntegration('jira', 'oauth'));
+      setGoogleCalendar(byProvider.get('google_calendar') ?? emptyIntegration('google_calendar', 'oauth'));
+      setMicrosoft(byProvider.get('microsoft') ?? emptyIntegration('microsoft', 'oauth'));
+      setTeams(byProvider.get('teams') ?? emptyIntegration('teams', 'api_key'));
       if (oa.settings?.model) setModel(String(oa.settings.model));
     } catch (err) {
       setError(getApiErrorMessage(err, 'Failed to load integrations'));
@@ -89,7 +101,42 @@ const IntegrationsSettings = () => {
     }
   };
 
-  const LABELS: Record<string, string> = { openai: 'OpenAI', github: 'GitHub', slack: 'Slack', jira: 'Jira' };
+  const LABELS: Record<string, string> = {
+    openai: 'OpenAI', github: 'GitHub', slack: 'Slack', jira: 'Jira',
+    google_calendar: 'Google Calendar', microsoft: 'Outlook Calendar', teams: 'Microsoft Teams',
+  };
+
+  const saveTeams = async () => {
+    const url = teamsWebhook.trim();
+    if (!url) return;
+    setSaving(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const res = await integrationsService.save('teams', { api_key: url });
+      setTeams(res.data);
+      setTeamsWebhook('');
+      setSuccess('Microsoft Teams connected. FlowTrack alerts can now post to your channel.');
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Failed to save Teams webhook'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const sendTeamsTest = async () => {
+    setTestingTeams(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      await teamsService.test();
+      setSuccess('Test message sent — check your Teams channel.');
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Failed to send Teams test message'));
+    } finally {
+      setTestingTeams(false);
+    }
+  };
 
   const disconnect = async (provider: string) => {
     const label = LABELS[provider] ?? provider;
@@ -130,6 +177,23 @@ const IntegrationsSettings = () => {
       setError(getApiErrorMessage(err, 'Failed to send Slack test message'));
     } finally {
       setTestingSlack(false);
+    }
+  };
+
+  const postSlackMessage = async () => {
+    const text = slackMessage.trim();
+    if (!text) return;
+    setPostingSlack(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      await slackService.send(text);
+      setSlackMessage('');
+      setSuccess('Message posted to Slack.');
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Failed to post message to Slack'));
+    } finally {
+      setPostingSlack(false);
     }
   };
 
@@ -362,6 +426,95 @@ const IntegrationsSettings = () => {
             </button>
           )}
         </div>
+
+        {slack.connected && (
+          <div className="mt-4 border-t border-white/10 pt-4">
+            <label className="block text-xs font-medium text-slate-300 mb-2">
+              Post a message to Slack
+            </label>
+            <textarea
+              value={slackMessage}
+              onChange={(e) => setSlackMessage(e.target.value)}
+              rows={3}
+              placeholder="Type an update to send to your Slack channel…"
+              className="w-full rounded-lg bg-black/30 border border-white/10 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-violet-500 resize-y"
+            />
+            <div className="flex justify-end mt-2">
+              <button
+                onClick={postSlackMessage}
+                disabled={postingSlack || !slackMessage.trim()}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-500 disabled:opacity-50 transition"
+              >
+                {postingSlack ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                Post to Slack
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Microsoft Teams (incoming webhook) */}
+      <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+        <div className="flex items-center gap-3">
+          <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-[#4B53BC]">
+            <MessageSquare className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h3 className="text-white font-semibold flex items-center gap-2">
+              Microsoft Teams
+              {teams.connected && (
+                <span className="inline-flex items-center gap-1 text-xs text-emerald-400">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Connected
+                </span>
+              )}
+            </h3>
+            <p className="text-xs text-slate-400">
+              {teams.connected
+                ? 'FlowTrack alerts and automations can post to your Teams channel.'
+                : 'Paste a Teams channel Incoming Webhook URL to receive alerts and standups.'}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-5 space-y-3">
+          <input
+            type="url"
+            value={teamsWebhook}
+            onChange={(e) => setTeamsWebhook(e.target.value)}
+            placeholder={teams.connected ? 'Paste a new webhook URL to replace the saved one' : 'https://outlook.office.com/webhook/…'}
+            autoComplete="off"
+            className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-violet-400/60"
+          />
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={saveTeams}
+              disabled={saving || !teamsWebhook.trim()}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#4B53BC] text-white text-sm font-medium hover:opacity-90 disabled:opacity-50 transition"
+            >
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageSquare className="w-4 h-4" />}
+              {teams.connected ? 'Update webhook' : 'Connect Teams'}
+            </button>
+            {teams.connected && (
+              <>
+                <button
+                  onClick={sendTeamsTest}
+                  disabled={testingTeams}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-500 disabled:opacity-50 transition"
+                >
+                  {testingTeams ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                  Send test message
+                </button>
+                <button
+                  onClick={() => disconnect('teams')}
+                  disabled={saving}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-white/5 text-red-400 text-sm hover:bg-white/10 transition"
+                >
+                  <Trash2 className="w-4 h-4" /> Disconnect
+                </button>
+              </>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Jira (OAuth) */}
@@ -414,6 +567,116 @@ const IntegrationsSettings = () => {
             >
               {connecting === 'jira' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trello className="w-4 h-4" />}
               Connect with Jira
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Google Calendar (OAuth) */}
+      <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+        <div className="flex items-center gap-3">
+          <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-[#1a73e8]">
+            <CalendarDays className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h3 className="text-white font-semibold flex items-center gap-2">
+              Google Calendar
+              {googleCalendar.connected && (
+                <span className="inline-flex items-center gap-1 text-xs text-emerald-400">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Connected
+                </span>
+              )}
+            </h3>
+            <p className="text-xs text-slate-400">
+              {googleCalendar.connected
+                ? `Connected as ${(googleCalendar.settings?.account_email as string) ?? (googleCalendar.settings?.account_name as string) ?? 'your account'}`
+                : 'Turn meetings into billable time entries and feed Autopilot.'}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3 mt-5">
+          {googleCalendar.connected ? (
+            <>
+              <button
+                onClick={() => connectOAuth('google_calendar')}
+                disabled={connecting === 'google_calendar'}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-white/10 text-white text-sm hover:bg-white/20 disabled:opacity-50 transition"
+              >
+                {connecting === 'google_calendar' ? <Loader2 className="w-4 h-4 animate-spin" /> : <CalendarDays className="w-4 h-4" />}
+                Reconnect
+              </button>
+              <button
+                onClick={() => disconnect('google_calendar')}
+                disabled={saving}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-white/5 text-red-400 text-sm hover:bg-white/10 transition"
+              >
+                <Trash2 className="w-4 h-4" /> Disconnect
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => connectOAuth('google_calendar')}
+              disabled={connecting === 'google_calendar'}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#1a73e8] text-white text-sm font-medium hover:opacity-90 disabled:opacity-50 transition"
+            >
+              {connecting === 'google_calendar' ? <Loader2 className="w-4 h-4 animate-spin" /> : <CalendarDays className="w-4 h-4" />}
+              Connect Google Calendar
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Outlook / Microsoft 365 Calendar (OAuth) */}
+      <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+        <div className="flex items-center gap-3">
+          <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-[#0078D4]">
+            <CalendarDays className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h3 className="text-white font-semibold flex items-center gap-2">
+              Outlook Calendar
+              {microsoft.connected && (
+                <span className="inline-flex items-center gap-1 text-xs text-emerald-400">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Connected
+                </span>
+              )}
+            </h3>
+            <p className="text-xs text-slate-400">
+              {microsoft.connected
+                ? `Connected as ${(microsoft.settings?.account_email as string) ?? (microsoft.settings?.account_name as string) ?? 'your account'}`
+                : 'Microsoft 365 / Outlook meetings become time entries and feed Autopilot.'}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3 mt-5">
+          {microsoft.connected ? (
+            <>
+              <button
+                onClick={() => connectOAuth('microsoft')}
+                disabled={connecting === 'microsoft'}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-white/10 text-white text-sm hover:bg-white/20 disabled:opacity-50 transition"
+              >
+                {connecting === 'microsoft' ? <Loader2 className="w-4 h-4 animate-spin" /> : <CalendarDays className="w-4 h-4" />}
+                Reconnect
+              </button>
+              <button
+                onClick={() => disconnect('microsoft')}
+                disabled={saving}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-white/5 text-red-400 text-sm hover:bg-white/10 transition"
+              >
+                <Trash2 className="w-4 h-4" /> Disconnect
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => connectOAuth('microsoft')}
+              disabled={connecting === 'microsoft'}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#0078D4] text-white text-sm font-medium hover:opacity-90 disabled:opacity-50 transition"
+            >
+              {connecting === 'microsoft' ? <Loader2 className="w-4 h-4 animate-spin" /> : <CalendarDays className="w-4 h-4" />}
+              Connect Outlook
             </button>
           )}
         </div>

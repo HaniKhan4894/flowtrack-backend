@@ -12,6 +12,13 @@ import { getApiErrorMessage } from '../../utils/apiError';
 
 const shortHash = (h?: string | null) => (h ? `${h.slice(0, 8)}…${h.slice(-6)}` : '—');
 
+const integrityStyle = (score: number) => {
+  if (score >= 90) return 'bg-emerald-500/15 text-emerald-300';
+  if (score >= 75) return 'bg-teal-500/15 text-teal-300';
+  if (score >= 55) return 'bg-amber-500/15 text-amber-300';
+  return 'bg-rose-500/15 text-rose-300';
+};
+
 const actionStyle: Record<string, string> = {
   record: 'bg-emerald-500/15 text-emerald-300',
   amend: 'bg-amber-500/15 text-amber-300',
@@ -176,6 +183,14 @@ const ProofOfWorkPage = () => {
                         {[r.first_name, r.last_name].filter(Boolean).join(' ') || 'System'} · {r.created_at}
                       </p>
                     </div>
+                    {r.integrity_score !== null && r.integrity_score !== undefined && r.action !== 'delete' && (
+                      <span
+                        className={`text-[10px] font-bold px-2 py-1 rounded-lg shrink-0 ${integrityStyle(Number(r.integrity_score))}`}
+                        title="Work integrity score"
+                      >
+                        {Math.round(Number(r.integrity_score))}
+                      </span>
+                    )}
                     <span className="text-xs font-mono text-primary-300/80 shrink-0 hidden sm:block">{shortHash(r.hash)}</span>
                   </div>
                 ))

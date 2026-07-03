@@ -8,6 +8,8 @@ export interface LedgerRecord {
     hash: string;
     prev_hash: string;
     created_at: string;
+    integrity_score?: number | string | null;
+    integrity_flags?: string | null;
     first_name?: string | null;
     last_name?: string | null;
 }

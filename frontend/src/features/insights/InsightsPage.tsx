@@ -10,6 +10,7 @@ import {
   AlertTriangle,
   Users,
   ShieldAlert,
+  LineChart,
 } from 'lucide-react';
 import { insightsService, type Benchmarks, type CoachSuggestion, type DeliveryRisk, type WeeklySummary, type WorkPatterns } from '../../api/insightsService';
 import { hasPermission, canViewUnusualActivity } from '../../utils/access';
@@ -17,8 +18,9 @@ import { useAuthStore } from '../../store/authStore';
 import { getApiErrorMessage } from '../../utils/apiError';
 import { UnusualActivityPanel } from './UnusualActivityPanel';
 import AskFlowTrack from './AskFlowTrack';
+import ForecastPanel from './ForecastPanel';
 
-type Tab = 'weekly' | 'benchmarks' | 'patterns' | 'coach' | 'risks' | 'unusual';
+type Tab = 'weekly' | 'benchmarks' | 'patterns' | 'coach' | 'risks' | 'forecast' | 'unusual';
 
 const InsightsPage = () => {
   const { user } = useAuthStore();
@@ -77,6 +79,7 @@ const InsightsPage = () => {
     { id: 'patterns', label: 'Work Patterns', icon: Brain },
     { id: 'coach', label: 'Productivity Coach', icon: Target },
     { id: 'risks', label: 'Delivery Risks', icon: AlertTriangle, managerOnly: true },
+    { id: 'forecast', label: 'Forecast', icon: LineChart, managerOnly: true },
     { id: 'unusual', label: 'Unusual Activity', icon: ShieldAlert, ownerManagerOnly: true },
   ];
 
@@ -255,6 +258,8 @@ const InsightsPage = () => {
             )}
           </motion.div>
         )}
+
+        {!loading && tab === 'forecast' && canViewTeam && <ForecastPanel />}
 
         {tab === 'unusual' && canViewUnusual && <UnusualActivityPanel />}
       </div>

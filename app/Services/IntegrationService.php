@@ -137,6 +137,47 @@ class IntegrationService
         ], $userId, false);
     }
 
+    /**
+     * Resolve an integration (with org id + decoded secrets) by provider and
+     * external account id. Used by inbound Slack/Teams commands to map a
+     * workspace back to its FlowTrack organization.
+     *
+     * @return array{organization_id:int, provider:string, is_enabled:bool, settings:array, secrets:array}|null
+     */
+    public function findByAccount(string $provider, string $externalAccountId): ?array
+    {
+        if ($externalAccountId === '') {
+            return null;
+        }
+        $row = $this->model->findByProviderAccount($provider, $externalAccountId);
+        if (!$row) {
+            return null;
+        }
+
+        return [
+            'organization_id' => (int) $row['organization_id'],
+            'provider'        => $row['provider'],
+            'is_enabled'      => !empty($row['is_enabled']),
+            'settings'        => $this->decodeJson($row['settings'] ?? null),
+            'secrets'         => $this->decodeSecrets($row['secrets_encrypted'] ?? null),
+        ];
+    }
+
+    /**
+     * Persist a settings patch for an integration (merges into existing settings).
+     *
+     * @param array<string,mixed> $patch
+     */
+    public function patchSettings(int $organizationId, string $provider, array $patch): void
+    {
+        $row = $this->model->findOne($organizationId, $provider);
+        if (!$row) {
+            return;
+        }
+        $settings = array_merge($this->decodeJson($row['settings'] ?? null), $patch);
+        $this->model->update($row['id'], ['settings' => json_encode($settings)]);
+    }
+
     public function setEnabled(int $organizationId, string $provider, bool $enabled): void
     {
         $row = $this->model->findOne($organizationId, $provider);

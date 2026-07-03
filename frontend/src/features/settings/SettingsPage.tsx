@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { User, Building, Bell, Shield, Cloud, Save, Camera, Loader2, CheckCircle2, Lock, CreditCard, ExternalLink, Gauge, Users, Plus, X, Pencil, Trash2, Activity, FileCheck, Sparkles, MapPin, Plug } from 'lucide-react';
+import { User, Building, Bell, Shield, Cloud, Save, Camera, Loader2, CheckCircle2, Lock, CreditCard, ExternalLink, Gauge, Users, Plus, X, Pencil, Trash2, Activity, FileCheck, Sparkles, MapPin, Plug, KeyRound } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import client from '../../api/client';
@@ -24,6 +24,7 @@ import { TimesheetPolicySettingsTab } from './TimesheetPolicySettingsTab';
 import { SmartNotificationsSettingsTab } from './SmartNotificationsSettingsTab';
 import { OfficeLocationsSettingsTab } from './OfficeLocationsSettingsTab';
 import IntegrationsSettings from './IntegrationsSettings';
+import DeveloperSettings from './DeveloperSettings';
 
 const CURRENCY_OPTIONS = [
   { value: 'USD', label: 'USD — US Dollar' },
@@ -149,6 +150,7 @@ const SettingsPage = () => {
       { id: 'office-locations', label: 'Remote vs Office', icon: MapPin },
       { id: 'roles-permissions', label: 'Roles & Permissions', icon: Users },
       { id: 'integrations', label: 'Integrations', icon: Plug },
+      { id: 'developer', label: 'Developer', icon: KeyRound },
     ] : []),
     { id: 'notifications', label: 'Notifications', icon: Bell },
     { id: 'security', label: 'Security', icon: Shield },
@@ -1212,6 +1214,8 @@ const SettingsPage = () => {
           )}
 
           {activeTab === 'integrations' && <IntegrationsSettings />}
+
+          {activeTab === 'developer' && <DeveloperSettings />}
 
           {activeTab === 'roles-permissions' && (
             <div className="space-y-6">

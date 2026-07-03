@@ -79,6 +79,7 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     let interval: ReturnType<typeof setInterval> | null = null;
+    let stream: EventSource | null = null;
 
     const loadNotifications = () => {
       if (!isDesktopForeground()) return;
@@ -89,6 +90,25 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
       notificationService.unreadCount()
         .then((res) => setUnreadCount(Number(res.data?.count ?? res.count ?? 0)))
         .catch(() => setUnreadCount(0));
+    };
+
+    const stopStream = () => {
+      if (stream) {
+        stream.close();
+        stream = null;
+      }
+    };
+
+    const startStream = () => {
+      if (!isDesktopForeground()) return;
+      stopStream();
+      stream = notificationService.openStream({
+        onNotification: (n) => {
+          setNotifications((prev) => [n, ...prev].slice(0, 50));
+          setUnreadCount((c) => c + 1);
+        },
+        onUnread: (count) => setUnreadCount(count),
+      });
     };
 
     const stopPolling = () => {
@@ -103,14 +123,16 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
       stopPolling();
       loadNotifications();
       loadUnread();
-      interval = setInterval(loadUnread, 30000);
+      startStream();
+      // Fallback refresh in case SSE is unavailable (proxies, etc.).
+      interval = setInterval(loadUnread, 60000);
     };
 
     startPolling();
 
-    const onBackground = () => stopPolling();
+    const onBackground = () => { stopPolling(); stopStream(); };
     const onForeground = () => startPolling();
-    const onShutdown = () => stopPolling();
+    const onShutdown = () => { stopPolling(); stopStream(); };
 
     window.addEventListener('flowtrack-app-background', onBackground);
     window.addEventListener('flowtrack-app-foreground', onForeground);
@@ -118,6 +140,7 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
 
     return () => {
       stopPolling();
+      stopStream();
       window.removeEventListener('flowtrack-app-background', onBackground);
       window.removeEventListener('flowtrack-app-foreground', onForeground);
       window.removeEventListener('flowtrack-app-shutdown', onShutdown);

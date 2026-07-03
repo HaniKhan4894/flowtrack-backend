@@ -29,6 +29,22 @@ export interface ProofPackScreenshot {
   thumbnail_url: string;
 }
 
+export interface WorkCertificate {
+  certificate_id: string;
+  issuer: string;
+  organization: string;
+  period: string;
+  tracked_hours: number;
+  billed_hours: number;
+  time_entries: number;
+  integrity_score: number;
+  work_integrity: { score: number; grade: string; flags: string[] };
+  ledger: { records: number; last_hash: string | null; chain_valid: boolean; data_valid: boolean };
+  issued_at: string;
+  signature: string;
+  algorithm: string;
+}
+
 export interface ProofPack {
   available: boolean;
   organization_name: string;
@@ -46,6 +62,7 @@ export interface ProofPack {
   contributors: { display_name: string; hours: number }[];
   screenshots: ProofPackScreenshot[];
   highlights: string[];
+  certificate?: WorkCertificate;
 }
 
 export interface PortalInvoice extends Invoice {
@@ -80,5 +97,19 @@ export const clientPortalService = {
       headers: usesNgrok ? { 'ngrok-skip-browser-warning': 'true' } : {},
     });
     return URL.createObjectURL(res.data);
+  },
+
+  getCertificate: async (token: string) => {
+    const res = await portalClient.get<{
+      data: { certificate: WorkCertificate; signature_valid: boolean; verified_at: string };
+    }>(`/portal/invoice/${token}/certificate`);
+    return res.data;
+  },
+
+  verifyCertificate: async (certificate: WorkCertificate) => {
+    const res = await portalClient.post<{
+      data: { valid: boolean; certificate_id: string | null; organization: string | null; issued_at: string | null; message: string };
+    }>(`/portal/certificate/verify`, { certificate });
+    return res.data;
   },
 };

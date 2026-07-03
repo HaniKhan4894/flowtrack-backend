@@ -10,6 +10,8 @@ import { jiraService, type JiraIssuesResult } from '../../api/jiraService';
 import { timeService } from '../../api/timeService';
 import { getApiErrorMessage } from '../../utils/apiError';
 import type { Project } from '../../api/projectService';
+import AutopilotPanel from './AutopilotPanel';
+import CalendarPanel from './CalendarPanel';
 
 interface Props {
   projects: Project[];
@@ -182,6 +184,9 @@ const DevAiPanel = ({ projects, onLogged }: Props) => {
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+      {/* AI Autopilot — full-day reconstruction */}
+      {showAi && <AutopilotPanel projects={projects} onLogged={onLogged} />}
+
       {/* AI Suggestions */}
       {showAi && (
         <div className="glass rounded-3xl border border-white/5 shadow-ai overflow-hidden">
@@ -515,6 +520,9 @@ const DevAiPanel = ({ projects, onLogged }: Props) => {
           )}
         </div>
       </div>
+
+      {/* Calendar meetings → time */}
+      <CalendarPanel projects={projects} onLogged={onLogged} />
     </div>
   );
 };

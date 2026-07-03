@@ -6,8 +6,10 @@ import {
   CheckCircle2,
   CreditCard,
   FileText,
+  Fingerprint,
   Loader2,
   Monitor,
+  ShieldAlert,
   ShieldCheck,
   Sparkles,
   Users,
@@ -17,6 +19,7 @@ import {
   type PortalInvoice,
   type ProofPack,
   type ProofPackScreenshot,
+  type WorkCertificate,
 } from '../../api/clientPortalService';
 import { Button } from '../../components/ui';
 import { getApiErrorMessage } from '../../utils/apiError';
@@ -108,6 +111,108 @@ function PortalScreenshotThumb({ shot }: { shot: ProofPackScreenshot }) {
           timeStyle: 'short',
         })}
       </div>
+    </div>
+  );
+}
+
+function WorkCertificateCard({ certificate }: { certificate: WorkCertificate }) {
+  const [checking, setChecking] = useState(false);
+  const [result, setResult] = useState<{ valid: boolean; message: string } | null>(null);
+
+  const verify = async () => {
+    setChecking(true);
+    try {
+      const res = await clientPortalService.verifyCertificate(certificate);
+      setResult({ valid: res.data.valid, message: res.data.message });
+    } catch {
+      setResult({ valid: false, message: 'Could not verify the certificate right now.' });
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  const download = () => {
+    const blob = new Blob([JSON.stringify(certificate, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `flowtrack-certificate-${certificate.certificate_id}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const ledgerIntact = certificate.ledger.chain_valid && certificate.ledger.data_valid;
+
+  return (
+    <div className="rounded-2xl border border-cyan-500/25 bg-black/20 p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Fingerprint className="h-5 w-5 text-cyan-300" />
+          <div>
+            <h3 className="text-sm font-bold text-white">Verified Work Certificate</h3>
+            <p className="text-[11px] text-slate-500">
+              ID {certificate.certificate_id} · issued {formatApiDate(certificate.issued_at)}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={download}
+            className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-white/10"
+          >
+            Download
+          </button>
+          <button
+            onClick={verify}
+            disabled={checking}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-cyan-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-cyan-500 disabled:opacity-60"
+          >
+            {checking ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />}
+            Verify signature
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2">
+          <p className="text-[10px] uppercase text-slate-500">Work integrity</p>
+          <p className="text-lg font-bold capitalize">{certificate.work_integrity.grade}</p>
+          <p className="text-[11px] text-slate-500">{Math.round(certificate.work_integrity.score)}/100</p>
+        </div>
+        <div className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2">
+          <p className="text-[10px] uppercase text-slate-500">Tracked</p>
+          <p className="text-lg font-bold">{certificate.tracked_hours.toFixed(1)}h</p>
+        </div>
+        <div className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2">
+          <p className="text-[10px] uppercase text-slate-500">Ledger</p>
+          <p className={`text-sm font-bold ${ledgerIntact ? 'text-emerald-300' : 'text-rose-300'}`}>
+            {ledgerIntact ? 'Intact' : 'Issues'}
+          </p>
+          <p className="text-[11px] text-slate-500">{certificate.ledger.records} records</p>
+        </div>
+        <div className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2">
+          <p className="text-[10px] uppercase text-slate-500">Signature</p>
+          <p className="truncate font-mono text-[11px] text-cyan-300" title={certificate.signature}>
+            {certificate.signature.slice(0, 12)}…
+          </p>
+        </div>
+      </div>
+
+      {result && (
+        <div
+          className={`mt-3 flex items-center gap-2 rounded-lg px-3 py-2 text-sm ${
+            result.valid ? 'bg-emerald-500/10 text-emerald-300' : 'bg-rose-500/10 text-rose-300'
+          }`}
+        >
+          {result.valid ? <ShieldCheck className="h-4 w-4" /> : <ShieldAlert className="h-4 w-4" />}
+          {result.message}
+        </div>
+      )}
+
+      <p className="mt-3 text-[11px] text-slate-500">
+        This certificate is cryptographically signed by FlowTrack ({certificate.algorithm}). Download it and re-verify
+        anytime — any change to the numbers will break the signature.
+      </p>
     </div>
   );
 }
@@ -236,6 +341,8 @@ function ProofPackSection({ pack }: { pack: ProofPack }) {
           </p>
         </div>
       )}
+
+      {pack.certificate && <WorkCertificateCard certificate={pack.certificate} />}
     </motion.div>
   );
 }

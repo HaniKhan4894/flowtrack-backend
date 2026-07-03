@@ -30,6 +30,38 @@ export interface AiCategorizeResult {
     message?: string;
 }
 
+export interface AiAutopilotBlock {
+    id?: number;
+    start_time: string;
+    end_time: string;
+    started_at: string;
+    ended_at: string;
+    duration_minutes: number;
+    project_id: number | null;
+    project_name: string | null;
+    description: string;
+    confidence: number;
+    sources: string[];
+}
+
+export interface AiAutopilotResult {
+    date: string;
+    blocks: AiAutopilotBlock[];
+    based_on: { activity_clusters: number; commits: number; jira_issues: number; projects: number };
+    model: string;
+    source: string;
+    message?: string;
+}
+
+export interface AutopilotApplyEntry {
+    suggestion_id?: number;
+    project_id?: number | null;
+    description: string;
+    started_at: string;
+    ended_at: string;
+    is_billable?: boolean;
+}
+
 export interface AiStandupResult {
     date: string;
     user: { id: number; name: string; email: string };
@@ -62,6 +94,16 @@ export const aiService = {
 
     categorize: async (date?: string): Promise<{ data: AiCategorizeResult }> => {
         const response = await client.get('/ai/categorize', { params: date ? { date } : {} });
+        return response.data;
+    },
+
+    autopilot: async (date?: string): Promise<{ data: AiAutopilotResult }> => {
+        const response = await client.get('/ai/autopilot', { params: date ? { date } : {} });
+        return response.data;
+    },
+
+    applyAutopilot: async (entries: AutopilotApplyEntry[]): Promise<{ data: { created: number } }> => {
+        const response = await client.post('/ai/autopilot/apply', { entries });
         return response.data;
     },
 

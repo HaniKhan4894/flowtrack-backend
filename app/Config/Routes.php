@@ -37,6 +37,16 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\API\V1'], function ($r
     $routes->post('auth/verify-email', 'AuthController::verifyEmail');
     $routes->post('auth/resend-verification', 'AuthController::resendVerification');
 
+    // Inbound command-center webhooks (Phase 12) — verified by provider
+    // signatures, so these are intentionally public (no JWT auth filter).
+    $routes->post('slack/commands', 'SlackCommandController::commands');
+    $routes->post('slack/interactions', 'SlackCommandController::interactions');
+    $routes->post('teams/commands', 'TeamsController::commands');
+
+    // Real-time notifications via SSE (Phase 12). Auth is by ?token= query param
+    // (EventSource can't send headers), verified inside the controller.
+    $routes->get('notifications/stream', 'NotificationController::stream');
+
     // Social login (OAuth) — Google & GitHub
     $routes->get('auth/(:segment)/redirect', 'OAuthController::redirect/$1');
     $routes->get('auth/(:segment)/callback', 'OAuthController::callback/$1');
@@ -47,8 +57,11 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\API\V1'], function ($r
     // Client portal (public, token-based)
     $routes->get('portal/invoice/(:segment)', 'ClientPortalController::show/$1');
     $routes->get('portal/invoice/(:segment)/screenshots/(:num)/thumbnail', 'ClientPortalController::screenshotThumbnail/$1/$2');
+    $routes->get('portal/invoice/(:segment)/certificate', 'ClientPortalController::certificate/$1');
     $routes->post('portal/invoice/(:segment)/approve', 'ClientPortalController::approve/$1');
     $routes->post('portal/invoice/(:segment)/payment', 'ClientPortalController::recordPayment/$1');
+    // Public, login-free verification of a Verified Work Certificate document.
+    $routes->post('portal/certificate/verify', 'ClientPortalController::verifyCertificate');
 
     // Protected Authentication Routes (Auth Required)
     $routes->get('auth/me', 'AuthController::me', ['filter' => 'auth']);
@@ -273,6 +286,8 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\API\V1'], function ($r
         $routes->post('ask', 'AiController::ask');
         $routes->get('weekly-narrative', 'AiController::weeklyNarrative');
         $routes->get('categorize', 'AiController::categorize');
+        $routes->get('autopilot', 'AiController::autopilot');
+        $routes->post('autopilot/apply', 'AiController::applyAutopilot');
         $routes->get('standup', 'AiController::standup');
     });
 
@@ -285,14 +300,44 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\API\V1'], function ($r
         // Slack messaging.
         $routes->post('slack/test', 'SlackController::test');
         $routes->post('slack/send', 'SlackController::send');
+        // Microsoft Teams messaging (Phase 12).
+        $routes->post('teams/test', 'TeamsController::test');
+        $routes->post('teams/send', 'TeamsController::send');
         // Jira issues → tracked time.
         $routes->get('jira/issues', 'JiraController::issues');
         $routes->post('jira/log-time', 'JiraController::logTime');
+        // Calendar (Google / Outlook) meetings → tracked time.
+        $routes->get('calendar/events', 'CalendarController::events');
+        $routes->post('calendar/log-time', 'CalendarController::logTime');
         $routes->get('(:segment)', 'IntegrationController::show/$1', ['filter' => 'permission:settings.view']);
         $routes->put('(:segment)', 'IntegrationController::update/$1', ['filter' => 'permission:settings.edit']);
         $routes->post('(:segment)/connect', 'IntegrationController::connect/$1', ['filter' => 'permission:settings.edit']);
         $routes->post('(:segment)/toggle', 'IntegrationController::toggle/$1', ['filter' => 'permission:settings.edit']);
         $routes->delete('(:segment)', 'IntegrationController::delete/$1', ['filter' => 'permission:settings.edit']);
+    });
+
+    // Developer platform (Phase 10): API keys, webhooks, automations.
+    $routes->group('developer', ['filter' => 'auth'], function ($routes) {
+        $routes->get('api-keys', 'ApiKeyController::index', ['filter' => 'permission:settings.view']);
+        $routes->post('api-keys', 'ApiKeyController::create', ['filter' => 'permission:settings.edit']);
+        $routes->delete('api-keys/(:num)', 'ApiKeyController::delete/$1', ['filter' => 'permission:settings.edit']);
+
+        $routes->get('webhooks', 'WebhookController::index', ['filter' => 'permission:settings.view']);
+        $routes->post('webhooks', 'WebhookController::create', ['filter' => 'permission:settings.edit']);
+        $routes->post('webhooks/(:num)/test', 'WebhookController::test/$1', ['filter' => 'permission:settings.edit']);
+        $routes->delete('webhooks/(:num)', 'WebhookController::delete/$1', ['filter' => 'permission:settings.edit']);
+
+        $routes->get('automations', 'AutomationController::index', ['filter' => 'permission:settings.view']);
+        $routes->post('automations', 'AutomationController::create', ['filter' => 'permission:settings.edit']);
+        $routes->put('automations/(:num)', 'AutomationController::update/$1', ['filter' => 'permission:settings.edit']);
+        $routes->delete('automations/(:num)', 'AutomationController::delete/$1', ['filter' => 'permission:settings.edit']);
+    });
+
+    // FlowTrack Public API (Phase 10): authenticated with an API key.
+    $routes->group('public', ['filter' => 'apikey'], function ($routes) {
+        $routes->get('ping', 'PublicApiController::ping');
+        $routes->get('projects', 'PublicApiController::projects');
+        $routes->get('time-entries', 'PublicApiController::timeEntries');
     });
 
     // Wellbeing / burnout suite (Phase 5)
@@ -313,6 +358,7 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\API\V1'], function ($r
         $routes->get('work-patterns', 'InsightsController::workPatterns');
         $routes->get('coach', 'InsightsController::coach');
         $routes->get('delivery-risks', 'InsightsController::deliveryRisks');
+        $routes->get('forecast', 'InsightsController::forecast');
         $routes->get('sprints', 'InsightsController::sprints');
         $routes->post('sprints', 'InsightsController::createSprint');
         $routes->get('unusual-activity', 'InsightsController::unusualActivity');

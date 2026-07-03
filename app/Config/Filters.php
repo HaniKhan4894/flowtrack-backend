@@ -41,6 +41,7 @@ class Filters extends BaseFilters
         'permission'    => \App\Filters\PermissionFilter::class,
         'planFeature'   => \App\Filters\PlanFeatureFilter::class,
         'superadmin'    => \App\Filters\SuperAdminFilter::class,
+        'apikey'        => \App\Filters\ApiKeyFilter::class,
     ];
 
     /**

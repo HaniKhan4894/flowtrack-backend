@@ -16,10 +16,10 @@ class IntegrationController extends ResourceController
     protected $format = 'json';
 
     /** Providers the org can configure with a plain API key. */
-    private const API_KEY_PROVIDERS = ['openai'];
+    private const API_KEY_PROVIDERS = ['openai', 'teams'];
 
     /** Providers the org connects via OAuth. */
-    private const OAUTH_PROVIDERS = ['github', 'slack', 'jira'];
+    private const OAUTH_PROVIDERS = ['github', 'slack', 'jira', 'google_calendar', 'microsoft'];
 
     public function __construct()
     {

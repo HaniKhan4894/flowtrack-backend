@@ -36,4 +36,15 @@ class OrganizationIntegrationModel extends Model
     {
         return $this->where('organization_id', $organizationId)->findAll();
     }
+
+    /**
+     * Resolve an integration by provider + external account id (e.g. a Slack
+     * team_id) so inbound webhooks/slash commands can find their organization.
+     */
+    public function findByProviderAccount(string $provider, string $externalAccountId): ?array
+    {
+        return $this->where('provider', $provider)
+            ->where('external_account_id', $externalAccountId)
+            ->first();
+    }
 }

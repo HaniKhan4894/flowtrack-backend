@@ -37,13 +37,27 @@ class LedgerService
         if ($payload === null && $action !== 'delete') {
             return; // nothing to record
         }
-        $this->append($organizationId, $userId, 'time_entry', $entryId, $payload ?? ['deleted' => true, 'id' => $entryId], $action);
+
+        // Stamp a work-integrity score (metadata only, not part of the hash).
+        $meta = [];
+        if ($action !== 'delete') {
+            try {
+                $integrity = (new WorkIntegrityService())->scoreForEntry($entryId);
+                $meta['integrity_score'] = $integrity['score'];
+                $meta['integrity_flags'] = $integrity['flags'];
+            } catch (\Throwable $e) {
+                log_message('error', 'Integrity scoring failed: ' . $e->getMessage());
+            }
+        }
+
+        $this->append($organizationId, $userId, 'time_entry', $entryId, $payload ?? ['deleted' => true, 'id' => $entryId], $action, $meta);
     }
 
     /**
      * @param array<string,mixed> $payload
+     * @param array{integrity_score?:float, integrity_flags?:array<int,string>} $meta
      */
-    public function append(int $organizationId, int $userId, string $entryType, ?int $referenceId, array $payload, string $action = 'record'): array
+    public function append(int $organizationId, int $userId, string $entryType, ?int $referenceId, array $payload, string $action = 'record', array $meta = []): array
     {
         $this->db->transStart();
 
@@ -71,6 +85,13 @@ class LedgerService
             'hash'            => $hash,
             'created_at'      => $createdAt,
         ];
+
+        if (array_key_exists('integrity_score', $meta) && $meta['integrity_score'] !== null) {
+            $row['integrity_score'] = $meta['integrity_score'];
+        }
+        if (!empty($meta['integrity_flags'])) {
+            $row['integrity_flags'] = json_encode(array_values($meta['integrity_flags']));
+        }
 
         $this->model->insert($row);
         $this->db->transComplete();
@@ -183,7 +204,7 @@ class LedgerService
     public function recent(int $organizationId, int $limit = 50): array
     {
         return $this->db->table('work_ledger l')
-            ->select('l.sequence, l.action, l.entry_type, l.reference_id, l.hash, l.prev_hash, l.created_at, u.first_name, u.last_name')
+            ->select('l.sequence, l.action, l.entry_type, l.reference_id, l.hash, l.prev_hash, l.created_at, l.integrity_score, l.integrity_flags, u.first_name, u.last_name')
             ->join('users u', 'u.id = l.user_id', 'left')
             ->where('l.organization_id', $organizationId)
             ->orderBy('l.sequence', 'DESC')

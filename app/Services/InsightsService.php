@@ -346,6 +346,408 @@ class InsightsService
         ];
     }
 
+    /**
+     * Phase 11 — Predictive forecasting.
+     *
+     * Projects forward each active project's budget-burn using the recent daily
+     * trend (least-squares slope + average), estimating a budget-overrun date
+     * and building a burn-up projection series for charting. Sprints get a
+     * deadline-miss probability from required-vs-actual pace. Optionally adds an
+     * AI narrative (BYOK) grounded strictly in the computed numbers.
+     */
+    public function getForecast(int $organizationId, int $historyDays = 30, int $horizonDays = 30): array
+    {
+        $historyDays = max(7, min(90, $historyDays));
+        $horizonDays = max(7, min(120, $horizonDays));
+
+        $phpTz = $this->timezoneService->getOrgTimezone($organizationId);
+        $todayLocal = (new \DateTime('now', new \DateTimeZone($phpTz)))->format('Y-m-d');
+        $startLocal = (new \DateTime($todayLocal, new \DateTimeZone($phpTz)))->modify('-' . ($historyDays - 1) . ' days')->format('Y-m-d');
+
+        $projectsRaw = $this->db->table('projects')
+            ->where('organization_id', $organizationId)
+            ->where('is_active', 1)
+            ->get()
+            ->getResultArray();
+
+        $dailyByProject = $this->dailyHoursByProject($organizationId, $startLocal, $todayLocal, $phpTz);
+
+        $projects = [];
+        foreach ($projectsRaw as $project) {
+            $projectId = (int) $project['id'];
+            $budgetHours = (float) ($project['budget_hours'] ?? 0);
+
+            $loggedTotal = (float) $this->db->table('time_entries')
+                ->select('COALESCE(SUM(duration_seconds),0)/3600 as hours', false)
+                ->where('organization_id', $organizationId)
+                ->where('project_id', $projectId)
+                ->get()
+                ->getRowArray()['hours'];
+
+            $daily = $dailyByProject[$projectId] ?? [];
+            $series = $this->buildDailySeries($startLocal, $todayLocal, $phpTz, $daily);
+            $recentHours = array_map(fn ($p) => $p['hours'], $series);
+
+            $slope = $this->linearSlope($recentHours);
+            $activeDays = count(array_filter($recentHours, fn ($h) => $h > 0));
+            $avgDaily = $activeDays > 0 ? array_sum($recentHours) / max(1, count($recentHours)) : 0;
+            // Blend average pace with trend to smooth spiky data.
+            $burnRate = max(0, round(($avgDaily * 0.7) + (max(0, $avgDaily + $slope) * 0.3), 3));
+
+            $projection = $this->buildProjection($series, $loggedTotal, $burnRate, $budgetHours, $horizonDays, $phpTz, $todayLocal);
+
+            $utilization = $budgetHours > 0 ? round(($loggedTotal / $budgetHours) * 100, 1) : null;
+            $projectedOverrunDate = $projection['overrun_date'];
+            $daysToOverrun = $projection['days_to_overrun'];
+
+            $risk = 'none';
+            if ($budgetHours > 0) {
+                if ($loggedTotal >= $budgetHours) {
+                    $risk = 'high';
+                } elseif ($daysToOverrun !== null && $daysToOverrun <= 7) {
+                    $risk = 'high';
+                } elseif ($daysToOverrun !== null && $daysToOverrun <= $horizonDays) {
+                    $risk = 'medium';
+                } elseif ($utilization !== null && $utilization >= 70) {
+                    $risk = 'low';
+                }
+            }
+
+            $projects[] = [
+                'project_id'             => $projectId,
+                'project_name'           => $project['name'],
+                'color'                  => $project['color'] ?? null,
+                'budget_hours'           => $budgetHours,
+                'logged_hours'           => round($loggedTotal, 2),
+                'daily_burn_rate'        => $burnRate,
+                'trend_per_day'          => round($slope, 3),
+                'utilization_percent'    => $utilization,
+                'projected_overrun_date' => $projectedOverrunDate,
+                'days_to_overrun'        => $daysToOverrun,
+                'risk'                   => $risk,
+                'series'                 => $projection['series'],
+            ];
+        }
+
+        // Sort by risk severity then soonest overrun.
+        $rank = ['high' => 0, 'medium' => 1, 'low' => 2, 'none' => 3];
+        usort($projects, function ($a, $b) use ($rank) {
+            $r = ($rank[$a['risk']] ?? 3) <=> ($rank[$b['risk']] ?? 3);
+            if ($r !== 0) {
+                return $r;
+            }
+            return ($a['days_to_overrun'] ?? PHP_INT_MAX) <=> ($b['days_to_overrun'] ?? PHP_INT_MAX);
+        });
+
+        $sprints = $this->forecastSprints($organizationId, $phpTz, $todayLocal);
+
+        $result = [
+            'generated_at' => date('c'),
+            'history_days' => $historyDays,
+            'horizon_days' => $horizonDays,
+            'projects'     => $projects,
+            'sprints'      => $sprints,
+        ];
+
+        $result['ai'] = $this->forecastNarrative($organizationId, $projects, $sprints);
+
+        return $result;
+    }
+
+    /**
+     * @return array<int, array<string,float>> project_id => [Y-m-d => hours]
+     */
+    protected function dailyHoursByProject(int $organizationId, string $startLocal, string $endLocal, string $phpTz): array
+    {
+        [$startUtc, $endUtc] = $this->timezoneService->dateRangeUtc($startLocal, $endLocal, $phpTz);
+
+        $rows = $this->db->table('time_entries')
+            ->select('project_id, started_at, duration_seconds')
+            ->where('organization_id', $organizationId)
+            ->where('started_at >=', $startUtc)
+            ->where('started_at <=', $endUtc)
+            ->where('project_id IS NOT NULL')
+            ->get()
+            ->getResultArray();
+
+        $out = [];
+        foreach ($rows as $row) {
+            $projectId = (int) $row['project_id'];
+            $seconds = (int) ($row['duration_seconds'] ?? 0);
+            if ($seconds <= 0) {
+                continue;
+            }
+            $localDate = substr($this->timezoneService->toOrgLocal($row['started_at'], $phpTz), 0, 10);
+            $out[$projectId][$localDate] = ($out[$projectId][$localDate] ?? 0) + ($seconds / 3600);
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param array<string,float> $daily
+     * @return array<int, array{date:string, hours:float}>
+     */
+    protected function buildDailySeries(string $startLocal, string $endLocal, string $phpTz, array $daily): array
+    {
+        $series = [];
+        $cursor = new \DateTime($startLocal, new \DateTimeZone($phpTz));
+        $end = new \DateTime($endLocal, new \DateTimeZone($phpTz));
+
+        while ($cursor <= $end) {
+            $d = $cursor->format('Y-m-d');
+            $series[] = ['date' => $d, 'hours' => round($daily[$d] ?? 0, 3)];
+            $cursor->modify('+1 day');
+        }
+
+        return $series;
+    }
+
+    /**
+     * Least-squares slope of a numeric series (units per index step).
+     *
+     * @param array<int,float> $values
+     */
+    protected function linearSlope(array $values): float
+    {
+        $n = count($values);
+        if ($n < 2) {
+            return 0.0;
+        }
+        $sumX = $sumY = $sumXY = $sumX2 = 0.0;
+        foreach ($values as $i => $y) {
+            $sumX += $i;
+            $sumY += $y;
+            $sumXY += $i * $y;
+            $sumX2 += $i * $i;
+        }
+        $denom = ($n * $sumX2) - ($sumX * $sumX);
+        if ($denom == 0.0) {
+            return 0.0;
+        }
+        return (($n * $sumXY) - ($sumX * $sumY)) / $denom;
+    }
+
+    /**
+     * Build a burn-up series: historical cumulative actuals plus a projected
+     * cumulative line into the future at the given burn rate.
+     *
+     * @param array<int, array{date:string, hours:float}> $series
+     * @return array{series:array<int,array<string,mixed>>, overrun_date:?string, days_to_overrun:?int}
+     */
+    protected function buildProjection(array $series, float $loggedTotal, float $burnRate, float $budgetHours, int $horizonDays, string $phpTz, string $todayLocal): array
+    {
+        // Historical cumulative within the window (used for the chart shape).
+        $windowSum = array_sum(array_map(fn ($p) => $p['hours'], $series));
+        $baseline = max(0, $loggedTotal - $windowSum);
+
+        $out = [];
+        $running = $baseline;
+        foreach ($series as $point) {
+            $running += $point['hours'];
+            $out[] = [
+                'date'       => $point['date'],
+                'actual'     => round($running, 2),
+                'projected'  => null,
+                'budget'     => $budgetHours > 0 ? $budgetHours : null,
+            ];
+        }
+
+        $overrunDate = null;
+        $daysToOverrun = null;
+        $projected = $loggedTotal;
+        // Anchor projection at "today" so it visually continues the actual line.
+        $out[count($out) - 1]['projected'] = round($projected, 2);
+
+        $cursor = new \DateTime($todayLocal, new \DateTimeZone($phpTz));
+        for ($day = 1; $day <= $horizonDays; $day++) {
+            $cursor->modify('+1 day');
+            $projected += $burnRate;
+            $point = [
+                'date'      => $cursor->format('Y-m-d'),
+                'actual'    => null,
+                'projected' => round($projected, 2),
+                'budget'    => $budgetHours > 0 ? $budgetHours : null,
+            ];
+            $out[] = $point;
+
+            if ($budgetHours > 0 && $overrunDate === null && $projected >= $budgetHours) {
+                $overrunDate = $cursor->format('Y-m-d');
+                $daysToOverrun = $day;
+            }
+        }
+
+        // Already over budget today.
+        if ($budgetHours > 0 && $loggedTotal >= $budgetHours) {
+            $overrunDate = $todayLocal;
+            $daysToOverrun = 0;
+        }
+
+        return ['series' => $out, 'overrun_date' => $overrunDate, 'days_to_overrun' => $daysToOverrun];
+    }
+
+    /**
+     * @return array<int, array<string,mixed>>
+     */
+    protected function forecastSprints(int $organizationId, string $phpTz, string $todayLocal): array
+    {
+        $sprints = $this->db->table('sprints')
+            ->where('organization_id', $organizationId)
+            ->where('end_date >=', $todayLocal)
+            ->orderBy('end_date', 'ASC')
+            ->limit(8)
+            ->get()
+            ->getResultArray();
+
+        $out = [];
+        foreach ($sprints as $sprint) {
+            $projectId = !empty($sprint['project_id']) ? (int) $sprint['project_id'] : null;
+
+            $estimated = 0.0;
+            if ($projectId) {
+                $estimated = (float) $this->db->table('tasks')
+                    ->select('COALESCE(SUM(estimated_hours),0) as est', false)
+                    ->where('project_id', $projectId)
+                    ->where('is_active', 1)
+                    ->get()
+                    ->getRowArray()['est'];
+            }
+
+            [$startUtc, $endUtc] = $this->timezoneService->dateRangeUtc($sprint['start_date'], $sprint['end_date'], $phpTz);
+            $loggedBuilder = $this->db->table('time_entries')
+                ->select('COALESCE(SUM(duration_seconds),0)/3600 as hours', false)
+                ->where('organization_id', $organizationId)
+                ->where('started_at >=', $startUtc)
+                ->where('started_at <=', $endUtc);
+            if ($projectId) {
+                $loggedBuilder->where('project_id', $projectId);
+            }
+            $logged = (float) $loggedBuilder->get()->getRowArray()['hours'];
+
+            $today = new \DateTime($todayLocal, new \DateTimeZone($phpTz));
+            $endDate = new \DateTime($sprint['end_date'], new \DateTimeZone($phpTz));
+            $startDate = new \DateTime($sprint['start_date'], new \DateTimeZone($phpTz));
+            $daysLeft = max(0, (int) $today->diff($endDate)->format('%r%a'));
+            $elapsedDays = max(1, (int) $startDate->diff($today)->format('%r%a') + 1);
+
+            $remaining = max(0, $estimated - $logged);
+            $recentDaily = $logged / $elapsedDays;
+            $requiredDaily = $daysLeft > 0 ? $remaining / $daysLeft : $remaining;
+
+            $missProbability = null;
+            $risk = 'none';
+            if ($estimated > 0) {
+                if ($remaining <= 0) {
+                    $missProbability = 0.0;
+                    $risk = 'none';
+                } elseif ($recentDaily <= 0) {
+                    $missProbability = 0.9;
+                    $risk = 'high';
+                } else {
+                    $ratio = $requiredDaily / $recentDaily; // >1 means need to speed up
+                    $missProbability = round(max(0, min(1, ($ratio - 0.8) / 1.2)), 2);
+                    $risk = $missProbability >= 0.66 ? 'high' : ($missProbability >= 0.33 ? 'medium' : 'low');
+                }
+            }
+
+            $out[] = [
+                'sprint_id'        => (int) $sprint['id'],
+                'name'             => $sprint['name'],
+                'start_date'       => $sprint['start_date'],
+                'end_date'         => $sprint['end_date'],
+                'days_left'        => $daysLeft,
+                'estimated_hours'  => round($estimated, 2),
+                'logged_hours'     => round($logged, 2),
+                'remaining_hours'  => round($remaining, 2),
+                'recent_daily'     => round($recentDaily, 2),
+                'required_daily'   => round($requiredDaily, 2),
+                'miss_probability' => $missProbability,
+                'risk'             => $risk,
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Optional AI narrative grounded strictly in the computed forecast numbers.
+     *
+     * @param array<int,array<string,mixed>> $projects
+     * @param array<int,array<string,mixed>> $sprints
+     * @return array<string,mixed>
+     */
+    protected function forecastNarrative(int $organizationId, array $projects, array $sprints): array
+    {
+        $status = (new AiService())->statusFor($organizationId);
+        if (empty($status['enabled'])) {
+            return ['enabled' => false, 'narrative' => null, 'model' => null, 'source' => null];
+        }
+
+        $atRiskProjects = array_values(array_filter($projects, fn ($p) => $p['risk'] !== 'none'));
+        $atRiskSprints = array_values(array_filter($sprints, fn ($s) => in_array($s['risk'], ['medium', 'high'], true)));
+
+        if ($atRiskProjects === [] && $atRiskSprints === []) {
+            return [
+                'enabled'   => true,
+                'narrative' => 'No budget-overrun or deadline-miss risks detected in the forecast window. Current pace is sustainable.',
+                'model'     => $status['model'] ?? null,
+                'source'    => $status['source'] ?? null,
+            ];
+        }
+
+        $payload = [
+            'projects' => array_map(fn ($p) => [
+                'name'                => $p['project_name'],
+                'budget_hours'        => $p['budget_hours'],
+                'logged_hours'        => $p['logged_hours'],
+                'daily_burn_rate'     => $p['daily_burn_rate'],
+                'utilization_percent' => $p['utilization_percent'],
+                'projected_overrun'   => $p['projected_overrun_date'],
+                'days_to_overrun'     => $p['days_to_overrun'],
+                'risk'                => $p['risk'],
+            ], array_slice($atRiskProjects, 0, 10)),
+            'sprints' => array_map(fn ($s) => [
+                'name'             => $s['name'],
+                'end_date'         => $s['end_date'],
+                'days_left'        => $s['days_left'],
+                'remaining_hours'  => $s['remaining_hours'],
+                'required_daily'   => $s['required_daily'],
+                'recent_daily'     => $s['recent_daily'],
+                'miss_probability' => $s['miss_probability'],
+                'risk'             => $s['risk'],
+            ], array_slice($atRiskSprints, 0, 10)),
+        ];
+
+        $system = <<<SYS
+You are FlowTrack's delivery-forecasting analyst. You are given ALREADY-COMPUTED
+forecast numbers (budget burn rates, projected overrun dates, sprint pace vs the
+pace required to hit the deadline). Do not invent numbers; only interpret the
+data provided.
+
+Write a concise executive briefing (max ~140 words) that:
+- Calls out the projects most likely to overrun budget and roughly when.
+- Flags sprints at risk of missing their deadline and what daily pace is needed.
+- Gives 1-2 concrete, actionable recommendations (rescope, reassign, extend).
+Use plain text with short lines. No JSON, no headings.
+SYS;
+
+        try {
+            $narrative = (new AiService())->chatForOrg($organizationId, [
+                ['role' => 'system', 'content' => $system],
+                ['role' => 'user', 'content' => json_encode($payload, JSON_UNESCAPED_SLASHES)],
+            ], ['temperature' => 0.3, 'max_tokens' => 400]);
+        } catch (\Throwable $e) {
+            return ['enabled' => true, 'narrative' => null, 'model' => $status['model'] ?? null, 'source' => $status['source'] ?? null, 'error' => 'AI narrative unavailable.'];
+        }
+
+        return [
+            'enabled'   => true,
+            'narrative' => trim($narrative),
+            'model'     => $status['model'] ?? null,
+            'source'    => $status['source'] ?? null,
+        ];
+    }
+
     public function listSprints(int $organizationId): array
     {
         return $this->db->table('sprints')

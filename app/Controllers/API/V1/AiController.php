@@ -99,6 +99,50 @@ class AiController extends ResourceController
     }
 
     /**
+     * GET /api/v1/ai/autopilot?date=YYYY-MM-DD
+     * Reconstructs a full draft timesheet for the current user's own day.
+     */
+    public function autopilot()
+    {
+        try {
+            [$orgId, $userId] = $this->requireContext();
+
+            $date = (string) ($this->request->getGet('date') ?? '');
+            if ($date === '' || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+                $date = date('Y-m-d');
+            }
+
+            $result = (new AiCategorizationService())->autopilot($orgId, $userId, $date);
+            return $this->respond(['success' => true, 'data' => $result]);
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+
+    /**
+     * POST /api/v1/ai/autopilot/apply
+     * Body: { entries: [{ suggestion_id?, project_id?, description, started_at, ended_at, is_billable? }] }
+     * Bulk-creates the accepted blocks as (ledgered) time entries.
+     */
+    public function applyAutopilot()
+    {
+        try {
+            [$orgId, $userId] = $this->requireContext();
+
+            $body = $this->request->getJSON(true) ?? [];
+            $entries = $body['entries'] ?? [];
+            if (!is_array($entries) || $entries === []) {
+                return $this->fail('No entries to apply.', 400);
+            }
+
+            $result = (new AiCategorizationService())->applyAutopilot($orgId, $userId, $entries);
+            return $this->respond(['success' => true, 'data' => $result]);
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+
+    /**
      * GET /api/v1/ai/standup?date=YYYY-MM-DD&user_id=123
      * Own standup by default; managers (reports.view_team) may target a member.
      */

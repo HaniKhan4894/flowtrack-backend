@@ -66,6 +66,32 @@ class OAuth extends BaseConfig
                 'scope'             => 'read:jira-work read:jira-user write:jira-work offline_access',
                 'integration_scope' => 'read:jira-work read:jira-user write:jira-work offline_access',
             ],
+            // Google Calendar. Falls back to the Google login app credentials so
+            // teams don't have to register a second OAuth app (just add the
+            // /api/v1/auth/google_calendar/callback redirect URI in Google Cloud).
+            'google_calendar' => [
+                'client_id'      => (string) (env('GOOGLE_CALENDAR_CLIENT_ID') ?: env('GOOGLE_CLIENT_ID') ?: ''),
+                'client_secret'  => (string) (env('GOOGLE_CALENDAR_CLIENT_SECRET') ?: env('GOOGLE_CLIENT_SECRET') ?: ''),
+                'redirect_uri'   => $this->resolveRedirectUri('GOOGLE_CALENDAR_REDIRECT_URI', 'google_calendar'),
+                'authorize_url'  => 'https://accounts.google.com/o/oauth2/v2/auth',
+                'token_url'      => 'https://oauth2.googleapis.com/token',
+                'userinfo_url'   => 'https://www.googleapis.com/oauth2/v3/userinfo',
+                'api_base'       => 'https://www.googleapis.com/calendar/v3',
+                'scope'             => 'openid email https://www.googleapis.com/auth/calendar.readonly',
+                'integration_scope' => 'openid email https://www.googleapis.com/auth/calendar.readonly',
+            ],
+            // Microsoft 365 / Outlook Calendar via Microsoft Graph.
+            'microsoft' => [
+                'client_id'      => (string) (env('MICROSOFT_CLIENT_ID') ?: ''),
+                'client_secret'  => (string) (env('MICROSOFT_CLIENT_SECRET') ?: ''),
+                'redirect_uri'   => $this->resolveRedirectUri('MICROSOFT_REDIRECT_URI', 'microsoft'),
+                'authorize_url'  => 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
+                'token_url'      => 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
+                'userinfo_url'   => 'https://graph.microsoft.com/v1.0/me',
+                'api_base'       => 'https://graph.microsoft.com/v1.0',
+                'scope'             => 'offline_access openid email User.Read Calendars.Read',
+                'integration_scope' => 'offline_access openid email User.Read Calendars.Read',
+            ],
         ];
     }
 

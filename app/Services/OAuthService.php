@@ -84,7 +84,7 @@ class OAuthService
             'state'         => $state,
         ];
 
-        if ($provider === 'google') {
+        if ($provider === 'google' || $provider === 'google_calendar') {
             $params['access_type'] = 'offline';
             $params['prompt'] = 'consent';
         }
@@ -110,9 +110,127 @@ class OAuthService
                 return $this->completeSlack($code);
             case 'jira':
                 return $this->completeJira($code);
+            case 'google_calendar':
+                return $this->completeGoogleCalendar($code);
+            case 'microsoft':
+                return $this->completeMicrosoft($code);
             default:
                 return $this->completeProfileProvider($provider, $code);
         }
+    }
+
+    /**
+     * Google Calendar: OAuth code exchange (with refresh token) + email lookup.
+     */
+    private function completeGoogleCalendar(string $code): array
+    {
+        $cfg = $this->requireProvider('google_calendar');
+        $token = $this->exchangeCodeForTokenBody('google_calendar', $code, false);
+
+        $access = (string) ($token['access_token'] ?? '');
+        $expiresIn = (int) ($token['expires_in'] ?? 3600);
+
+        $email = null;
+        $name = null;
+        try {
+            $client = \Config\Services::curlrequest(['timeout' => 20, 'http_errors' => false]);
+            $resp = $client->get($cfg['userinfo_url'], ['headers' => ['Authorization' => 'Bearer ' . $access]]);
+            $info = json_decode((string) $resp->getBody(), true);
+            if (is_array($info)) {
+                $email = $info['email'] ?? null;
+                $name = $info['name'] ?? null;
+            }
+        } catch (\Throwable $e) {
+            // Non-fatal.
+        }
+
+        return [
+            'external_account_id' => (string) ($email ?? ''),
+            'account_name'        => (string) ($name ?? $email ?? 'Google Calendar'),
+            'secrets'             => array_filter([
+                'access_token'  => $access,
+                'refresh_token' => $token['refresh_token'] ?? null,
+            ], fn ($v) => $v !== null && $v !== ''),
+            'settings'            => array_filter([
+                'account_email' => $email,
+                'account_name'  => $name ?? $email,
+                'expires_at'    => date('Y-m-d H:i:s', time() + $expiresIn),
+            ], fn ($v) => $v !== null),
+        ];
+    }
+
+    /**
+     * Microsoft 365 / Outlook: OAuth code exchange (with refresh token) + /me.
+     */
+    private function completeMicrosoft(string $code): array
+    {
+        $cfg = $this->requireProvider('microsoft');
+        $token = $this->exchangeCodeForTokenBody('microsoft', $code, false);
+
+        $access = (string) ($token['access_token'] ?? '');
+        $expiresIn = (int) ($token['expires_in'] ?? 3600);
+
+        $email = null;
+        $name = null;
+        $id = null;
+        try {
+            $client = \Config\Services::curlrequest(['timeout' => 20, 'http_errors' => false]);
+            $resp = $client->get($cfg['userinfo_url'], ['headers' => ['Authorization' => 'Bearer ' . $access]]);
+            $info = json_decode((string) $resp->getBody(), true);
+            if (is_array($info)) {
+                $email = $info['mail'] ?? $info['userPrincipalName'] ?? null;
+                $name = $info['displayName'] ?? null;
+                $id = $info['id'] ?? null;
+            }
+        } catch (\Throwable $e) {
+            // Non-fatal.
+        }
+
+        return [
+            'external_account_id' => (string) ($id ?? $email ?? ''),
+            'account_name'        => (string) ($name ?? $email ?? 'Outlook Calendar'),
+            'secrets'             => array_filter([
+                'access_token'  => $access,
+                'refresh_token' => $token['refresh_token'] ?? null,
+            ], fn ($v) => $v !== null && $v !== ''),
+            'settings'            => array_filter([
+                'account_email' => $email,
+                'account_name'  => $name ?? $email,
+                'expires_at'    => date('Y-m-d H:i:s', time() + $expiresIn),
+            ], fn ($v) => $v !== null),
+        ];
+    }
+
+    /**
+     * Exchange the code and return the FULL decoded token body (access +
+     * refresh + expiry). Used by providers that need the refresh token.
+     *
+     * @return array<string,mixed>
+     */
+    private function exchangeCodeForTokenBody(string $provider, string $code, bool $json = false): array
+    {
+        $cfg = $this->requireProvider($provider);
+        $client = \Config\Services::curlrequest(['timeout' => 20, 'http_errors' => false]);
+
+        $params = [
+            'client_id'     => $cfg['client_id'],
+            'client_secret' => $cfg['client_secret'],
+            'code'          => $code,
+            'redirect_uri'  => $cfg['redirect_uri'],
+            'grant_type'    => 'authorization_code',
+        ];
+
+        $response = $json
+            ? $client->post($cfg['token_url'], ['headers' => ['Accept' => 'application/json', 'Content-Type' => 'application/json'], 'body' => json_encode($params)])
+            : $client->post($cfg['token_url'], ['headers' => ['Accept' => 'application/json'], 'form_params' => $params]);
+
+        $body = json_decode((string) $response->getBody(), true);
+        if (!is_array($body) || empty($body['access_token'])) {
+            $error = is_array($body) ? ($body['error_description'] ?? $body['error'] ?? null) : null;
+            throw new \RuntimeException('Failed to obtain ' . $provider . ' access token' . ($error ? ': ' . $error : '.'));
+        }
+
+        return $body;
     }
 
     /**

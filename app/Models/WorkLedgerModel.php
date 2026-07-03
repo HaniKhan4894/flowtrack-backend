@@ -15,6 +15,7 @@ class WorkLedgerModel extends Model
     protected $allowedFields    = [
         'organization_id', 'user_id', 'sequence', 'entry_type', 'action',
         'reference_id', 'payload_hash', 'prev_hash', 'hash', 'created_at',
+        'integrity_score', 'integrity_flags',
     ];
 
     protected $useTimestamps = false;

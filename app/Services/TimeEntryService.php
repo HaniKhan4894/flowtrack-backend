@@ -168,6 +168,7 @@ class TimeEntryService
         }
 
         $this->recordToLedger((int) $entry['organization_id'], $userId, $entryId, 'record');
+        $this->emitEntryEvent('time_entry.completed', (int) $entry['organization_id'], $entry);
 
         return $entry;
     }
@@ -326,6 +327,7 @@ class TimeEntryService
 
             $entry = $this->formatTimeEntry($this->timeEntryModel->find($entryId));
             $this->recordToLedger($organizationId, $userId, $entryId, 'record');
+            $this->emitEntryEvent('time_entry.completed', $organizationId, $entry);
 
             return $entry;
 
@@ -382,7 +384,10 @@ class TimeEntryService
             }
         }
 
-        return $this->formatTimeEntry($this->timeEntryModel->find($entryId));
+        $updated = $this->formatTimeEntry($this->timeEntryModel->find($entryId));
+        $this->emitEntryEvent('time_entry.updated', $organizationId, $updated);
+
+        return $updated;
     }
 
     public function deleteEntry(int $entryId, int $actorUserId, int $organizationId): bool
@@ -400,6 +405,7 @@ class TimeEntryService
 
         // Record the deletion in the ledger *before* the row disappears.
         $this->recordToLedger($organizationId, (int) $entry['user_id'], $entryId, 'delete');
+        $this->emitEntryEvent('time_entry.deleted', $organizationId, $entry);
 
         return $this->timeEntryModel->delete($entryId);
     }
@@ -413,6 +419,37 @@ class TimeEntryService
             (new LedgerService())->appendTimeEntry($organizationId, $userId, $entryId, $action);
         } catch (\Throwable $e) {
             log_message('error', 'Ledger append failed: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Emit a time-entry domain event to webhooks + automations (best-effort).
+     */
+    private function emitEntryEvent(string $event, int $organizationId, array $entry): void
+    {
+        try {
+            $userId = (int) ($entry['user_id'] ?? 0);
+            $userName = 'A team member';
+            if ($userId > 0) {
+                $u = $this->db->table('users')->select('first_name, last_name')->where('id', $userId)->get()->getRowArray();
+                if ($u) {
+                    $userName = trim(($u['first_name'] ?? '') . ' ' . ($u['last_name'] ?? '')) ?: $userName;
+                }
+            }
+
+            EventBus::emit($organizationId, $event, [
+                'entry_id'         => (int) ($entry['id'] ?? 0),
+                'user_id'          => $userId,
+                'user_name'        => $userName,
+                'project_id'       => $entry['project_id'] ?? null,
+                'project_name'     => $entry['project_name'] ?? null,
+                'description'      => $entry['description'] ?? null,
+                'duration_seconds' => (int) ($entry['duration_seconds'] ?? 0),
+                'hours'            => round(((int) ($entry['duration_seconds'] ?? 0)) / 3600, 2),
+                'is_billable'      => (bool) ($entry['is_billable'] ?? false),
+            ]);
+        } catch (\Throwable $e) {
+            log_message('error', 'Event emit failed: ' . $e->getMessage());
         }
     }
 

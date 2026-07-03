@@ -56,6 +56,54 @@ export interface DeliveryRisk {
   open_tasks?: number;
 }
 
+export type RiskLevel = 'none' | 'low' | 'medium' | 'high';
+
+export interface ForecastSeriesPoint {
+  date: string;
+  actual: number | null;
+  projected: number | null;
+  budget: number | null;
+}
+
+export interface ForecastProject {
+  project_id: number;
+  project_name: string;
+  color: string | null;
+  budget_hours: number;
+  logged_hours: number;
+  daily_burn_rate: number;
+  trend_per_day: number;
+  utilization_percent: number | null;
+  projected_overrun_date: string | null;
+  days_to_overrun: number | null;
+  risk: RiskLevel;
+  series: ForecastSeriesPoint[];
+}
+
+export interface ForecastSprint {
+  sprint_id: number;
+  name: string;
+  start_date: string;
+  end_date: string;
+  days_left: number;
+  estimated_hours: number;
+  logged_hours: number;
+  remaining_hours: number;
+  recent_daily: number;
+  required_daily: number;
+  miss_probability: number | null;
+  risk: RiskLevel;
+}
+
+export interface Forecast {
+  generated_at: string;
+  history_days: number;
+  horizon_days: number;
+  projects: ForecastProject[];
+  sprints: ForecastSprint[];
+  ai: { enabled: boolean; narrative: string | null; model: string | null; source: string | null; error?: string };
+}
+
 export type UnusualActivityTier = 'highly_unusual' | 'unusual' | 'slightly_unusual';
 
 export interface UnusualActivityInstance {
@@ -121,6 +169,11 @@ export const insightsService = {
 
   getDeliveryRisks: async () => {
     const res = await client.get<{ data: { project_risks: DeliveryRisk[]; capacity: { team_size: number; weekly_hours_logged: number; expected_weekly_capacity: number; utilization_percent: number; forecast: string } } }>('/insights/delivery-risks');
+    return res.data;
+  },
+
+  getForecast: async (params?: { history_days?: number; horizon_days?: number }) => {
+    const res = await client.get<{ data: Forecast }>('/insights/forecast', { params });
     return res.data;
   },
 

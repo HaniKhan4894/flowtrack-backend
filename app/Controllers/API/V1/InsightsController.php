@@ -104,6 +104,23 @@ class InsightsController extends ResourceController
         }
     }
 
+    public function forecast()
+    {
+        try {
+            [$orgId, $userId] = $this->requireContext();
+            if ($response = $this->requireTeamReports($orgId, $userId)) {
+                return $response;
+            }
+
+            $historyDays = (int) ($this->request->getGet('history_days') ?? 30);
+            $horizonDays = (int) ($this->request->getGet('horizon_days') ?? 30);
+            $data = $this->insightsService->getForecast($orgId, $historyDays, $horizonDays);
+            return $this->respond(['success' => true, 'data' => $data]);
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+
     public function sprints()
     {
         try {

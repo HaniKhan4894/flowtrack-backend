@@ -44,24 +44,152 @@ class ProofOfWorkService
 
         $org = $this->db->table('organizations')->select('name')->where('id', $organizationId)->get()->getRowArray();
 
+        $summary = [
+            'tracked_hours' => $trackedHours,
+            'billed_hours' => round($billedHours, 2),
+            'time_entry_count' => count($entries),
+            'screenshot_count' => (int) $this->countScreenshots($entryIds),
+            'contributor_count' => count($contributors),
+        ];
+
+        $certificate = $this->buildCertificate(
+            $organizationId,
+            $org['name'] ?? 'Your team',
+            $period,
+            $summary,
+            $entryIds,
+            (float) $integrity['score'],
+            $portalToken
+        );
+
         return [
             'available' => $trackedSeconds > 0 || $billedHours > 0,
             'organization_name' => $org['name'] ?? 'Your team',
             'period' => $period,
-            'summary' => [
-                'tracked_hours' => $trackedHours,
-                'billed_hours' => round($billedHours, 2),
-                'time_entry_count' => count($entries),
-                'screenshot_count' => (int) $this->countScreenshots($entryIds),
-                'contributor_count' => count($contributors),
-            ],
+            'summary' => $summary,
             'integrity' => $integrity,
             'productivity' => $activityStats['by_category'],
             'top_apps' => $activityStats['top_apps'],
             'contributors' => $contributors,
             'screenshots' => $screenshots,
             'highlights' => $this->buildHighlights($integrity, $activityStats, $trackedHours, $billedHours),
+            'certificate' => $certificate,
         ];
+    }
+
+    /**
+     * Build a portable, cryptographically-signed "Verified Work Certificate".
+     *
+     * The certificate binds the org, period, tracked totals, work-integrity
+     * grade and the current proof-of-work ledger state, then HMAC-signs the
+     * canonical payload. Anyone can re-verify the signature (and, server-side,
+     * the live ledger) without logging in — see ClientPortalController.
+     *
+     * @param array{start_date:string,end_date:string,label:string} $period
+     * @param array<string,mixed> $summary
+     * @param array<int,int> $entryIds
+     * @return array<string,mixed>
+     */
+    public function buildCertificate(
+        int $organizationId,
+        string $organizationName,
+        array $period,
+        array $summary,
+        array $entryIds,
+        float $integrityScore,
+        string $portalToken
+    ): array {
+        $ledger = new LedgerService();
+        $ledgerSummary = $ledger->summary($organizationId);
+        $verification = $ledger->verify($organizationId);
+        $workIntegrity = (new WorkIntegrityService())->scoreForEntries($entryIds);
+
+        $payload = [
+            'certificate_id'   => strtoupper(substr(hash('sha256', $portalToken . ':' . $organizationId), 0, 20)),
+            'issuer'           => 'FlowTrack',
+            'organization'     => $organizationName,
+            'period'           => $period['label'] ?? '',
+            'tracked_hours'    => (float) ($summary['tracked_hours'] ?? 0),
+            'billed_hours'     => (float) ($summary['billed_hours'] ?? 0),
+            'time_entries'     => (int) ($summary['time_entry_count'] ?? 0),
+            'integrity_score'  => round($integrityScore, 1),
+            'work_integrity'   => [
+                'score' => $workIntegrity['score'],
+                'grade' => $workIntegrity['grade'],
+                'flags' => $workIntegrity['flags'],
+            ],
+            'ledger'           => [
+                'records'     => (int) $ledgerSummary['records'],
+                'last_hash'    => $ledgerSummary['last_hash'],
+                'chain_valid'  => (bool) $verification['chain_valid'],
+                'data_valid'   => (bool) $verification['data_valid'],
+            ],
+            'issued_at'        => gmdate('c'),
+        ];
+
+        $payload['signature'] = $this->sign($payload);
+        $payload['algorithm'] = 'HMAC-SHA256';
+
+        return $payload;
+    }
+
+    /**
+     * Re-verify a certificate's signature (integrity of the document itself).
+     *
+     * @param array<string,mixed> $certificate
+     */
+    public function verifyCertificateSignature(array $certificate): bool
+    {
+        $provided = (string) ($certificate['signature'] ?? '');
+        if ($provided === '') {
+            return false;
+        }
+        unset($certificate['signature'], $certificate['algorithm']);
+        $expected = $this->sign($certificate);
+
+        return hash_equals($expected, $provided);
+    }
+
+    /**
+     * Deterministic HMAC signature over the canonical (recursively key-sorted)
+     * certificate payload.
+     *
+     * @param array<string,mixed> $payload
+     */
+    private function sign(array $payload): string
+    {
+        return hash_hmac('sha256', $this->canonical($payload), $this->signingKey());
+    }
+
+    /**
+     * @param mixed $value
+     */
+    private function canonical($value): string
+    {
+        if (is_array($value)) {
+            if (array_keys($value) !== range(0, count($value) - 1)) {
+                ksort($value);
+            }
+            $parts = [];
+            foreach ($value as $k => $v) {
+                $parts[] = json_encode((string) $k) . ':' . $this->canonical($v);
+            }
+            return '{' . implode(',', $parts) . '}';
+        }
+        return json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    }
+
+    private function signingKey(): string
+    {
+        $secret = (string) (
+            env('AI_ENCRYPTION_KEY')
+            ?: env('JWT_SECRET_KEY')
+            ?: ($_ENV['JWT_SECRET_KEY'] ?? '')
+        );
+        if ($secret === '') {
+            $secret = 'flowtrack-fallback-signing-key';
+        }
+        return hash('sha256', 'certificate:' . $secret, true);
     }
 
     public function canAccessScreenshot(string $token, int $screenshotId): ?array

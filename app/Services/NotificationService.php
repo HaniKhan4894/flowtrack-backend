@@ -54,6 +54,22 @@ class NotificationService
             ->getResultArray();
     }
 
+    /**
+     * Notifications newer than a given id (ascending) — used by the SSE stream.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function getNotificationsAfter(int $userId, int $afterId, int $limit = 20): array
+    {
+        return $this->notificationModel->builder()
+            ->where('user_id', $userId)
+            ->where('id >', $afterId)
+            ->orderBy('id', 'ASC')
+            ->limit($limit)
+            ->get()
+            ->getResultArray();
+    }
+
     public function markAsRead(int $notificationId, int $userId): bool
     {
         return $this->notificationModel
