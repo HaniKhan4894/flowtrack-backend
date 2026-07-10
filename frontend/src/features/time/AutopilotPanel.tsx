@@ -103,8 +103,8 @@ const AutopilotPanel = ({ projects, onLogged }: Props) => {
     : 0;
 
   return (
-    <div className="glass rounded-3xl border border-primary-500/20 shadow-ai overflow-hidden xl:col-span-2">
-      <div className="p-6 border-b border-white/5 bg-gradient-to-r from-primary-500/10 to-transparent flex flex-wrap items-center justify-between gap-3">
+    <div className="glass rounded-2xl border border-white/5 shadow-ai overflow-hidden">
+      <div className="p-4 border-b border-white/5 bg-gradient-to-r from-primary-500/10 to-transparent flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-xl bg-primary-500/20 flex items-center justify-center text-primary-300">
             <Sparkles size={20} />
@@ -138,7 +138,7 @@ const AutopilotPanel = ({ projects, onLogged }: Props) => {
         </div>
       </div>
 
-      <div className="p-6 space-y-3 min-h-[120px]">
+      <div className="p-4 space-y-3">
         {error && <p className="text-rose-400 text-sm">{error}</p>}
         {appliedCount !== null && (
           <div className="flex items-center gap-2 text-emerald-400 text-sm font-semibold">

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { User, Building, Bell, Shield, Cloud, Save, Camera, Loader2, CheckCircle2, Lock, CreditCard, ExternalLink, Gauge, Users, Plus, X, Pencil, Trash2, Activity, FileCheck, Sparkles, MapPin, Plug, KeyRound } from 'lucide-react';
+import { User, Building, Bell, Shield, Cloud, Save, Camera, Loader2, CheckCircle2, Lock, CreditCard, ExternalLink, Gauge, Users, Plus, X, Pencil, Trash2, Activity, FileCheck, Sparkles, MapPin, KeyRound } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import client from '../../api/client';
@@ -16,14 +16,13 @@ import { formatApiDate } from '../../utils/date';
 import { productivityRuleService } from '../../api/productivityRuleService';
 import { roleService } from '../../api/roleService';
 import { notificationPreferenceService } from '../../api/notificationPreferenceService';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import type { Country, State, City, TimezoneOption, ProductivityRule, Role, Permission, NotificationPreference } from '../../types';
 import { SearchableSelect } from '../../components/ui';
 import { ActivityTrackingSettingsTab } from './ActivityTrackingSettingsTab';
 import { TimesheetPolicySettingsTab } from './TimesheetPolicySettingsTab';
 import { SmartNotificationsSettingsTab } from './SmartNotificationsSettingsTab';
 import { OfficeLocationsSettingsTab } from './OfficeLocationsSettingsTab';
-import IntegrationsSettings from './IntegrationsSettings';
 import DeveloperSettings from './DeveloperSettings';
 
 const CURRENCY_OPTIONS = [
@@ -48,10 +47,13 @@ function mergeSelectedCity(
 }
 
 const SettingsPage = () => {
+  const navigate = useNavigate();
   const { user, setUser } = useAuthStore();
   const [activeTab, setActiveTab] = useState(() => {
     if (typeof window === 'undefined') return 'profile';
-    return new URLSearchParams(window.location.search).get('tab') || 'profile';
+    const tab = new URLSearchParams(window.location.search).get('tab');
+    if (tab === 'integrations') return 'profile';
+    return tab || 'profile';
   });
   const [isSaving, setIsSaving] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
@@ -149,7 +151,6 @@ const SettingsPage = () => {
       { id: 'smart-notifications', label: 'Smart Notifications', icon: Sparkles },
       { id: 'office-locations', label: 'Remote vs Office', icon: MapPin },
       { id: 'roles-permissions', label: 'Roles & Permissions', icon: Users },
-      { id: 'integrations', label: 'Integrations', icon: Plug },
       { id: 'developer', label: 'Developer', icon: KeyRound },
     ] : []),
     { id: 'notifications', label: 'Notifications', icon: Bell },
@@ -162,6 +163,13 @@ const SettingsPage = () => {
       setActiveTab('profile');
     }
   }, [activeTab, tabs]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('tab') === 'integrations') {
+      navigate('/integrations', { replace: true });
+    }
+  }, [navigate]);
 
   const loadOrg = useCallback(async () => {
     if (!user?.organization_id || !canViewOrg) return;
@@ -1213,7 +1221,6 @@ const SettingsPage = () => {
             <OfficeLocationsSettingsTab organizationId={user.organization_id} />
           )}
 
-          {activeTab === 'integrations' && <IntegrationsSettings />}
 
           {activeTab === 'developer' && <DeveloperSettings />}
 

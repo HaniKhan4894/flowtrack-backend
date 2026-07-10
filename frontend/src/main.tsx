@@ -33,6 +33,10 @@ import DailyStandupPage from './features/standup/DailyStandupPage'
 import WellbeingPage from './features/wellbeing/WellbeingPage'
 import ProofOfWorkPage from './features/proof/ProofOfWorkPage'
 import ClientPortalPage from './features/portal/ClientPortalPage'
+import IntegrationsPage from './features/integrations/IntegrationsPage'
+import JiraHubPage from './features/integrations/JiraHubPage'
+import GitHubHubPage from './features/integrations/GitHubHubPage'
+import SlackHubPage from './features/integrations/SlackHubPage'
 
 import { Shell } from './layouts/Shell'
 import { useAuthStore } from './store/authStore'
@@ -75,7 +79,10 @@ const MemberTrackingRoute = ({ children }: { children: React.ReactNode }) => {
 };
 
 const RoleRoute = ({ path, children }: { path: string; children: React.ReactNode }) => {
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, user, sessionReady } = useAuthStore();
+  if (!sessionReady) {
+    return <AuthBootLoader />;
+  }
   if (!isAuthenticated) return <Navigate to="/login" />;
   if (!canAccessPath(user, path)) return <Navigate to="/app" replace />;
   return <Shell>{children}</Shell>;
@@ -135,6 +142,10 @@ createRoot(document.getElementById('root')!).render(
         <Route path="/team/member/:userId" element={<MemberTrackingRoute><MemberTrackingPage /></MemberTrackingRoute>} />
         <Route path="/team/member/:userId/advanced-monitoring" element={<MemberTrackingRoute><AdvancedMonitoringReportPage /></MemberTrackingRoute>} />
         <Route path="/settings" element={<RoleRoute path="/settings"><SettingsPage /></RoleRoute>} />
+        <Route path="/integrations" element={<RoleRoute path="/integrations"><IntegrationsPage /></RoleRoute>} />
+        <Route path="/integrations/jira" element={<ProtectedRoute><JiraHubPage /></ProtectedRoute>} />
+        <Route path="/integrations/github" element={<ProtectedRoute><GitHubHubPage /></ProtectedRoute>} />
+        <Route path="/integrations/slack" element={<ProtectedRoute><SlackHubPage /></ProtectedRoute>} />
         <Route path="/analytics" element={<RoleRoute path="/analytics"><AnalyticsPage /></RoleRoute>} />
         <Route path="/insights" element={<RoleRoute path="/insights"><InsightsPage /></RoleRoute>} />
         <Route path="/standup" element={<RoleRoute path="/standup"><DailyStandupPage /></RoleRoute>} />

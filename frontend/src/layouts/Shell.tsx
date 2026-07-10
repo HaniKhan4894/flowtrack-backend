@@ -22,7 +22,9 @@ import { isDesktopForeground } from '../utils/desktopLifecycle';
 
 const SidebarItem = ({ icon: Icon, label, path, isCollapsed }: any) => {
   const location = useLocation();
-  const isActive = location.pathname === path;
+  const isActive =
+    location.pathname === path ||
+    (path !== '/app' && path !== '/time' && location.pathname.startsWith(`${path}/`));
 
   return (
     <Link to={path}>
@@ -195,6 +197,7 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
           <div className="flex items-center gap-4 text-slate-400">
             <h2 className="text-xl font-semibold text-white">
               {navItems.find(item => item.path === location.pathname)?.label
+                || (location.pathname.startsWith('/integrations') ? 'Integrations' : null)
                 || (location.pathname.startsWith('/invoices/') ? 'Invoice Detail' : null)
                 || (location.pathname === '/timesheets' ? 'Timesheets' : null)
                 || (location.pathname === '/settings' ? 'Settings' : null)

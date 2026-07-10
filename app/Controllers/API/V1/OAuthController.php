@@ -117,8 +117,7 @@ class OAuthController extends ResourceController
 
         return $this->redirectToFrontend([
             'connected' => $provider,
-            'tab'       => 'integrations',
-        ], '/settings');
+        ], '/integrations');
     }
 
     private function redirectToFrontend(array $params, string $path = '/login')

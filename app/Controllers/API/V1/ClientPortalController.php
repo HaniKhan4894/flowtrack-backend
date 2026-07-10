@@ -8,6 +8,7 @@ use App\Services\ProofOfWorkService;
 use App\Services\ScreenshotService;
 use CodeIgniter\RESTful\ResourceController;
 
+
 class ClientPortalController extends ResourceController
 {
     protected ClientPortalService $portalService;

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Sparkles, Loader2, CheckCircle2, Trash2, Eye, EyeOff, Github, Slack, Trello, Send, CalendarDays, MessageSquare } from 'lucide-react';
 import { integrationsService, type Integration } from '../../api/integrationsService';
 import { slackService } from '../../api/slackService';
@@ -16,7 +17,7 @@ const emptyIntegration = (provider: string, auth_type: 'api_key' | 'oauth'): Int
   settings: {},
 });
 
-const IntegrationsSettings = () => {
+const IntegrationsSettings = ({ hideHeader = false }: { hideHeader?: boolean }) => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -214,19 +215,25 @@ const IntegrationsSettings = () => {
   const jiraUrl = jira.settings?.site_url as string | undefined;
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-bold text-white">Integrations</h2>
-        <p className="text-slate-400 mt-1 text-sm">
-          Connect third-party services to your organization. Credentials are encrypted and used only for your team.
-        </p>
-      </div>
+    <div className="space-y-8">
+      {!hideHeader && (
+        <div>
+          <h2 className="text-xl font-bold text-white">Integrations</h2>
+          <p className="text-slate-400 mt-1 text-sm">
+            Connect third-party services to your organization. Credentials are encrypted and used only for your team.
+          </p>
+        </div>
+      )}
 
       {error && <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">{error}</div>}
       {success && <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm">{success}</div>}
 
+      {/* AI */}
+      <section>
+        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3">AI & Intelligence</h3>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
       {/* OpenAI (API key) */}
-      <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+      <div className="rounded-2xl border border-violet-500/20 bg-gradient-to-br from-violet-500/5 to-transparent p-5 h-full flex flex-col">
         <div className="flex items-center gap-3">
           <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-ai-gradient shadow-ai">
             <Sparkles className="w-5 h-5 text-white" />
@@ -307,9 +314,15 @@ const IntegrationsSettings = () => {
           </div>
         </div>
       </div>
+        </div>
+      </section>
 
+      {/* Development */}
+      <section>
+        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3">Development</h3>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
       {/* GitHub (OAuth) */}
-      <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+      <div className="rounded-2xl border border-white/10 bg-gradient-to-br from-white/5 to-transparent p-5 h-full flex flex-col">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-white/10">
@@ -365,8 +378,69 @@ const IntegrationsSettings = () => {
         </div>
       </div>
 
+      {/* Jira (OAuth) */}
+      <div className="rounded-2xl border border-[#0052CC]/20 bg-gradient-to-br from-[#0052CC]/5 to-transparent p-5 h-full flex flex-col">
+        <div className="flex items-center gap-3">
+          <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-[#0052CC]">
+            <Trello className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h3 className="text-white font-semibold flex items-center gap-2">
+              Jira
+              {jira.connected && (
+                <span className="inline-flex items-center gap-1 text-xs text-emerald-400">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Connected
+                </span>
+              )}
+            </h3>
+            <p className="text-xs text-slate-400">
+              {jira.connected
+                ? `Connected to ${jiraAccount ?? jiraUrl ?? 'your Jira site'}`
+                : 'Manage issues, transitions, comments & worklogs in FlowTrack.'}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3 mt-auto pt-5">
+          {jira.connected ? (
+            <>
+              <button
+                onClick={() => connectOAuth('jira')}
+                disabled={connecting === 'jira'}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-white/10 text-white text-sm hover:bg-white/20 disabled:opacity-50 transition"
+              >
+                {connecting === 'jira' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trello className="w-4 h-4" />}
+                Reconnect
+              </button>
+              <button
+                onClick={() => disconnect('jira')}
+                disabled={saving}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-white/5 text-red-400 text-sm hover:bg-white/10 transition"
+              >
+                <Trash2 className="w-4 h-4" /> Disconnect
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => connectOAuth('jira')}
+              disabled={connecting === 'jira'}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#0052CC] text-white text-sm font-medium hover:opacity-90 disabled:opacity-50 transition"
+            >
+              {connecting === 'jira' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trello className="w-4 h-4" />}
+              Connect with Jira
+            </button>
+          )}
+        </div>
+      </div>
+        </div>
+      </section>
+
+      {/* Messaging */}
+      <section>
+        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3">Messaging</h3>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
       {/* Slack (OAuth) */}
-      <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+      <div className="rounded-2xl border border-[#4A154B]/30 bg-gradient-to-br from-[#4A154B]/10 to-transparent p-5 h-full flex flex-col">
         <div className="flex items-center gap-3">
           <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-[#4A154B]">
             <Slack className="w-5 h-5 text-white" />
@@ -388,7 +462,15 @@ const IntegrationsSettings = () => {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 mt-5">
+        <div className="flex flex-wrap items-center gap-3 mt-auto pt-5">
+          {slack.connected && (
+            <Link
+              to="/integrations/slack"
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#4A154B]/30 border border-[#4A154B]/40 text-white text-sm font-medium hover:bg-[#4A154B]/50 transition"
+            >
+              <Slack className="w-4 h-4" /> Open workspace
+            </Link>
+          )}
           {slack.connected ? (
             <>
               <button
@@ -454,7 +536,7 @@ const IntegrationsSettings = () => {
       </div>
 
       {/* Microsoft Teams (incoming webhook) */}
-      <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+      <div className="rounded-2xl border border-[#4B53BC]/30 bg-gradient-to-br from-[#4B53BC]/10 to-transparent p-5 h-full flex flex-col">
         <div className="flex items-center gap-3">
           <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-[#4B53BC]">
             <MessageSquare className="w-5 h-5 text-white" />
@@ -516,64 +598,15 @@ const IntegrationsSettings = () => {
           </div>
         </div>
       </div>
-
-      {/* Jira (OAuth) */}
-      <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
-        <div className="flex items-center gap-3">
-          <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-[#0052CC]">
-            <Trello className="w-5 h-5 text-white" />
-          </div>
-          <div>
-            <h3 className="text-white font-semibold flex items-center gap-2">
-              Jira
-              {jira.connected && (
-                <span className="inline-flex items-center gap-1 text-xs text-emerald-400">
-                  <CheckCircle2 className="w-3.5 h-3.5" /> Connected
-                </span>
-              )}
-            </h3>
-            <p className="text-xs text-slate-400">
-              {jira.connected
-                ? `Connected to ${jiraAccount ?? jiraUrl ?? 'your Jira site'}`
-                : 'Log time against Jira issues and push worklogs back to Jira.'}
-            </p>
-          </div>
         </div>
+      </section>
 
-        <div className="flex flex-wrap items-center gap-3 mt-5">
-          {jira.connected ? (
-            <>
-              <button
-                onClick={() => connectOAuth('jira')}
-                disabled={connecting === 'jira'}
-                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-white/10 text-white text-sm hover:bg-white/20 disabled:opacity-50 transition"
-              >
-                {connecting === 'jira' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trello className="w-4 h-4" />}
-                Reconnect
-              </button>
-              <button
-                onClick={() => disconnect('jira')}
-                disabled={saving}
-                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-white/5 text-red-400 text-sm hover:bg-white/10 transition"
-              >
-                <Trash2 className="w-4 h-4" /> Disconnect
-              </button>
-            </>
-          ) : (
-            <button
-              onClick={() => connectOAuth('jira')}
-              disabled={connecting === 'jira'}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#0052CC] text-white text-sm font-medium hover:opacity-90 disabled:opacity-50 transition"
-            >
-              {connecting === 'jira' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trello className="w-4 h-4" />}
-              Connect with Jira
-            </button>
-          )}
-        </div>
-      </div>
-
+      {/* Calendar */}
+      <section>
+        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3">Calendar</h3>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
       {/* Google Calendar (OAuth) */}
-      <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+      <div className="rounded-2xl border border-[#1a73e8]/30 bg-gradient-to-br from-[#1a73e8]/10 to-transparent p-5 h-full flex flex-col">
         <div className="flex items-center gap-3">
           <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-[#1a73e8]">
             <CalendarDays className="w-5 h-5 text-white" />
@@ -628,7 +661,7 @@ const IntegrationsSettings = () => {
       </div>
 
       {/* Outlook / Microsoft 365 Calendar (OAuth) */}
-      <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+      <div className="rounded-2xl border border-[#0078D4]/30 bg-gradient-to-br from-[#0078D4]/10 to-transparent p-5 h-full flex flex-col">
         <div className="flex items-center gap-3">
           <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-[#0078D4]">
             <CalendarDays className="w-5 h-5 text-white" />
@@ -681,6 +714,8 @@ const IntegrationsSettings = () => {
           )}
         </div>
       </div>
+        </div>
+      </section>
     </div>
   );
 };

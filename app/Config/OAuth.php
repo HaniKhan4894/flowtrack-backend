@@ -50,9 +50,9 @@ class OAuth extends BaseConfig
                 'redirect_uri'   => $this->resolveRedirectUri('SLACK_REDIRECT_URI', 'slack'),
                 'authorize_url'  => 'https://slack.com/oauth/v2/authorize',
                 'token_url'      => 'https://slack.com/api/oauth.v2.access',
-                // Bot scopes: post messages + receive an incoming webhook to a channel.
+                // Bot scopes: post + read channels/messages for in-app workspace.
                 'scope'             => 'incoming-webhook,chat:write',
-                'integration_scope' => 'incoming-webhook,chat:write',
+                'integration_scope' => 'incoming-webhook,chat:write,channels:read,channels:history,groups:read,groups:history,users:read',
             ],
             'jira' => [
                 'client_id'      => (string) (env('JIRA_CLIENT_ID') ?: ''),

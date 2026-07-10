@@ -40,8 +40,11 @@ class GithubController extends ResourceController
 
             $days = (int) ($this->request->getGet('days') ?? 7);
             $days = max(1, min(30, $days));
+            $prPage = max(1, (int) ($this->request->getGet('pr_page') ?? 1));
+            $commitPage = max(1, (int) ($this->request->getGet('commit_page') ?? 1));
+            $perPage = max(1, min(50, (int) ($this->request->getGet('per_page') ?? 20)));
 
-            $result = $this->github->recentActivity($orgId, $days);
+            $result = $this->github->recentActivity($orgId, $days, $prPage, $commitPage, $perPage);
             $result['connected'] = true;
 
             return $this->respond(['success' => true, 'data' => $result]);
@@ -104,6 +107,94 @@ class GithubController extends ResourceController
             ]);
 
             return $this->respondCreated(['success' => true, 'data' => $entry]);
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+
+    /**
+     * GET /api/v1/integrations/github/repos
+     */
+    public function repos()
+    {
+        try {
+            $orgId = $this->orgId();
+            if (!$this->github->isConnected($orgId)) {
+                return $this->respond(['success' => true, 'data' => ['connected' => false, 'repos' => []]]);
+            }
+            $max = (int) ($this->request->getGet('max') ?? 30);
+            return $this->respond([
+                'success' => true,
+                'data' => ['connected' => true, 'repos' => $this->github->listRepos($orgId, $max)],
+            ]);
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+
+    /**
+     * GET /api/v1/integrations/github/pulls/(:segment)/(:segment)/(:num)
+     */
+    public function pullRequest(string $owner, string $repo, int $number)
+    {
+        try {
+            $orgId = $this->orgId();
+            if (!$this->github->isConnected($orgId)) {
+                return $this->fail('GitHub is not connected.', 400);
+            }
+            return $this->respond([
+                'success' => true,
+                'data' => $this->github->getPullRequest($orgId, $owner, $repo, $number),
+            ]);
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+
+    /**
+     * POST /api/v1/integrations/github/pulls/(:segment)/(:segment)/(:num)/comment
+     */
+    public function pullComment(string $owner, string $repo, int $number)
+    {
+        try {
+            $orgId = $this->orgId();
+            $body = $this->request->getJSON(true) ?? [];
+            $text = trim((string) ($body['body'] ?? ''));
+            if ($text === '') {
+                return $this->fail('Comment body is required.', 400);
+            }
+            $comment = $this->github->addPullRequestComment($orgId, $owner, $repo, $number, $text);
+            return $this->respondCreated(['success' => true, 'data' => $comment]);
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+
+    /**
+     * POST /api/v1/integrations/github/pulls/(:segment)/(:segment)/(:num)/merge
+     */
+    public function pullMerge(string $owner, string $repo, int $number)
+    {
+        try {
+            $orgId = $this->orgId();
+            $result = $this->github->mergePullRequest($orgId, $owner, $repo, $number);
+            return $this->respond(['success' => true, 'data' => $result]);
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+
+    /**
+     * POST /api/v1/integrations/github/pulls/(:segment)/(:segment)/(:num)/state
+     */
+    public function pullState(string $owner, string $repo, int $number)
+    {
+        try {
+            $orgId = $this->orgId();
+            $body = $this->request->getJSON(true) ?? [];
+            $state = trim((string) ($body['state'] ?? 'closed'));
+            $result = $this->github->updatePullRequest($orgId, $owner, $repo, $number, $state);
+            return $this->respond(['success' => true, 'data' => $result]);
         } catch (\Exception $e) {
             return $this->fail($e->getMessage(), 400);
         }

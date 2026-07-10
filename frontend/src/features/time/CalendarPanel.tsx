@@ -63,8 +63,8 @@ const CalendarPanel = ({ projects, onLogged }: Props) => {
   };
 
   return (
-    <div className="glass rounded-3xl border border-white/5 shadow-ai overflow-hidden">
-      <div className="p-6 border-b border-white/5 bg-white/[0.02] flex items-center justify-between gap-3">
+    <div className="glass rounded-2xl border border-white/5 shadow-ai overflow-hidden h-full flex flex-col">
+      <div className="p-4 border-b border-white/5 bg-white/[0.02] flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-xl bg-[#1a73e8]/20 flex items-center justify-center text-[#8ab4f8]">
             <CalendarDays size={20} />
@@ -95,7 +95,7 @@ const CalendarPanel = ({ projects, onLogged }: Props) => {
         </div>
       </div>
 
-      <div className="p-6 space-y-3 min-h-[120px]">
+      <div className="p-4 space-y-3 flex-1">
         {error && <p className="text-rose-400 text-sm">{error}</p>}
 
         {loading ? (
@@ -105,8 +105,8 @@ const CalendarPanel = ({ projects, onLogged }: Props) => {
         ) : data && !data.connected ? (
           <div className="text-sm text-slate-400">
             No calendar connected yet.{' '}
-            <Link to="/settings?tab=integrations" className="text-primary-400 font-bold hover:underline">
-              Connect Google or Outlook in Settings → Integrations
+            <Link to="/integrations" className="text-primary-400 font-bold hover:underline">
+              Connect Google or Outlook in Integrations
             </Link>{' '}
             to log meetings automatically.
           </div>

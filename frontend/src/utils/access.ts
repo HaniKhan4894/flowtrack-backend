@@ -19,6 +19,7 @@ import {
   MessageSquare,
   HeartPulse,
   FileCheck,
+  Plug,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -68,6 +69,7 @@ const ALL_NAV_ITEMS: NavItem[] = [
     showIf: (user) => canViewTeam(user),
   },
   { icon: CreditCard, label: 'Billing', path: '/billing', permission: 'settings.billing' },
+  { icon: Plug, label: 'Integrations', path: '/integrations', showIf: (user) => canManageIntegrations(user) },
 ];
 
 export const SETTINGS_NAV_ITEM: NavItem = { icon: Settings, label: 'Settings', path: '/settings', permission: 'settings.view' };
@@ -91,10 +93,20 @@ const PATH_PERMISSIONS: Record<string, string | string[]> = {
   '/wellbeing': ['reports.view_own', 'reports.view_team'],
   '/proof-of-work': 'reports.view_team',
   '/billing': 'settings.billing',
+  '/integrations': '__integrations__',
+  '/integrations/jira': [],
+  '/integrations/github': [],
+  '/integrations/slack': [],
   '/settings': [],
   '/admin': '__super_admin__',
   '/team/member': ['time.view_team', 'screenshots.view_team', 'activity.view_team'],
 };
+
+export function canManageIntegrations(user: User | null | undefined): boolean {
+  if (!user) return false;
+  if (isOrgAdmin(user)) return true;
+  return hasPermission(user, 'settings.edit');
+}
 
 export function isOrgAdmin(user: User | null | undefined): boolean {
   if (!user) return false;
@@ -149,6 +161,7 @@ export function canAccessPath(user: User | null | undefined, path: string): bool
   if (rule === '__super_admin__') return isSuperAdmin(user);
   if (rule === '__team_nav__') return canViewTeam(user);
   if (rule === '__screenshots__') return canAccessScreenshotsPage(user);
+  if (rule === '__integrations__') return canManageIntegrations(user);
   return hasPermission(user, rule);
 }
 

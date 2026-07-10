@@ -296,14 +296,27 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\API\V1'], function ($r
         $routes->get('/', 'IntegrationController::index', ['filter' => 'permission:settings.view']);
         // GitHub developer activity (available to any authenticated member).
         $routes->get('github/activity', 'GithubController::activity');
+        $routes->get('github/repos', 'GithubController::repos');
+        $routes->get('github/pulls/(:segment)/(:segment)/(:num)', 'GithubController::pullRequest/$1/$2/$3');
+        $routes->post('github/pulls/(:segment)/(:segment)/(:num)/comment', 'GithubController::pullComment/$1/$2/$3');
+        $routes->post('github/pulls/(:segment)/(:segment)/(:num)/merge', 'GithubController::pullMerge/$1/$2/$3');
+        $routes->post('github/pulls/(:segment)/(:segment)/(:num)/state', 'GithubController::pullState/$1/$2/$3');
         $routes->post('github/log-time', 'GithubController::logTime');
-        // Slack messaging.
+        // Slack messaging + in-app workspace.
+        $routes->get('slack/meta', 'SlackController::meta');
+        $routes->get('slack/channels/(:segment)/messages', 'SlackController::messages/$1');
+        $routes->post('slack/channels/(:segment)/message', 'SlackController::channelMessage/$1');
+        $routes->get('slack/channels', 'SlackController::channels');
         $routes->post('slack/test', 'SlackController::test');
         $routes->post('slack/send', 'SlackController::send');
         // Microsoft Teams messaging (Phase 12).
         $routes->post('teams/test', 'TeamsController::test');
         $routes->post('teams/send', 'TeamsController::send');
-        // Jira issues → tracked time.
+        // Jira issues → tracked time + in-app workspace.
+        $routes->get('jira/issues/(:segment)/transitions', 'JiraController::transitions/$1');
+        $routes->post('jira/issues/(:segment)/transition', 'JiraController::transition/$1');
+        $routes->post('jira/issues/(:segment)/comment', 'JiraController::comment/$1');
+        $routes->get('jira/issues/(:segment)', 'JiraController::issue/$1');
         $routes->get('jira/issues', 'JiraController::issues');
         $routes->post('jira/log-time', 'JiraController::logTime');
         // Calendar (Google / Outlook) meetings → tracked time.
