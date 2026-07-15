@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Wallet, Plus, Users, DollarSign, CheckCircle2, Clock, Loader2, X } from 'lucide-react';
-import { Button } from '../../components/ui';
+import { Wallet, Plus, Users, DollarSign, CheckCircle2, Clock, Loader2 } from 'lucide-react';
+import { Button, Modal } from '../../components/ui';
 import { payrollService } from '../../api/payrollService';
 import { teamService } from '../../api/teamService';
 import { useAuthStore } from '../../store/authStore';
@@ -310,50 +310,42 @@ const PayrollPage = () => {
         </div>
       )}
 
-      {showCreateRun && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="modal-panel w-full max-w-md p-6 space-y-4">
-            <div className="flex justify-between items-center">
-              <h3 className="text-xl font-bold text-white">New Payroll Run</h3>
-              <button onClick={() => setShowCreateRun(false)} className="text-slate-400 hover:text-white"><X size={20} /></button>
-            </div>
-            <form onSubmit={handleCreateRun} className="space-y-4">
-              <div>
-                <label className="text-xs text-slate-500 uppercase font-bold">Title (optional)</label>
-                <input
-                  className="w-full h-12 mt-1 bg-[#12141C] border border-white/10 rounded-xl px-4 text-white"
-                  value={runForm.title}
-                  onChange={(e) => setRunForm((p) => ({ ...p, title: e.target.value }))}
-                  placeholder="June 2026 Payroll"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs text-slate-500 uppercase font-bold">Period Start</label>
-                  <input
-                    type="date"
-                    required
-                    className="w-full h-12 mt-1 bg-[#12141C] border border-white/10 rounded-xl px-4 text-white"
-                    value={runForm.period_start}
-                    onChange={(e) => setRunForm((p) => ({ ...p, period_start: e.target.value }))}
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-slate-500 uppercase font-bold">Period End</label>
-                  <input
-                    type="date"
-                    required
-                    className="w-full h-12 mt-1 bg-[#12141C] border border-white/10 rounded-xl px-4 text-white"
-                    value={runForm.period_end}
-                    onChange={(e) => setRunForm((p) => ({ ...p, period_end: e.target.value }))}
-                  />
-                </div>
-              </div>
-              <Button type="submit" isLoading={creating} className="w-full">Create Run</Button>
-            </form>
+      <Modal open={showCreateRun} onClose={() => setShowCreateRun(false)} title="New Payroll Run" size="sm">
+        <form onSubmit={handleCreateRun} className="space-y-4">
+          <div>
+            <label className="text-xs text-slate-500 uppercase font-bold">Title (optional)</label>
+            <input
+              className="w-full h-12 mt-1 bg-[#12141C] border border-white/10 rounded-xl px-4 text-white"
+              value={runForm.title}
+              onChange={(e) => setRunForm((p) => ({ ...p, title: e.target.value }))}
+              placeholder="June 2026 Payroll"
+            />
           </div>
-        </div>
-      )}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs text-slate-500 uppercase font-bold">Period Start</label>
+              <input
+                type="date"
+                required
+                className="w-full h-12 mt-1 bg-[#12141C] border border-white/10 rounded-xl px-4 text-white"
+                value={runForm.period_start}
+                onChange={(e) => setRunForm((p) => ({ ...p, period_start: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 uppercase font-bold">Period End</label>
+              <input
+                type="date"
+                required
+                className="w-full h-12 mt-1 bg-[#12141C] border border-white/10 rounded-xl px-4 text-white"
+                value={runForm.period_end}
+                onChange={(e) => setRunForm((p) => ({ ...p, period_end: e.target.value }))}
+              />
+            </div>
+          </div>
+          <Button type="submit" isLoading={creating} className="w-full">Create Run</Button>
+        </form>
+      </Modal>
     </div>
   );
 };

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { User, Building, Bell, Shield, Cloud, Save, Camera, Loader2, CheckCircle2, Lock, CreditCard, ExternalLink, Gauge, Users, Plus, X, Pencil, Trash2, Activity, FileCheck, Sparkles, MapPin, KeyRound } from 'lucide-react';
+import { User, Building, Bell, Shield, Cloud, Save, Camera, Loader2, CheckCircle2, Lock, CreditCard, ExternalLink, Gauge, Users, Plus, Pencil, Trash2, Activity, FileCheck, Sparkles, MapPin, KeyRound } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import client from '../../api/client';
@@ -18,7 +18,7 @@ import { roleService } from '../../api/roleService';
 import { notificationPreferenceService } from '../../api/notificationPreferenceService';
 import { Link, useNavigate } from 'react-router-dom';
 import type { Country, State, City, TimezoneOption, ProductivityRule, Role, Permission, NotificationPreference } from '../../types';
-import { SearchableSelect } from '../../components/ui';
+import { Modal, SearchableSelect } from '../../components/ui';
 import { ActivityTrackingSettingsTab } from './ActivityTrackingSettingsTab';
 import { TimesheetPolicySettingsTab } from './TimesheetPolicySettingsTab';
 import { SmartNotificationsSettingsTab } from './SmartNotificationsSettingsTab';
@@ -1333,11 +1333,9 @@ const SettingsPage = () => {
               )}
 
               {/* Rename role modal */}
-              {renameModal && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 modal-overlay">
-                  <button type="button" aria-label="Close" className="absolute inset-0" onClick={() => setRenameModal(null)} />
-                  <div className="relative z-10 w-full max-w-sm modal-panel p-6 space-y-4">
-                    <h4 className="text-lg font-bold text-white">Rename role</h4>
+              <Modal open={!!renameModal} onClose={() => setRenameModal(null)} title="Rename role" size="sm">
+                {renameModal && (
+                  <div className="space-y-4">
                     <input
                       autoFocus
                       value={renameModal.name}
@@ -1361,8 +1359,8 @@ const SettingsPage = () => {
                       </button>
                     </div>
                   </div>
-                </div>
-              )}
+                )}
+              </Modal>
             </div>
           )}
 
@@ -1473,35 +1471,34 @@ const SettingsPage = () => {
         </div>
       </div>
 
-      {showRuleModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <form onSubmit={handleSaveRule} className="w-full max-w-md glass border border-white/10 rounded-3xl p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-bold text-white">{editingRule ? 'Edit rule' : 'New rule'}</h3>
-              <button type="button" onClick={() => setShowRuleModal(false)} className="text-slate-500 hover:text-white"><X size={20} /></button>
-            </div>
-            <select value={ruleForm.rule_type} onChange={(e) => setRuleForm((f) => ({ ...f, rule_type: e.target.value as ProductivityRule['rule_type'] }))} className="form-select w-full">
-              <option value="app">App</option>
-              <option value="url">URL</option>
-              <option value="keyword">Keyword</option>
-            </select>
-            <input value={ruleForm.pattern} onChange={(e) => setRuleForm((f) => ({ ...f, pattern: e.target.value }))} placeholder="Pattern" required className={inputClass} />
-            <select value={ruleForm.category} onChange={(e) => setRuleForm((f) => ({ ...f, category: e.target.value as ProductivityRule['category'] }))} className="form-select w-full">
-              <option value="productive">Productive</option>
-              <option value="unproductive">Unproductive</option>
-              <option value="neutral">Neutral</option>
-            </select>
-            <label className="flex items-center gap-2 text-sm text-slate-300">
-              <input type="checkbox" checked={ruleForm.is_active} onChange={(e) => setRuleForm((f) => ({ ...f, is_active: e.target.checked }))} />
-              Active
-            </label>
-            <button type="submit" disabled={isSaving} className="w-full flex items-center justify-center gap-2 bg-ai-gradient text-white py-3 rounded-xl font-bold disabled:opacity-50">
-              {isSaving ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
-              Save rule
-            </button>
-          </form>
-        </div>
-      )}
+      <Modal
+        open={showRuleModal}
+        onClose={() => setShowRuleModal(false)}
+        title={editingRule ? 'Edit rule' : 'New rule'}
+        size="sm"
+      >
+        <form onSubmit={handleSaveRule} className="space-y-4">
+          <select value={ruleForm.rule_type} onChange={(e) => setRuleForm((f) => ({ ...f, rule_type: e.target.value as ProductivityRule['rule_type'] }))} className="form-select w-full">
+            <option value="app">App</option>
+            <option value="url">URL</option>
+            <option value="keyword">Keyword</option>
+          </select>
+          <input value={ruleForm.pattern} onChange={(e) => setRuleForm((f) => ({ ...f, pattern: e.target.value }))} placeholder="Pattern" required className={inputClass} />
+          <select value={ruleForm.category} onChange={(e) => setRuleForm((f) => ({ ...f, category: e.target.value as ProductivityRule['category'] }))} className="form-select w-full">
+            <option value="productive">Productive</option>
+            <option value="unproductive">Unproductive</option>
+            <option value="neutral">Neutral</option>
+          </select>
+          <label className="flex items-center gap-2 text-sm text-slate-300">
+            <input type="checkbox" checked={ruleForm.is_active} onChange={(e) => setRuleForm((f) => ({ ...f, is_active: e.target.checked }))} />
+            Active
+          </label>
+          <button type="submit" disabled={isSaving} className="w-full flex items-center justify-center gap-2 bg-ai-gradient text-white py-3 rounded-xl font-bold disabled:opacity-50">
+            {isSaving ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
+            Save rule
+          </button>
+        </form>
+      </Modal>
     </div>
   );
 };

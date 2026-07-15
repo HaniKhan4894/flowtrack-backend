@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { UserPlus, Mail, Shield, Trash2, Search, Filter, X, Loader2, CheckCircle2, SlidersHorizontal, UsersRound, Target, Pencil, ShieldAlert, Info, ExternalLink } from 'lucide-react';
+import { UserPlus, Mail, Shield, Trash2, Search, Filter, Loader2, CheckCircle2, SlidersHorizontal, UsersRound, Target, Pencil, ShieldAlert, Info, ExternalLink } from 'lucide-react';
 import { teamService, type TeamMember, type TeamGroup } from '../../api/teamService';
 import type { AdvancedMonitoringStatus } from '../../api/advancedMonitoringService';
 import { reportService } from '../../api/reportService';
 import { billingService, type SubscriptionUsage } from '../../api/billingService';
-import { Button, Input } from '../../components/ui';
+import { Button, Input, Modal } from '../../components/ui';
 import { useAuthStore } from '../../store/authStore';
 import { canManageTeam, canViewMemberTracking, hasPermission } from '../../utils/access';
 import { Link } from 'react-router-dom';
@@ -396,7 +396,7 @@ const TeamPage = () => {
                       <div className="w-10 h-10 rounded-xl bg-ai-gradient flex items-center justify-center text-white font-bold ring-2 ring-white/10 transition-transform group-hover:scale-110">
                         {member.first_name[0]}{member.last_name[0]}
                       </div>
-                      <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-[#12141C] ${activeUserIds.has(member.user_id ?? member.id) ? 'bg-emerald-400' : 'bg-slate-600'}`} title={activeUserIds.has(member.user_id ?? member.id) ? 'Working now' : 'Offline'} />
+                      <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-surface-900 ${activeUserIds.has(member.user_id ?? member.id) ? 'bg-emerald-400' : 'bg-slate-600'}`} title={activeUserIds.has(member.user_id ?? member.id) ? 'Working now' : 'Offline'} />
                     </div>
                     <div>
                       <div className="font-semibold text-white group-hover:text-primary-400 transition-colors uppercase tracking-tight">{member.first_name} {member.last_name}</div>
@@ -519,419 +519,347 @@ const TeamPage = () => {
       </div>
 
       {/* Invite Member Modal */}
-      <AnimatePresence>
-        {showInviteModal && (
-          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setShowInviteModal(false)}
-              className="absolute inset-0 bg-black/80"
+      <Modal open={showInviteModal} onClose={() => setShowInviteModal(false)} title="Invite Team Member">
+        <form onSubmit={handleInvite} className="space-y-6">
+          {inviteError && (
+            <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+              {inviteError}
+            </div>
+          )}
+          <div className="space-y-2">
+            <label className="text-sm font-bold text-slate-400 uppercase tracking-wider ml-1">Email Address</label>
+            <Input 
+              type="email"
+              value={inviteEmail}
+              onChange={(e) => setInviteEmail(e.target.value)}
+              placeholder="e.g. colleague@company.com" 
+              required 
             />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative w-full max-w-lg modal-panel p-8 z-10"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between mb-8">
-                <h2 className="text-2xl font-bold text-white">Invite Team Member</h2>
-                <button onClick={() => setShowInviteModal(false)} className="text-slate-500 hover:text-white">
-                  <X size={24} />
-                </button>
-              </div>
-
-              <form onSubmit={handleInvite} className="space-y-6">
-                {inviteError && (
-                  <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
-                    {inviteError}
-                  </div>
-                )}
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-slate-400 uppercase tracking-wider ml-1">Email Address</label>
-                  <Input 
-                    type="email"
-                    value={inviteEmail}
-                    onChange={(e) => setInviteEmail(e.target.value)}
-                    placeholder="e.g. colleague@company.com" 
-                    required 
-                  />
-                </div>
-
-                <div className="space-y-4">
-                  <label className="text-sm font-bold text-slate-400 uppercase tracking-wider ml-1 flex items-center gap-2">
-                    <Shield size={16} /> Assign Role
-                  </label>
-                  <div className="grid grid-cols-2 gap-4">
-                    {['member', 'team_lead', 'manager', 'admin'].map((role) => (
-                      <button
-                        key={role}
-                        type="button"
-                        onClick={() => setInviteRole(role)}
-                        className={`p-4 rounded-2xl border transition-all text-left ${inviteRole === role ? 'bg-primary-500/10 border-primary-500/50 text-white' : 'bg-white/5 border-white/10 text-slate-400 hover:bg-white/10'}`}
-                      >
-                        <div className="font-bold capitalize mb-1">{role.replace('_', ' ')}</div>
-                        <div className="text-[10px] uppercase opacity-60">
-                          {role === 'admin' ? 'Full org access' : role === 'manager' ? 'Team management' : role === 'team_lead' ? 'Team visibility' : 'Own tracking only'}
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="pt-4 flex gap-4">
-                  <Button variant="secondary" type="button" className="flex-1" onClick={() => setShowInviteModal(false)}>
-                    Cancel
-                  </Button>
-                  <Button type="submit" className="flex-1" isLoading={isInviting}>
-                    Send Invitation
-                  </Button>
-                </div>
-              </form>
-            </motion.div>
           </div>
-        )}
-      </AnimatePresence>
+
+          <div className="space-y-4">
+            <label className="text-sm font-bold text-slate-400 uppercase tracking-wider ml-1 flex items-center gap-2">
+              <Shield size={16} /> Assign Role
+            </label>
+            <div className="grid grid-cols-2 gap-4">
+              {['member', 'team_lead', 'manager', 'admin'].map((role) => (
+                <button
+                  key={role}
+                  type="button"
+                  onClick={() => setInviteRole(role)}
+                  className={`p-4 rounded-2xl border transition-all text-left ${inviteRole === role ? 'bg-primary-500/10 border-primary-500/50 text-white' : 'bg-white/5 border-white/10 text-slate-400 hover:bg-white/10'}`}
+                >
+                  <div className="font-bold capitalize mb-1">{role.replace('_', ' ')}</div>
+                  <div className="text-[10px] uppercase opacity-60">
+                    {role === 'admin' ? 'Full org access' : role === 'manager' ? 'Team management' : role === 'team_lead' ? 'Team visibility' : 'Own tracking only'}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="pt-4 flex gap-4">
+            <Button variant="secondary" type="button" className="flex-1" onClick={() => setShowInviteModal(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" className="flex-1" isLoading={isInviting}>
+              Send Invitation
+            </Button>
+          </div>
+        </form>
+      </Modal>
 
       {/* Invitation Link Modal */}
-      <AnimatePresence>
-        {showInvitationModal && (
-          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
-             <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setShowInvitationModal(false)}
-              className="absolute inset-0 bg-black/80"
-            />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative w-full max-w-lg modal-panel p-8 z-10"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between mb-8">
-                <h2 className="text-2xl font-bold text-white">Invitation Created</h2>
-                <button onClick={() => setShowInvitationModal(false)} className="text-slate-500 hover:text-white">
-                  <X size={24} />
-                </button>
-              </div>
-
-              <div className="space-y-6">
-                <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 p-4 rounded-xl flex items-start gap-3">
-                   <div className="mt-1"><CheckCircle2 size={18} /></div>
-                   <div>
-                       <p className="font-semibold">User Invited Successfully</p>
-                       <p className="text-sm opacity-80 mt-1">
-                           The user does not have an account yet. Share the link below with them to join your team.
-                       </p>
-                   </div>
-                </div>
-
-                <div className="space-y-2">
-                   <label className="text-sm font-bold text-slate-400 uppercase tracking-wider">Invitation Link</label>
-                   <div className="flex gap-2">
-                       <Input 
-                         readOnly 
-                         value={invitationLink} 
-                         className="bg-black/20"
-                       />
-                       <Button onClick={copyToClipboard}>
-                           Copy
-                       </Button>
-                   </div>
-                </div>
-
-                 <div className="pt-4 flex justify-end">
-                  <Button onClick={() => {
-                      setShowInvitationModal(false);
-                      setInviteEmail('');
-                      fetchMembers();
-                  }}>
-                    Done
-                  </Button>
-                </div>
-              </div>
-            </motion.div>
+      <Modal open={showInvitationModal} onClose={() => setShowInvitationModal(false)} title="Invitation Created">
+        <div className="space-y-6">
+          <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 p-4 rounded-xl flex items-start gap-3">
+             <div className="mt-1"><CheckCircle2 size={18} /></div>
+             <div>
+                 <p className="font-semibold">User Invited Successfully</p>
+                 <p className="text-sm opacity-80 mt-1">
+                     The user does not have an account yet. Share the link below with them to join your team.
+                 </p>
+             </div>
           </div>
-        )}
-      </AnimatePresence>
 
-      {/* Member Monitoring Modal */}
-      <AnimatePresence>
-        {monitorMember && monitorSettings && (
-          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => { setMonitorMember(null); setMonitorSettings(null); }}
-              className="absolute inset-0 bg-black/80"
-            />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative w-full max-w-xl modal-panel p-8 max-h-[90vh] overflow-y-auto z-10"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h2 className="text-2xl font-bold text-white">Monitoring Controls</h2>
-                  <p className="text-slate-400 text-sm mt-1">
-                    {monitorMember.first_name} {monitorMember.last_name}
-                  </p>
-                </div>
-                <button onClick={() => { setMonitorMember(null); setMonitorSettings(null); }} className="text-slate-500 hover:text-white">
-                  <X size={24} />
-                </button>
-              </div>
-
-              <div className="space-y-6">
-                <label className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/10 cursor-pointer">
-                  <div>
-                    <div className="font-semibold text-white">Time tracker</div>
-                    <div className="text-xs text-slate-500">Allow this member to start/stop the timer</div>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={monitorSettings.tracking_enabled}
-                    onChange={(e) => setMonitorSettings({ ...monitorSettings, tracking_enabled: e.target.checked })}
-                    className="w-5 h-5 accent-primary-500"
-                  />
-                </label>
-
-                <label className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/10 cursor-pointer">
-                  <div>
-                    <div className="font-semibold text-white">Screenshots enabled</div>
-                    <div className="text-xs text-slate-500">Master switch for screenshot capture</div>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={monitorSettings.screenshots_enabled}
-                    onChange={(e) => setMonitorSettings({ ...monitorSettings, screenshots_enabled: e.target.checked })}
-                    className="w-5 h-5 accent-primary-500"
-                  />
-                </label>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-slate-400 uppercase tracking-wider">Disable screenshots until</label>
-                  <Input
-                    type="datetime-local"
-                    value={monitorSettings.screenshot_disabled_until?.slice(0, 16) ?? ''}
-                    onChange={(e) => setMonitorSettings({
-                      ...monitorSettings,
-                      screenshot_disabled_until: e.target.value ? new Date(e.target.value).toISOString() : null,
-                    })}
-                  />
-                  <p className="text-xs text-slate-500">Screenshots stay off until this date/time passes.</p>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-bold text-slate-400 uppercase tracking-wider">Pause from</label>
-                    <Input
-                      type="datetime-local"
-                      value={monitorSettings.screenshot_disabled_from?.slice(0, 16) ?? ''}
-                      onChange={(e) => setMonitorSettings({
-                        ...monitorSettings,
-                        screenshot_disabled_from: e.target.value ? new Date(e.target.value).toISOString() : null,
-                      })}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-bold text-slate-400 uppercase tracking-wider">Pause until</label>
-                    <Input
-                      type="datetime-local"
-                      value={monitorSettings.screenshot_disabled_to?.slice(0, 16) ?? ''}
-                      onChange={(e) => setMonitorSettings({
-                        ...monitorSettings,
-                        screenshot_disabled_to: e.target.value ? new Date(e.target.value).toISOString() : null,
-                      })}
-                    />
-                  </div>
-                </div>
-                <p className="text-xs text-slate-500">Use the window above to disable screenshots during a specific period (e.g. client meeting).</p>
-
-                {canManageAdvanced && advancedData && (
-                  <div className="rounded-2xl border border-rose-500/20 bg-rose-500/5 p-5 space-y-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <h3 className="font-bold text-white flex items-center gap-2">
-                          <ShieldAlert size={18} className="text-rose-400" />
-                          Advanced Monitoring
-                        </h3>
-                        <p className="text-xs text-slate-400 mt-1 flex items-start gap-1">
-                          <Info size={12} className="mt-0.5 shrink-0" />
-                          Intensifies screenshot capture and activity tracking for suspicious or low-activity members. Use when you need deeper visibility before taking action.
-                        </p>
-                      </div>
-                      {advancedData.active && (
-                        <Link
-                          to={`/team/member/${monitorMember.user_id ?? monitorMember.id}/advanced-monitoring`}
-                          className="text-xs font-bold text-primary-400 hover:underline flex items-center gap-1 shrink-0"
-                        >
-                          View report <ExternalLink size={12} />
-                        </Link>
-                      )}
-                    </div>
-
-                    {!advancedData.plan_available ? (
-                      <p className="text-sm text-amber-300">Upgrade to Professional or Enterprise to use advanced monitoring.</p>
-                    ) : advancedData.active ? (
-                      <div className="space-y-4">
-                        <div className="rounded-xl bg-black/20 border border-rose-500/20 p-4 text-sm text-rose-100">
-                          Active since {new Date(advancedData.active.started_at).toLocaleString()}
-                          {advancedData.active.reason ? ` · ${advancedData.active.reason}` : ''}
-                          <div className="text-xs text-rose-200/70 mt-1">
-                            Screenshot frequency: every {advancedData.active.screenshot_frequency_minutes} min (random within window)
-                          </div>
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-sm font-bold text-slate-400 uppercase tracking-wider">Review result summary</label>
-                          <textarea
-                            value={closeSummary}
-                            onChange={(e) => setCloseSummary(e.target.value)}
-                            rows={3}
-                            placeholder="Optional summary sent to the member if you notify them..."
-                            className="w-full bg-[#12141C] border border-white/10 rounded-xl px-4 py-3 text-white text-sm"
-                          />
-                        </div>
-                        <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
-                          <input type="checkbox" checked={closeNotify} onChange={(e) => setCloseNotify(e.target.checked)} className="accent-primary-500" />
-                          Notify member with result summary
-                        </label>
-                        <Button type="button" variant="secondary" className="w-full" isLoading={savingAdvanced} onClick={closeAdvancedMonitoring}>
-                          End advanced monitoring
-                        </Button>
-                      </div>
-                    ) : (
-                      <div className="space-y-4">
-                        <div className="space-y-2">
-                          <label className="text-sm font-bold text-slate-400 uppercase tracking-wider">Reason (internal note)</label>
-                          <textarea
-                            value={advancedReason}
-                            onChange={(e) => setAdvancedReason(e.target.value)}
-                            rows={2}
-                            placeholder="e.g. Low productivity, suspicious idle patterns..."
-                            className="w-full bg-[#12141C] border border-white/10 rounded-xl px-4 py-3 text-white text-sm"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-sm font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                            Screenshot frequency (minutes)
-                            <span title="Captures at a random time within each interval so the member cannot predict when the next screenshot is taken." className="text-slate-500 cursor-help">
-                              <Info size={14} />
-                            </span>
-                          </label>
-                          <input
-                            type="range"
-                            min={1}
-                            max={5}
-                            value={advancedFrequency}
-                            onChange={(e) => setAdvancedFrequency(Number(e.target.value))}
-                            className="w-full accent-rose-500"
-                          />
-                          <span className="text-sm text-slate-300">{advancedFrequency} min · random capture within window</span>
-                        </div>
-                        <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
-                          <input type="checkbox" checked={advancedNotify} onChange={(e) => setAdvancedNotify(e.target.checked)} className="accent-primary-500" />
-                          Notify member that advanced monitoring is enabled
-                        </label>
-                        <p className="text-[10px] text-slate-500">If checked, the member receives an in-app warning explaining that monitoring has been intensified.</p>
-                        <Button type="button" className="w-full bg-rose-600 hover:bg-rose-500" isLoading={savingAdvanced} onClick={enableAdvancedMonitoring}>
-                          Enable advanced monitoring
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              <div className="pt-6 flex gap-4">
-                <Button variant="secondary" type="button" className="flex-1" onClick={() => { setMonitorMember(null); setMonitorSettings(null); }}>
-                  Cancel
-                </Button>
-                <Button type="button" className="flex-1" isLoading={savingMonitoring} onClick={saveMonitoring}>
-                  Save Settings
-                </Button>
-              </div>
-            </motion.div>
+          <div className="space-y-2">
+             <label className="text-sm font-bold text-slate-400 uppercase tracking-wider">Invitation Link</label>
+             <div className="flex gap-2">
+                 <Input 
+                   readOnly 
+                   value={invitationLink} 
+                   className="bg-black/20"
+                 />
+                 <Button onClick={copyToClipboard}>
+                     Copy
+                 </Button>
+             </div>
           </div>
-        )}
-      </AnimatePresence>
 
-      {showTeamModal && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80">
-          <div className="modal-panel w-full max-w-lg p-8 space-y-4">
-            <div className="flex justify-between">
-              <h2 className="text-xl font-bold text-white">{editingTeam ? 'Edit Team' : 'Create Team'}</h2>
-              <button onClick={() => { setShowTeamModal(false); setEditingTeam(null); }}><X size={24} className="text-slate-500" /></button>
-            </div>
-            <Input value={teamForm.name} onChange={(e) => setTeamForm((p) => ({ ...p, name: e.target.value }))} placeholder="Team name" required />
-            <div className="space-y-2 max-h-48 overflow-y-auto">
-              <p className="text-xs text-slate-500 uppercase font-bold">Assign members</p>
-              {members.map((m) => {
-                const id = m.user_id;
-                if (!id) return null;
-                const checked = teamForm.member_ids.includes(id);
-                return (
-                  <label key={id} className="flex items-center gap-2 text-sm text-slate-300">
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => setTeamForm((p) => ({
-                        ...p,
-                        member_ids: checked ? p.member_ids.filter((x) => x !== id) : [...p.member_ids, id],
-                      }))}
-                    />
-                    {m.first_name} {m.last_name}
-                  </label>
-                );
-              })}
-            </div>
-            <Button
-              isLoading={savingTeam}
-              onClick={async () => {
-                setSavingTeam(true);
-                try {
-                  if (editingTeam) {
-                    await teamService.updateTeam(editingTeam.id, { name: teamForm.name });
-                    const currentIds = new Set(editingTeam.members.map((m) => m.user_id));
-                    const nextIds = new Set(teamForm.member_ids);
-                    for (const uid of teamForm.member_ids) {
-                      if (!currentIds.has(uid)) {
-                        await teamService.assignMembers(editingTeam.id, [uid]);
-                      }
-                    }
-                    for (const uid of editingTeam.members.map((m) => m.user_id)) {
-                      if (!nextIds.has(uid)) {
-                        await teamService.removeTeamMember(editingTeam.id, uid);
-                      }
-                    }
-                  } else {
-                    await teamService.createTeam({ name: teamForm.name, member_ids: teamForm.member_ids });
-                  }
-                  const r = await teamService.getTeams();
-                  setTeams(r.data ?? []);
-                  setShowTeamModal(false);
-                  setEditingTeam(null);
-                  setTeamForm({ name: '', member_ids: [] });
-                } catch (e) {
-                  console.error(e);
-                } finally {
-                  setSavingTeam(false);
-                }
-              }}
-            >
-              {editingTeam ? 'Save Team' : 'Create Team'}
+           <div className="pt-4 flex justify-end">
+            <Button onClick={() => {
+                setShowInvitationModal(false);
+                setInviteEmail('');
+                fetchMembers();
+            }}>
+              Done
             </Button>
           </div>
         </div>
-      )}
+      </Modal>
+
+      {/* Member Monitoring Modal */}
+      <Modal
+        open={!!(monitorMember && monitorSettings)}
+        onClose={() => { setMonitorMember(null); setMonitorSettings(null); }}
+        title="Monitoring Controls"
+        size="lg"
+      >
+        {monitorMember && monitorSettings && (
+          <>
+            <p className="text-slate-400 text-sm -mt-2 mb-6">
+              {monitorMember.first_name} {monitorMember.last_name}
+            </p>
+
+            <div className="space-y-6">
+              <label className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/10 cursor-pointer">
+                <div>
+                  <div className="font-semibold text-white">Time tracker</div>
+                  <div className="text-xs text-slate-500">Allow this member to start/stop the timer</div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={monitorSettings.tracking_enabled}
+                  onChange={(e) => setMonitorSettings({ ...monitorSettings, tracking_enabled: e.target.checked })}
+                  className="w-5 h-5 accent-primary-500"
+                />
+              </label>
+
+              <label className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/10 cursor-pointer">
+                <div>
+                  <div className="font-semibold text-white">Screenshots enabled</div>
+                  <div className="text-xs text-slate-500">Master switch for screenshot capture</div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={monitorSettings.screenshots_enabled}
+                  onChange={(e) => setMonitorSettings({ ...monitorSettings, screenshots_enabled: e.target.checked })}
+                  className="w-5 h-5 accent-primary-500"
+                />
+              </label>
+
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-400 uppercase tracking-wider">Disable screenshots until</label>
+                <Input
+                  type="datetime-local"
+                  value={monitorSettings.screenshot_disabled_until?.slice(0, 16) ?? ''}
+                  onChange={(e) => setMonitorSettings({
+                    ...monitorSettings,
+                    screenshot_disabled_until: e.target.value ? new Date(e.target.value).toISOString() : null,
+                  })}
+                />
+                <p className="text-xs text-slate-500">Screenshots stay off until this date/time passes.</p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-400 uppercase tracking-wider">Pause from</label>
+                  <Input
+                    type="datetime-local"
+                    value={monitorSettings.screenshot_disabled_from?.slice(0, 16) ?? ''}
+                    onChange={(e) => setMonitorSettings({
+                      ...monitorSettings,
+                      screenshot_disabled_from: e.target.value ? new Date(e.target.value).toISOString() : null,
+                    })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-slate-400 uppercase tracking-wider">Pause until</label>
+                  <Input
+                    type="datetime-local"
+                    value={monitorSettings.screenshot_disabled_to?.slice(0, 16) ?? ''}
+                    onChange={(e) => setMonitorSettings({
+                      ...monitorSettings,
+                      screenshot_disabled_to: e.target.value ? new Date(e.target.value).toISOString() : null,
+                    })}
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-slate-500">Use the window above to disable screenshots during a specific period (e.g. client meeting).</p>
+
+              {canManageAdvanced && advancedData && (
+                <div className="rounded-2xl border border-rose-500/20 bg-rose-500/5 p-5 space-y-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="font-bold text-white flex items-center gap-2">
+                        <ShieldAlert size={18} className="text-rose-400" />
+                        Advanced Monitoring
+                      </h3>
+                      <p className="text-xs text-slate-400 mt-1 flex items-start gap-1">
+                        <Info size={12} className="mt-0.5 shrink-0" />
+                        Intensifies screenshot capture and activity tracking for suspicious or low-activity members. Use when you need deeper visibility before taking action.
+                      </p>
+                    </div>
+                    {advancedData.active && (
+                      <Link
+                        to={`/team/member/${monitorMember.user_id ?? monitorMember.id}/advanced-monitoring`}
+                        className="text-xs font-bold text-primary-400 hover:underline flex items-center gap-1 shrink-0"
+                      >
+                        View report <ExternalLink size={12} />
+                      </Link>
+                    )}
+                  </div>
+
+                  {!advancedData.plan_available ? (
+                    <p className="text-sm text-amber-300">Upgrade to Professional or Enterprise to use advanced monitoring.</p>
+                  ) : advancedData.active ? (
+                    <div className="space-y-4">
+                      <div className="rounded-xl bg-black/20 border border-rose-500/20 p-4 text-sm text-rose-100">
+                        Active since {new Date(advancedData.active.started_at).toLocaleString()}
+                        {advancedData.active.reason ? ` · ${advancedData.active.reason}` : ''}
+                        <div className="text-xs text-rose-200/70 mt-1">
+                          Screenshot frequency: every {advancedData.active.screenshot_frequency_minutes} min (random within window)
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-sm font-bold text-slate-400 uppercase tracking-wider">Review result summary</label>
+                        <textarea
+                          value={closeSummary}
+                          onChange={(e) => setCloseSummary(e.target.value)}
+                          rows={3}
+                          placeholder="Optional summary sent to the member if you notify them..."
+                          className="w-full bg-surface-800 border border-white/10 rounded-xl px-4 py-3 text-white text-sm"
+                        />
+                      </div>
+                      <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+                        <input type="checkbox" checked={closeNotify} onChange={(e) => setCloseNotify(e.target.checked)} className="accent-primary-500" />
+                        Notify member with result summary
+                      </label>
+                      <Button type="button" variant="secondary" className="w-full" isLoading={savingAdvanced} onClick={closeAdvancedMonitoring}>
+                        End advanced monitoring
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <label className="text-sm font-bold text-slate-400 uppercase tracking-wider">Reason (internal note)</label>
+                        <textarea
+                          value={advancedReason}
+                          onChange={(e) => setAdvancedReason(e.target.value)}
+                          rows={2}
+                          placeholder="e.g. Low productivity, suspicious idle patterns..."
+                          className="w-full bg-surface-800 border border-white/10 rounded-xl px-4 py-3 text-white text-sm"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-sm font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                          Screenshot frequency (minutes)
+                          <span title="Captures at a random time within each interval so the member cannot predict when the next screenshot is taken." className="text-slate-500 cursor-help">
+                            <Info size={14} />
+                          </span>
+                        </label>
+                        <input
+                          type="range"
+                          min={1}
+                          max={5}
+                          value={advancedFrequency}
+                          onChange={(e) => setAdvancedFrequency(Number(e.target.value))}
+                          className="w-full accent-rose-500"
+                        />
+                        <span className="text-sm text-slate-300">{advancedFrequency} min · random capture within window</span>
+                      </div>
+                      <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+                        <input type="checkbox" checked={advancedNotify} onChange={(e) => setAdvancedNotify(e.target.checked)} className="accent-primary-500" />
+                        Notify member that advanced monitoring is enabled
+                      </label>
+                      <p className="text-[10px] text-slate-500">If checked, the member receives an in-app warning explaining that monitoring has been intensified.</p>
+                      <Button type="button" className="w-full bg-rose-600 hover:bg-rose-500" isLoading={savingAdvanced} onClick={enableAdvancedMonitoring}>
+                        Enable advanced monitoring
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="pt-6 flex gap-4">
+              <Button variant="secondary" type="button" className="flex-1" onClick={() => { setMonitorMember(null); setMonitorSettings(null); }}>
+                Cancel
+              </Button>
+              <Button type="button" className="flex-1" isLoading={savingMonitoring} onClick={saveMonitoring}>
+                Save Settings
+              </Button>
+            </div>
+          </>
+        )}
+      </Modal>
+
+      <Modal
+        open={showTeamModal}
+        onClose={() => { setShowTeamModal(false); setEditingTeam(null); }}
+        title={editingTeam ? 'Edit Team' : 'Create Team'}
+      >
+        <div className="space-y-4">
+          <Input value={teamForm.name} onChange={(e) => setTeamForm((p) => ({ ...p, name: e.target.value }))} placeholder="Team name" required />
+          <div className="space-y-2 max-h-48 overflow-y-auto">
+            <p className="text-xs text-slate-500 uppercase font-bold">Assign members</p>
+            {members.map((m) => {
+              const id = m.user_id;
+              if (!id) return null;
+              const checked = teamForm.member_ids.includes(id);
+              return (
+                <label key={id} className="flex items-center gap-2 text-sm text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => setTeamForm((p) => ({
+                      ...p,
+                      member_ids: checked ? p.member_ids.filter((x) => x !== id) : [...p.member_ids, id],
+                    }))}
+                  />
+                  {m.first_name} {m.last_name}
+                </label>
+              );
+            })}
+          </div>
+          <Button
+            isLoading={savingTeam}
+            onClick={async () => {
+              setSavingTeam(true);
+              try {
+                if (editingTeam) {
+                  await teamService.updateTeam(editingTeam.id, { name: teamForm.name });
+                  const currentIds = new Set(editingTeam.members.map((m) => m.user_id));
+                  const nextIds = new Set(teamForm.member_ids);
+                  for (const uid of teamForm.member_ids) {
+                    if (!currentIds.has(uid)) {
+                      await teamService.assignMembers(editingTeam.id, [uid]);
+                    }
+                  }
+                  for (const uid of editingTeam.members.map((m) => m.user_id)) {
+                    if (!nextIds.has(uid)) {
+                      await teamService.removeTeamMember(editingTeam.id, uid);
+                    }
+                  }
+                } else {
+                  await teamService.createTeam({ name: teamForm.name, member_ids: teamForm.member_ids });
+                }
+                const r = await teamService.getTeams();
+                setTeams(r.data ?? []);
+                setShowTeamModal(false);
+                setEditingTeam(null);
+                setTeamForm({ name: '', member_ids: [] });
+              } catch (e) {
+                console.error(e);
+              } finally {
+                setSavingTeam(false);
+              }
+            }}
+          >
+            {editingTeam ? 'Save Team' : 'Create Team'}
+          </Button>
+        </div>
+      </Modal>
 
     </div>
   );

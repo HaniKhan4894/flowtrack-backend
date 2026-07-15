@@ -10,11 +10,20 @@ import { monitoringService } from '../api/monitoringService';
 import { useAuthStore } from '../store/authStore';
 import { isOrgAdmin, canManageProjects } from '../utils/access';
 import { getApiErrorMessage } from '../utils/apiError';
+import { toastSuccess, toastError } from '../store/toastStore';
 
 export const TimerWidget = () => {
   const isDesktop = monitoringService.isDesktop;
-  const { user } = useAuthStore();
-  const { activeEntry, isRunning, isPaused, elapsed, start, stop, pause, resume, loadActive } = useTimerStore();
+  const user = useAuthStore((s) => s.user);
+  const activeEntry = useTimerStore((s) => s.activeEntry);
+  const isRunning = useTimerStore((s) => s.isRunning);
+  const isPaused = useTimerStore((s) => s.isPaused);
+  const elapsed = useTimerStore((s) => s.elapsed);
+  const start = useTimerStore((s) => s.start);
+  const stop = useTimerStore((s) => s.stop);
+  const pause = useTimerStore((s) => s.pause);
+  const resume = useTimerStore((s) => s.resume);
+  const loadActive = useTimerStore((s) => s.loadActive);
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
@@ -84,16 +93,21 @@ export const TimerWidget = () => {
     setError(null);
     try {
       if (isRunning) {
+        // Optimistic: clear UI immediately while request completes
         await stop();
+        toastSuccess('Timer stopped');
       } else {
         if (!selectedProjectId) {
           setError('Please select a project first');
           return;
         }
         await start(selectedProjectId, description, selectedTaskId ?? undefined);
+        toastSuccess('Timer started');
       }
     } catch (e: unknown) {
-      setError(getApiErrorMessage(e, 'Timer action failed'));
+      const msg = getApiErrorMessage(e, 'Timer action failed');
+      setError(msg);
+      toastError(msg);
     }
   };
 

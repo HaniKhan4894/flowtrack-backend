@@ -8,7 +8,7 @@ import {
   Send,
   Clock,
 } from 'lucide-react';
-import { Button } from '../../components/ui';
+import { Button, Modal } from '../../components/ui';
 import { timesheetService } from '../../api/timesheetService';
 import { teamService } from '../../api/teamService';
 import { useAuthStore } from '../../store/authStore';
@@ -282,27 +282,29 @@ const TimesheetsPage = () => {
         )}
       </div>
 
-      {showRejectModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="w-full max-w-md glass-card border border-white/10 p-6 space-y-4">
-            <h3 className="text-lg font-bold text-white">Reject timesheet</h3>
-            <textarea
-              value={rejectReason}
-              onChange={(e) => setRejectReason(e.target.value)}
-              placeholder="Reason for rejection (required)"
-              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white outline-none min-h-24"
-            />
-            <div className="flex gap-3">
-              <Button variant="secondary" className="flex-1" onClick={() => setShowRejectModal(false)}>
-                Cancel
-              </Button>
-              <Button className="flex-1" onClick={handleReject} isLoading={actionLoading} disabled={!rejectReason.trim()}>
-                Reject
-              </Button>
-            </div>
+      <Modal
+        open={showRejectModal}
+        onClose={() => setShowRejectModal(false)}
+        title="Reject timesheet"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <textarea
+            value={rejectReason}
+            onChange={(e) => setRejectReason(e.target.value)}
+            placeholder="Reason for rejection (required)"
+            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white outline-none min-h-24"
+          />
+          <div className="flex gap-3">
+            <Button variant="secondary" className="flex-1" onClick={() => setShowRejectModal(false)}>
+              Cancel
+            </Button>
+            <Button className="flex-1" onClick={handleReject} isLoading={actionLoading} disabled={!rejectReason.trim()}>
+              Reject
+            </Button>
           </div>
         </div>
-      )}
+      </Modal>
     </div>
   );
 };

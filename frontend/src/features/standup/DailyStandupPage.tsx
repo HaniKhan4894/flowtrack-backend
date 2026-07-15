@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { MessageSquare, Loader2, Wand2, Clock, Gauge, ListChecks, AlertCircle, Slack, Check } from 'lucide-react';
+import { MessageSquare, Loader2, Wand2, Clock, Gauge, ListChecks, AlertCircle, Slack, Check, Radio } from 'lucide-react';
 import { aiService, type AiStandupResult } from '../../api/aiService';
 import { slackService } from '../../api/slackService';
 import { teamService, type TeamMember } from '../../api/teamService';
+import { reportService, type ActiveSession } from '../../api/reportService';
 import { useAuthStore } from '../../store/authStore';
 import { canViewTeam } from '../../utils/access';
 import { getApiErrorMessage } from '../../utils/apiError';
+import { Avatar } from '../../components/ui';
 
 /** Minimal, safe markdown renderer for **bold** + bullet lists + headings. */
 const renderInline = (text: string) => {
@@ -42,7 +44,7 @@ const Markdown = ({ text }: { text: string }) => {
 };
 
 const DailyStandupPage = () => {
-  const { user } = useAuthStore();
+  const user = useAuthStore((s) => s.user);
   const isManager = canViewTeam(user);
   const today = new Date().toISOString().split('T')[0];
 
@@ -55,12 +57,25 @@ const DailyStandupPage = () => {
   const [error, setError] = useState<string | null>(null);
   const [slackState, setSlackState] = useState<'idle' | 'sending' | 'sent'>('idle');
   const [slackNote, setSlackNote] = useState<string | null>(null);
+  const [presence, setPresence] = useState<ActiveSession[]>([]);
 
   useEffect(() => {
     aiService.status().then((r) => setAiEnabled(!!r.data.enabled)).catch(() => setAiEnabled(false));
     if (isManager) {
       teamService.getAll().then((r) => setMembers(r.data)).catch(() => setMembers([]));
     }
+  }, [isManager]);
+
+  useEffect(() => {
+    if (!isManager) return;
+    const load = () => {
+      reportService.getActiveSessions()
+        .then((r) => setPresence(r.data ?? []))
+        .catch(() => setPresence([]));
+    };
+    load();
+    const t = setInterval(load, 30_000);
+    return () => clearInterval(t);
   }, [isManager]);
 
   const generate = async () => {
@@ -160,6 +175,32 @@ const DailyStandupPage = () => {
           </button>
         </div>
       </div>
+
+      {isManager && (
+        <div className="glass rounded-2xl border border-white/5 p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <Radio size={16} className="text-emerald-400" />
+            <h3 className="text-sm font-semibold text-white">Live presence</h3>
+            <span className="text-[10px] text-slate-500">Who is tracking right now</span>
+          </div>
+          {presence.length === 0 ? (
+            <p className="text-xs text-slate-500">No one is online with an active timer.</p>
+          ) : (
+            <ul className="flex flex-wrap gap-3">
+              {presence.map((s) => (
+                <li key={s.time_entry_id} className="flex items-center gap-2 rounded-xl bg-white/5 border border-white/5 px-3 py-2">
+                  <Avatar name={s.user_name} size="sm" />
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-white truncate">{s.user_name}</p>
+                    <p className="text-[10px] text-slate-500 truncate">{s.project_name} · {s.elapsed}</p>
+                  </div>
+                  <span className={`w-2 h-2 rounded-full ${s.is_paused ? 'bg-amber-400' : 'bg-emerald-400 animate-pulse'}`} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       {error && <p className="text-rose-400 text-sm">{error}</p>}
 

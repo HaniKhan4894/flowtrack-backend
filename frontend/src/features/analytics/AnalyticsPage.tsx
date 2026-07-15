@@ -18,6 +18,7 @@ import { reportService, type TimeSummary, type ProjectBreakdown, type TeamLeader
 import { officeLocationService, type LocationBreakdown } from '../../api/officeLocationService';
 import { useAuthStore } from '../../store/authStore';
 import { canViewMemberTracking, hasPermission } from '../../utils/access';
+import { PageSkeleton } from '../../components/ui';
 
 function buildRangeParams(filterRange: 'today' | '7days' | '30days' | 'month', startDate: string, endDate: string) {
   const params: Record<string, string> = {};
@@ -53,7 +54,7 @@ function buildRangeParams(filterRange: 'today' | '7days' | '30days' | 'month', s
 
 const AnalyticsPage = () => {
   const navigate = useNavigate();
-  const { user } = useAuthStore();
+  const user = useAuthStore((s) => s.user);
   const canTrackMembers = canViewMemberTracking(user);
   const [summary, setSummary] = useState<TimeSummary | null>(null);
   const [projects, setProjects] = useState<ProjectBreakdown[]>([]);
@@ -198,6 +199,8 @@ const AnalyticsPage = () => {
         </div>
       </div>
 
+      {loading && summary === null ? <PageSkeleton /> : (
+      <>
       {/* Quick Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {[
@@ -456,6 +459,8 @@ const AnalyticsPage = () => {
             </div>
           </div>
         </div>
+      )}
+      </>
       )}
     </div>
   );

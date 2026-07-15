@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, CheckCircle2, Plus, DollarSign, Loader2, X, Download, FileText } from 'lucide-react';
-import { Button } from '../../components/ui';
+import { ArrowLeft, CheckCircle2, Plus, DollarSign, Loader2, Download, FileText } from 'lucide-react';
+import { Button, Modal } from '../../components/ui';
 import { payrollService } from '../../api/payrollService';
 import { useAuthStore } from '../../store/authStore';
 import { hasPermission } from '../../utils/access';
@@ -267,81 +267,75 @@ const PayrollRunDetailPage = () => {
         </div>
       )}
 
-      {adjustItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="modal-panel w-full max-w-md p-6 space-y-4">
-            <div className="flex justify-between">
-              <h3 className="text-lg font-bold text-white">Add Adjustment — {adjustItem.first_name}</h3>
-              <button onClick={() => setAdjustItem(null)}><X size={20} className="text-slate-400" /></button>
-            </div>
-            <form onSubmit={handleAddAdjustment} className="space-y-4">
-              <select
-                className="form-select"
-                value={adjustForm.type}
-                onChange={(e) => setAdjustForm((p) => ({ ...p, type: e.target.value as 'bonus' | 'deduction' }))}
-              >
-                <option value="bonus">Bonus</option>
-                <option value="deduction">Deduction</option>
-              </select>
-              <input
-                required
-                placeholder="Label (e.g. Performance bonus)"
-                className="w-full h-12 bg-[#12141C] border border-white/10 rounded-xl px-4 text-white"
-                value={adjustForm.label}
-                onChange={(e) => setAdjustForm((p) => ({ ...p, label: e.target.value }))}
-              />
-              <input
-                required
-                type="number"
-                step="0.01"
-                placeholder="Amount"
-                className="w-full h-12 bg-[#12141C] border border-white/10 rounded-xl px-4 text-white"
-                value={adjustForm.amount}
-                onChange={(e) => setAdjustForm((p) => ({ ...p, amount: e.target.value }))}
-              />
-              <Button type="submit" isLoading={submitting} className="w-full">Add</Button>
-            </form>
-          </div>
-        </div>
-      )}
+      <Modal
+        open={!!adjustItem}
+        onClose={() => setAdjustItem(null)}
+        title={adjustItem ? `Add Adjustment — ${adjustItem.first_name}` : 'Add Adjustment'}
+        size="sm"
+      >
+        <form onSubmit={handleAddAdjustment} className="space-y-4">
+          <select
+            className="form-select"
+            value={adjustForm.type}
+            onChange={(e) => setAdjustForm((p) => ({ ...p, type: e.target.value as 'bonus' | 'deduction' }))}
+          >
+            <option value="bonus">Bonus</option>
+            <option value="deduction">Deduction</option>
+          </select>
+          <input
+            required
+            placeholder="Label (e.g. Performance bonus)"
+            className="w-full h-12 bg-[#12141C] border border-white/10 rounded-xl px-4 text-white"
+            value={adjustForm.label}
+            onChange={(e) => setAdjustForm((p) => ({ ...p, label: e.target.value }))}
+          />
+          <input
+            required
+            type="number"
+            step="0.01"
+            placeholder="Amount"
+            className="w-full h-12 bg-[#12141C] border border-white/10 rounded-xl px-4 text-white"
+            value={adjustForm.amount}
+            onChange={(e) => setAdjustForm((p) => ({ ...p, amount: e.target.value }))}
+          />
+          <Button type="submit" isLoading={submitting} className="w-full">Add</Button>
+        </form>
+      </Modal>
 
-      {payItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="modal-panel w-full max-w-md p-6 space-y-4">
-            <div className="flex justify-between">
-              <h3 className="text-lg font-bold text-white">Record Payment — {payItem.first_name}</h3>
-              <button onClick={() => setPayItem(null)}><X size={20} className="text-slate-400" /></button>
-            </div>
-            <form onSubmit={handleRecordPayment} className="space-y-4">
-              <input
-                required
-                type="number"
-                step="0.01"
-                placeholder="Amount"
-                className="w-full h-12 bg-[#12141C] border border-white/10 rounded-xl px-4 text-white"
-                value={payForm.amount}
-                onChange={(e) => setPayForm((p) => ({ ...p, amount: e.target.value }))}
-              />
-              <select
-                className="form-select"
-                value={payForm.method}
-                onChange={(e) => setPayForm((p) => ({ ...p, method: e.target.value }))}
-              >
-                <option value="manual">Manual / Cash</option>
-                <option value="bank">Bank Transfer</option>
-                <option value="stripe">Stripe (future)</option>
-              </select>
-              <input
-                placeholder="Reference / Transaction ID"
-                className="w-full h-12 bg-[#12141C] border border-white/10 rounded-xl px-4 text-white"
-                value={payForm.reference}
-                onChange={(e) => setPayForm((p) => ({ ...p, reference: e.target.value }))}
-              />
-              <Button type="submit" isLoading={submitting} className="w-full">Record Payment</Button>
-            </form>
-          </div>
-        </div>
-      )}
+      <Modal
+        open={!!payItem}
+        onClose={() => setPayItem(null)}
+        title={payItem ? `Record Payment — ${payItem.first_name}` : 'Record Payment'}
+        size="sm"
+      >
+        <form onSubmit={handleRecordPayment} className="space-y-4">
+          <input
+            required
+            type="number"
+            step="0.01"
+            placeholder="Amount"
+            className="w-full h-12 bg-[#12141C] border border-white/10 rounded-xl px-4 text-white"
+            value={payForm.amount}
+            onChange={(e) => setPayForm((p) => ({ ...p, amount: e.target.value }))}
+          />
+          <select
+            className="form-select"
+            value={payForm.method}
+            onChange={(e) => setPayForm((p) => ({ ...p, method: e.target.value }))}
+          >
+            <option value="manual">Manual / Cash</option>
+            <option value="bank">Bank Transfer</option>
+            <option value="stripe">Stripe (future)</option>
+          </select>
+          <input
+            placeholder="Reference / Transaction ID"
+            className="w-full h-12 bg-[#12141C] border border-white/10 rounded-xl px-4 text-white"
+            value={payForm.reference}
+            onChange={(e) => setPayForm((p) => ({ ...p, reference: e.target.value }))}
+          />
+          <Button type="submit" isLoading={submitting} className="w-full">Record Payment</Button>
+        </form>
+      </Modal>
     </div>
   );
 };

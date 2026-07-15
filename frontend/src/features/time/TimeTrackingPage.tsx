@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Calendar, Filter, Download, MoreHorizontal, Clock, Tag, Briefcase, Loader2, Search, AlertCircle, Plus, Pencil, Trash2, X } from 'lucide-react';
+import { Calendar, Filter, Download, MoreHorizontal, Clock, Tag, Briefcase, Loader2, Search, AlertCircle, Plus, Pencil, Trash2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { timeService } from '../../api/timeService';
 import { projectService, type Project } from '../../api/projectService';
@@ -10,7 +10,7 @@ import DevAiPanel from './DevAiPanel';
 import { useAuthStore } from '../../store/authStore';
 import { hasPermission, isOrgAdmin, canManageProjects } from '../../utils/access';
 import { getApiErrorMessage } from '../../utils/apiError';
-import { Button, Input } from '../../components/ui';
+import { Button, Input, Modal } from '../../components/ui';
 import type { Task, TimeEntry } from '../../types';
 
 const TimeTrackingPage = () => {
@@ -392,83 +392,77 @@ const TimeTrackingPage = () => {
         </div>
       </div>
 
-      {showManualModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <form onSubmit={handleSaveEntry} className="w-full max-w-lg glass-card border border-white/10 p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xl font-bold text-white">
-                {editingEntry ? 'Edit Time Entry' : 'Manual Time Entry'}
-              </h3>
-              <button type="button" onClick={() => setShowManualModal(false)} className="text-slate-500 hover:text-white">
-                <X size={20} />
-              </button>
-            </div>
-            {formError && <p className="text-rose-400 text-sm">{formError}</p>}
-            <select
-              value={entryForm.project_id}
-              onChange={(e) => {
-                setEntryForm((f) => ({ ...f, project_id: e.target.value, task_id: '' }));
-                loadTasksForProject(e.target.value);
-              }}
-              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white outline-none"
-            >
-              <option value="">No project</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
-            <select
-              value={entryForm.task_id}
-              onChange={(e) => setEntryForm((f) => ({ ...f, task_id: e.target.value }))}
-              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white outline-none"
-            >
-              <option value="">No task</option>
-              {tasks.map((t) => (
-                <option key={t.id} value={t.id}>{t.name}</option>
-              ))}
-            </select>
-            <Input
-              placeholder="Description"
-              value={entryForm.description}
-              onChange={(e) => setEntryForm((f) => ({ ...f, description: e.target.value }))}
-            />
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs text-slate-500 uppercase font-bold mb-1 block">Start</label>
-                <input
-                  required
-                  type="datetime-local"
-                  value={entryForm.started_at}
-                  onChange={(e) => setEntryForm((f) => ({ ...f, started_at: e.target.value }))}
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white outline-none"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-slate-500 uppercase font-bold mb-1 block">End</label>
-                <input
-                  required
-                  type="datetime-local"
-                  value={entryForm.ended_at}
-                  onChange={(e) => setEntryForm((f) => ({ ...f, ended_at: e.target.value }))}
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white outline-none"
-                />
-              </div>
-            </div>
-            <label className="flex items-center gap-2 text-sm text-slate-300">
+      <Modal
+        open={showManualModal}
+        onClose={() => setShowManualModal(false)}
+        title={editingEntry ? 'Edit Time Entry' : 'Manual Time Entry'}
+      >
+        <form onSubmit={handleSaveEntry} className="space-y-4">
+          {formError && <p className="text-rose-400 text-sm">{formError}</p>}
+          <select
+            value={entryForm.project_id}
+            onChange={(e) => {
+              setEntryForm((f) => ({ ...f, project_id: e.target.value, task_id: '' }));
+              loadTasksForProject(e.target.value);
+            }}
+            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white outline-none"
+          >
+            <option value="">No project</option>
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+          <select
+            value={entryForm.task_id}
+            onChange={(e) => setEntryForm((f) => ({ ...f, task_id: e.target.value }))}
+            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white outline-none"
+          >
+            <option value="">No task</option>
+            {tasks.map((t) => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </select>
+          <Input
+            placeholder="Description"
+            value={entryForm.description}
+            onChange={(e) => setEntryForm((f) => ({ ...f, description: e.target.value }))}
+          />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-slate-500 uppercase font-bold mb-1 block">Start</label>
               <input
-                type="checkbox"
-                checked={entryForm.is_billable}
-                onChange={(e) => setEntryForm((f) => ({ ...f, is_billable: e.target.checked }))}
-                className="rounded border-white/20"
+                required
+                type="datetime-local"
+                value={entryForm.started_at}
+                onChange={(e) => setEntryForm((f) => ({ ...f, started_at: e.target.value }))}
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white outline-none"
               />
-              Billable
-            </label>
-            <Button type="submit" isLoading={saving} className="w-full">
-              {editingEntry ? 'Save changes' : 'Add entry'}
-            </Button>
-          </form>
-        </div>
-      )}
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 uppercase font-bold mb-1 block">End</label>
+              <input
+                required
+                type="datetime-local"
+                value={entryForm.ended_at}
+                onChange={(e) => setEntryForm((f) => ({ ...f, ended_at: e.target.value }))}
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white outline-none"
+              />
+            </div>
+          </div>
+          <label className="flex items-center gap-2 text-sm text-slate-300">
+            <input
+              type="checkbox"
+              checked={entryForm.is_billable}
+              onChange={(e) => setEntryForm((f) => ({ ...f, is_billable: e.target.checked }))}
+              className="rounded border-white/20"
+            />
+            Billable
+          </label>
+          <Button type="submit" isLoading={saving} className="w-full">
+            {editingEntry ? 'Save changes' : 'Add entry'}
+          </Button>
+        </form>
+      </Modal>
     </div>
   );
 };

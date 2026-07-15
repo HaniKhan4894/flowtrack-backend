@@ -99,10 +99,29 @@ client.interceptors.response.use(
             const message = error.response.data?.message || 'Plan limit reached. Please upgrade your subscription.';
             if (typeof window !== 'undefined') {
                 window.dispatchEvent(new CustomEvent('plan-limit-reached', { detail: { message } }));
+                try {
+                    // Dynamic import to avoid circular deps with UI stores
+                    void import('../store/toastStore').then(({ toastWarning }) => {
+                        toastWarning(message, 'Plan limit');
+                    });
+                } catch {
+                    /* ignore */
+                }
                 if (window.location.pathname !== '/billing' && confirm(`${message}\n\nOpen billing to upgrade?`)) {
                     window.location.href = '/billing';
                 }
             }
+        }
+
+        // Surface server errors as toasts (avoid double-toasting routine 4xx handled in pages)
+        if (typeof window !== 'undefined' && error.response?.status && error.response.status >= 500) {
+            const msg =
+                error.response?.data?.message ||
+                error.response?.data?.error ||
+                'Server error. Please try again.';
+            void import('../store/toastStore').then(({ toastError }) => {
+                toastError(String(msg));
+            });
         }
 
         return Promise.reject(error);

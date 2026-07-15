@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Search, MoreVertical, Folder, X, Palette, Clock, Users, Archive, Trash2, ChevronDown, ChevronUp, ListTodo } from 'lucide-react';
-import { Button, Input } from '../../components/ui';
+import { Plus, Search, MoreVertical, Folder, Palette, Clock, Users, Archive, Trash2, ChevronDown, ChevronUp, ListTodo } from 'lucide-react';
+import { Button, Input, Modal } from '../../components/ui';
 import { projectService, type Project } from '../../api/projectService';
 import { clientService, type Client } from '../../api/clientService';
 import { useAuthStore } from '../../store/authStore';
@@ -371,182 +371,134 @@ export const ProjectsPage = () => {
       </div>
 
       {/* Create Project Modal */}
-      <AnimatePresence>
-        {showCreateModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setShowCreateModal(false)}
-              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+      <Modal open={showCreateModal} onClose={() => setShowCreateModal(false)} title="Create New Project">
+        <form onSubmit={handleCreate} className="space-y-6">
+          <div className="space-y-2">
+            <label className="text-sm font-bold text-slate-400 uppercase tracking-wider ml-1">Project Name</label>
+            <Input
+              value={newProject.name}
+              onChange={(e) => setNewProject({...newProject, name: e.target.value})}
+              placeholder="e.g. Website Redesign"
+              required
             />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative w-full max-w-lg glass-card border border-white/10 p-8 shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between mb-8">
-                <h2 className="text-2xl font-bold text-white">Create New Project</h2>
-                <button onClick={() => setShowCreateModal(false)} className="text-slate-500 hover:text-white">
-                  <X size={24} />
-                </button>
-              </div>
-
-              <form onSubmit={handleCreate} className="space-y-6">
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-slate-400 uppercase tracking-wider ml-1">Project Name</label>
-                  <Input
-                    value={newProject.name}
-                    onChange={(e) => setNewProject({...newProject, name: e.target.value})}
-                    placeholder="e.g. Website Redesign"
-                    required
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-slate-400 uppercase tracking-wider ml-1">Description</label>
-                  <textarea
-                    value={newProject.description}
-                    onChange={(e) => setNewProject({...newProject, description: e.target.value})}
-                    placeholder="Briefly describe what this project is about..."
-                    className="w-full h-32 bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500/50 outline-none transition-all resize-none"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-slate-400 uppercase tracking-wider ml-1">Client</label>
-                  <select
-                    className="form-select"
-                    value={newProject.client_id}
-                    onChange={(e) => setNewProject({ ...newProject, client_id: e.target.value })}
-                  >
-                    <option value="">No client</option>
-                    {clients.map((c) => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-bold text-slate-400 uppercase tracking-wider ml-1">Budget Hours</label>
-                    <Input
-                      type="number"
-                      step="0.5"
-                      value={newProject.budget_hours}
-                      onChange={(e) => setNewProject({ ...newProject, budget_hours: e.target.value })}
-                      placeholder="e.g. 120"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-bold text-slate-400 uppercase tracking-wider ml-1">Budget Amount</label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={newProject.budget_amount}
-                      onChange={(e) => setNewProject({ ...newProject, budget_amount: e.target.value })}
-                      placeholder="e.g. 5000"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <label className="text-sm font-bold text-slate-400 uppercase tracking-wider ml-1 flex items-center gap-2">
-                    <Palette size={16} /> Project Color
-                  </label>
-                  <div className="flex gap-4">
-                    {colors.map(color => (
-                      <button
-                        key={color}
-                        type="button"
-                        onClick={() => setNewProject({...newProject, color})}
-                        className={`w-10 h-10 rounded-xl transition-all ${newProject.color === color ? 'ring-4 ring-primary-500/50 scale-110' : 'hover:scale-105'}`}
-                        style={{ backgroundColor: color }}
-                      />
-                    ))}
-                  </div>
-                </div>
-
-                <div className="pt-4 flex gap-4">
-                  <Button variant="secondary" type="button" className="flex-1" onClick={() => setShowCreateModal(false)}>
-                    Cancel
-                  </Button>
-                  <Button type="submit" className="flex-1" isLoading={isCreating}>
-                    Create Project
-                  </Button>
-                </div>
-              </form>
-            </motion.div>
           </div>
-        )}
-      </AnimatePresence>
+
+          <div className="space-y-2">
+            <label className="text-sm font-bold text-slate-400 uppercase tracking-wider ml-1">Description</label>
+            <textarea
+              value={newProject.description}
+              onChange={(e) => setNewProject({...newProject, description: e.target.value})}
+              placeholder="Briefly describe what this project is about..."
+              className="w-full h-32 bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500/50 outline-none transition-all resize-none"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-bold text-slate-400 uppercase tracking-wider ml-1">Client</label>
+            <select
+              className="form-select"
+              value={newProject.client_id}
+              onChange={(e) => setNewProject({ ...newProject, client_id: e.target.value })}
+            >
+              <option value="">No client</option>
+              {clients.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-bold text-slate-400 uppercase tracking-wider ml-1">Budget Hours</label>
+              <Input
+                type="number"
+                step="0.5"
+                value={newProject.budget_hours}
+                onChange={(e) => setNewProject({ ...newProject, budget_hours: e.target.value })}
+                placeholder="e.g. 120"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-bold text-slate-400 uppercase tracking-wider ml-1">Budget Amount</label>
+              <Input
+                type="number"
+                step="0.01"
+                value={newProject.budget_amount}
+                onChange={(e) => setNewProject({ ...newProject, budget_amount: e.target.value })}
+                placeholder="e.g. 5000"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <label className="text-sm font-bold text-slate-400 uppercase tracking-wider ml-1 flex items-center gap-2">
+              <Palette size={16} /> Project Color
+            </label>
+            <div className="flex gap-4">
+              {colors.map(color => (
+                <button
+                  key={color}
+                  type="button"
+                  onClick={() => setNewProject({...newProject, color})}
+                  className={`w-10 h-10 rounded-xl transition-all ${newProject.color === color ? 'ring-4 ring-primary-500/50 scale-110' : 'hover:scale-105'}`}
+                  style={{ backgroundColor: color }}
+                />
+              ))}
+            </div>
+          </div>
+
+          <div className="pt-4 flex gap-4">
+            <Button variant="secondary" type="button" className="flex-1" onClick={() => setShowCreateModal(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" className="flex-1" isLoading={isCreating}>
+              Create Project
+            </Button>
+          </div>
+        </form>
+      </Modal>
 
       {/* Task Modal */}
-      <AnimatePresence>
-        {showTaskModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setShowTaskModal(false)}
-              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative w-full max-w-md glass-card border border-white/10 p-8 shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold text-white">
-                  {editingTask ? 'Edit Task' : 'New Task'}
-                </h2>
-                <button onClick={() => setShowTaskModal(false)} className="text-slate-500 hover:text-white">
-                  <X size={24} />
-                </button>
-              </div>
-              {taskError && <p className="text-rose-400 text-sm mb-4">{taskError}</p>}
-              <form onSubmit={handleSaveTask} className="space-y-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-slate-400 uppercase tracking-wider ml-1">Name</label>
-                  <Input value={taskForm.name} onChange={(e) => setTaskForm((f) => ({ ...f, name: e.target.value }))} required />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-slate-400 uppercase tracking-wider ml-1">Description</label>
-                  <textarea
-                    value={taskForm.description}
-                    onChange={(e) => setTaskForm((f) => ({ ...f, description: e.target.value }))}
-                    className="w-full h-24 bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white outline-none resize-none"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-bold text-slate-400 uppercase tracking-wider ml-1">Estimated hours</label>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.25"
-                    value={taskForm.estimated_hours}
-                    onChange={(e) => setTaskForm((f) => ({ ...f, estimated_hours: e.target.value }))}
-                  />
-                </div>
-                <div className="flex gap-4 pt-2">
-                  <Button variant="secondary" type="button" className="flex-1" onClick={() => setShowTaskModal(false)}>
-                    Cancel
-                  </Button>
-                  <Button type="submit" className="flex-1" isLoading={taskSaving}>
-                    Save
-                  </Button>
-                </div>
-              </form>
-            </motion.div>
+      <Modal
+        open={showTaskModal}
+        onClose={() => setShowTaskModal(false)}
+        title={editingTask ? 'Edit Task' : 'New Task'}
+        size="sm"
+      >
+        {taskError && <p className="text-rose-400 text-sm mb-4">{taskError}</p>}
+        <form onSubmit={handleSaveTask} className="space-y-4">
+          <div className="space-y-2">
+            <label className="text-sm font-bold text-slate-400 uppercase tracking-wider ml-1">Name</label>
+            <Input value={taskForm.name} onChange={(e) => setTaskForm((f) => ({ ...f, name: e.target.value }))} required />
           </div>
-        )}
-      </AnimatePresence>
+          <div className="space-y-2">
+            <label className="text-sm font-bold text-slate-400 uppercase tracking-wider ml-1">Description</label>
+            <textarea
+              value={taskForm.description}
+              onChange={(e) => setTaskForm((f) => ({ ...f, description: e.target.value }))}
+              className="w-full h-24 bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white outline-none resize-none"
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-bold text-slate-400 uppercase tracking-wider ml-1">Estimated hours</label>
+            <Input
+              type="number"
+              min="0"
+              step="0.25"
+              value={taskForm.estimated_hours}
+              onChange={(e) => setTaskForm((f) => ({ ...f, estimated_hours: e.target.value }))}
+            />
+          </div>
+          <div className="flex gap-4 pt-2">
+            <Button variant="secondary" type="button" className="flex-1" onClick={() => setShowTaskModal(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" className="flex-1" isLoading={taskSaving}>
+              Save
+            </Button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 };

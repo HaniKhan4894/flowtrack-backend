@@ -54,6 +54,24 @@ export const useTimerStore = create<TimerState>((set, get) => ({
     isPaused: false,
 
     start: async (projectId, description, taskId) => {
+        // Optimistic UI — show running state immediately
+        const optimisticId = -Date.now();
+        set({
+            isRunning: true,
+            isPaused: false,
+            elapsed: 0,
+            activeEntry: {
+                id: optimisticId,
+                project_id: projectId,
+                task_id: taskId ?? null,
+                description: description ?? '',
+                started_at: new Date().toISOString(),
+                ended_at: null,
+                duration_seconds: 0,
+                elapsed_seconds: 0,
+            } as import('../types').TimeEntry,
+        });
+        setTrackingSessionActive(true);
         try {
             const response = await timeService.startTimer({
                 project_id: projectId,
@@ -67,13 +85,14 @@ export const useTimerStore = create<TimerState>((set, get) => ({
                 isPaused: false,
                 elapsed: entry.elapsed_seconds ?? 0,
             });
-            setTrackingSessionActive(true);
             const token = useAuthStore.getState().accessToken ?? undefined;
             monitoringService.startMonitoring(response.data.id, token);
             syncElectronAuthToken(token ?? localStorage.getItem('access_token'));
             startResync();
         } catch (error) {
             console.error('Failed to start timer', error);
+            set({ activeEntry: null, isRunning: false, isPaused: false, elapsed: 0 });
+            setTrackingSessionActive(false);
             await get().loadActive();
             if (get().isRunning) {
                 return;
@@ -83,31 +102,40 @@ export const useTimerStore = create<TimerState>((set, get) => ({
     },
 
     stop: async () => {
-        const { activeEntry } = get();
+        const { activeEntry, elapsed } = get();
         if (!activeEntry) return;
+
+        // Optimistic clear — revert on failure
+        const snapshot = { activeEntry, elapsed, isRunning: true as const, isPaused: get().isPaused };
+        set({ activeEntry: null, isRunning: false, isPaused: false, elapsed: 0 });
+        setTrackingSessionActive(false);
+        pausedBySystemIdle = false;
+        monitoringService.stopMonitoring();
+        stopResync();
+
+        if (activeEntry.id < 0) {
+            return;
+        }
 
         try {
             await timeService.stopTimer(activeEntry.id);
-            set({ activeEntry: null, isRunning: false, isPaused: false, elapsed: 0 });
-            setTrackingSessionActive(false);
-            pausedBySystemIdle = false;
-            monitoringService.stopMonitoring();
-            stopResync();
         } catch (error: unknown) {
             console.error('Failed to stop timer', error);
             const message = (error as { response?: { data?: { message?: string } } })?.response?.data?.message ?? '';
             if (message.toLowerCase().includes('already stopped')) {
-                set({ activeEntry: null, isRunning: false, isPaused: false, elapsed: 0 });
-                setTrackingSessionActive(false);
-                pausedBySystemIdle = false;
-                monitoringService.stopMonitoring();
-                stopResync();
                 return;
             }
+            // Revert optimistic clear
+            set({
+                activeEntry: snapshot.activeEntry,
+                isRunning: true,
+                isPaused: snapshot.isPaused,
+                elapsed: snapshot.elapsed,
+            });
+            setTrackingSessionActive(true);
+            startResync();
             await get().loadActive();
             if (!get().isRunning) {
-                monitoringService.stopMonitoring();
-                stopResync();
                 return;
             }
             throw error;

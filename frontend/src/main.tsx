@@ -1,141 +1,164 @@
-import { StrictMode } from 'react'
+import { StrictMode, Suspense, lazy, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import './index.css'
 
-import LoginPage from './features/auth/LoginPage'
-import RegisterPage from './features/auth/RegisterPage'
-import ForgotPasswordPage from './features/auth/ForgotPasswordPage'
-import ResetPasswordPage from './features/auth/ResetPasswordPage'
-import VerifyEmailPage from './features/auth/VerifyEmailPage'
-import OAuthCallbackPage from './features/auth/OAuthCallbackPage'
-import LandingPage from './features/marketing/LandingPage'
-import PrivacyPolicyPage from './features/marketing/PrivacyPolicyPage'
-import TermsOfServicePage from './features/marketing/TermsOfServicePage'
-import DashboardPage from './features/dashboard/DashboardPage'
-import ProjectsPage from './features/projects/ProjectsPage'
-import BillingPage from './features/billing/BillingPage'
-import TeamPage from './features/team/TeamPage'
-import SettingsPage from './features/settings/SettingsPage'
-import TimeTrackingPage from './features/time/TimeTrackingPage'
-import AnalyticsPage from './features/analytics/AnalyticsPage'
-import ScreenshotsPage from './features/screenshots/ScreenshotsPage'
-import ActivityPage from './features/activity/ActivityPage'
-import InvoicesPage from './features/invoices/InvoicesPage'
-import InvoiceDetailPage from './features/invoices/InvoiceDetailPage'
-import TimesheetsPage from './features/timesheets/TimesheetsPage'
-import PayrollPage from './features/payroll/PayrollPage'
-import PayrollRunDetailPage from './features/payroll/PayrollRunDetailPage'
-import ClientsPage from './features/clients/ClientsPage'
-import LeavePage from './features/leave/LeavePage'
-import InsightsPage from './features/insights/InsightsPage'
-import DailyStandupPage from './features/standup/DailyStandupPage'
-import WellbeingPage from './features/wellbeing/WellbeingPage'
-import ProofOfWorkPage from './features/proof/ProofOfWorkPage'
-import ClientPortalPage from './features/portal/ClientPortalPage'
-import IntegrationsPage from './features/integrations/IntegrationsPage'
-import JiraHubPage from './features/integrations/JiraHubPage'
-import GitHubHubPage from './features/integrations/GitHubHubPage'
-import SlackHubPage from './features/integrations/SlackHubPage'
-
 import { Shell } from './layouts/Shell'
 import { useAuthStore } from './store/authStore'
-import AdminDashboardPage from './features/admin/AdminDashboardPage'
-import MemberTrackingPage from './features/team/MemberTrackingPage'
-import AdvancedMonitoringReportPage from './features/team/AdvancedMonitoringReportPage'
 import { canAccessPath, isSuperAdmin } from './utils/access'
 import { isDesktopApp } from './utils/electronAuth'
 import { initDesktopLifecycle } from './utils/desktopLifecycle'
 import { DesktopTitleBar } from './components/WindowControls'
+import { AppQueryProvider } from './lib/queryClient'
+import { ToastViewport, PageSkeleton } from './components/ui'
+import { CommandPalette } from './components/CommandPalette'
+import { ShortcutsHelp } from './components/ShortcutsHelp'
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 
-import { Loader2 } from 'lucide-react';
+const LoginPage = lazy(() => import('./features/auth/LoginPage'))
+const RegisterPage = lazy(() => import('./features/auth/RegisterPage'))
+const ForgotPasswordPage = lazy(() => import('./features/auth/ForgotPasswordPage'))
+const ResetPasswordPage = lazy(() => import('./features/auth/ResetPasswordPage'))
+const VerifyEmailPage = lazy(() => import('./features/auth/VerifyEmailPage'))
+const OAuthCallbackPage = lazy(() => import('./features/auth/OAuthCallbackPage'))
+const LandingPage = lazy(() => import('./features/marketing/LandingPage'))
+const PrivacyPolicyPage = lazy(() => import('./features/marketing/PrivacyPolicyPage'))
+const TermsOfServicePage = lazy(() => import('./features/marketing/TermsOfServicePage'))
+const DashboardPage = lazy(() => import('./features/dashboard/DashboardPage'))
+const ProjectsPage = lazy(() => import('./features/projects/ProjectsPage'))
+const BillingPage = lazy(() => import('./features/billing/BillingPage'))
+const TeamPage = lazy(() => import('./features/team/TeamPage'))
+const SettingsPage = lazy(() => import('./features/settings/SettingsPage'))
+const TimeTrackingPage = lazy(() => import('./features/time/TimeTrackingPage'))
+const AnalyticsPage = lazy(() => import('./features/analytics/AnalyticsPage'))
+const ScreenshotsPage = lazy(() => import('./features/screenshots/ScreenshotsPage'))
+const ActivityPage = lazy(() => import('./features/activity/ActivityPage'))
+const InvoicesPage = lazy(() => import('./features/invoices/InvoicesPage'))
+const InvoiceDetailPage = lazy(() => import('./features/invoices/InvoiceDetailPage'))
+const TimesheetsPage = lazy(() => import('./features/timesheets/TimesheetsPage'))
+const PayrollPage = lazy(() => import('./features/payroll/PayrollPage'))
+const PayrollRunDetailPage = lazy(() => import('./features/payroll/PayrollRunDetailPage'))
+const ClientsPage = lazy(() => import('./features/clients/ClientsPage'))
+const LeavePage = lazy(() => import('./features/leave/LeavePage'))
+const InsightsPage = lazy(() => import('./features/insights/InsightsPage'))
+const DailyStandupPage = lazy(() => import('./features/standup/DailyStandupPage'))
+const WellbeingPage = lazy(() => import('./features/wellbeing/WellbeingPage'))
+const ProofOfWorkPage = lazy(() => import('./features/proof/ProofOfWorkPage'))
+const ClientPortalPage = lazy(() => import('./features/portal/ClientPortalPage'))
+const IntegrationsPage = lazy(() => import('./features/integrations/IntegrationsPage'))
+const JiraHubPage = lazy(() => import('./features/integrations/JiraHubPage'))
+const GitHubHubPage = lazy(() => import('./features/integrations/GitHubHubPage'))
+const SlackHubPage = lazy(() => import('./features/integrations/SlackHubPage'))
+const AdminDashboardPage = lazy(() => import('./features/admin/AdminDashboardPage'))
+const MemberTrackingPage = lazy(() => import('./features/team/MemberTrackingPage'))
+const AdvancedMonitoringReportPage = lazy(() => import('./features/team/AdvancedMonitoringReportPage'))
+const ActivityFeedPage = lazy(() => import('./features/activity/ActivityFeedPage'))
+const OnboardingPage = lazy(() => import('./features/onboarding/OnboardingPage'))
+
+const RouteFallback = () => (
+  <div className="min-h-[50vh] p-6">
+    <PageSkeleton />
+  </div>
+)
 
 const AuthBootLoader = () => (
   <div className="min-h-screen flex items-center justify-center bg-background">
-    <Loader2 className="w-10 h-10 text-primary-500 animate-spin" />
+    <PageSkeleton />
   </div>
-);
+)
 
-const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
-  const { isAuthenticated, sessionReady } = useAuthStore();
-  if (!sessionReady) {
-    return <AuthBootLoader />;
-  }
-  return isAuthenticated ? <Shell>{children}</Shell> : <Navigate to="/login" />;
-};
+const Lazy = ({ children }: { children: ReactNode }) => (
+  <Suspense fallback={<RouteFallback />}>{children}</Suspense>
+)
 
-const SuperAdminRoute = ({ children }: { children: React.ReactNode }) => {
-  const { isAuthenticated, user } = useAuthStore();
-  if (!isAuthenticated) return <Navigate to="/login" />;
-  if (!isSuperAdmin(user)) return <Navigate to="/app" replace />;
-  return <Shell>{children}</Shell>;
-};
+const ProtectedRoute = ({ children }: { children: ReactNode }) => {
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
+  const sessionReady = useAuthStore((s) => s.sessionReady)
+  if (!sessionReady) return <AuthBootLoader />
+  return isAuthenticated ? <Shell><Lazy>{children}</Lazy></Shell> : <Navigate to="/login" />
+}
 
-const MemberTrackingRoute = ({ children }: { children: React.ReactNode }) => {
-  const { isAuthenticated, user } = useAuthStore();
-  if (!isAuthenticated) return <Navigate to="/login" />;
-  if (!canAccessPath(user, '/team/member')) return <Navigate to="/app" replace />;
-  return <Shell>{children}</Shell>;
-};
+const SuperAdminRoute = ({ children }: { children: ReactNode }) => {
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
+  const user = useAuthStore((s) => s.user)
+  if (!isAuthenticated) return <Navigate to="/login" />
+  if (!isSuperAdmin(user)) return <Navigate to="/app" replace />
+  return <Shell><Lazy>{children}</Lazy></Shell>
+}
 
-const RoleRoute = ({ path, children }: { path: string; children: React.ReactNode }) => {
-  const { isAuthenticated, user, sessionReady } = useAuthStore();
-  if (!sessionReady) {
-    return <AuthBootLoader />;
-  }
-  if (!isAuthenticated) return <Navigate to="/login" />;
-  if (!canAccessPath(user, path)) return <Navigate to="/app" replace />;
-  return <Shell>{children}</Shell>;
-};
+const MemberTrackingRoute = ({ children }: { children: ReactNode }) => {
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
+  const user = useAuthStore((s) => s.user)
+  if (!isAuthenticated) return <Navigate to="/login" />
+  if (!canAccessPath(user, '/team/member')) return <Navigate to="/app" replace />
+  return <Shell><Lazy>{children}</Lazy></Shell>
+}
+
+const RoleRoute = ({ path, children }: { path: string; children: ReactNode }) => {
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
+  const user = useAuthStore((s) => s.user)
+  const sessionReady = useAuthStore((s) => s.sessionReady)
+  if (!sessionReady) return <AuthBootLoader />
+  if (!isAuthenticated) return <Navigate to="/login" />
+  if (!canAccessPath(user, path)) return <Navigate to="/app" replace />
+  return <Shell><Lazy>{children}</Lazy></Shell>
+}
 
 const RootPage = () => {
   if (isDesktopApp()) {
-    const { isAuthenticated, sessionReady } = useAuthStore();
-    if (!sessionReady) {
-      return <AuthBootLoader />;
-    }
-    return <Navigate to={isAuthenticated ? '/app' : '/login'} replace />;
+    const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
+    const sessionReady = useAuthStore((s) => s.sessionReady)
+    if (!sessionReady) return <AuthBootLoader />
+    return <Navigate to={isAuthenticated ? '/app' : '/login'} replace />
   }
-  return <LandingPage />;
-};
+  return (
+    <Lazy>
+      <LandingPage />
+    </Lazy>
+  )
+}
 
 const RegisterRoute = () => {
-  if (isDesktopApp()) {
-    return <Navigate to="/login" replace />;
-  }
-  return <RegisterPage />;
-};
+  if (isDesktopApp()) return <Navigate to="/login" replace />
+  return (
+    <Lazy>
+      <RegisterPage />
+    </Lazy>
+  )
+}
 
 const FallbackRedirect = () => (
   <Navigate to={isDesktopApp() ? '/login' : '/app'} replace />
-);
+)
 
-initDesktopLifecycle();
-
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <Router>
+function AppChrome() {
+  useKeyboardShortcuts()
+  return (
+    <>
       <DesktopTitleBar />
+      <ToastViewport />
+      <CommandPalette />
+      <ShortcutsHelp />
       <Routes>
-        <Route path="/login" element={<LoginPage />} />
+        <Route path="/login" element={<Lazy><LoginPage /></Lazy>} />
         <Route path="/register" element={<RegisterRoute />} />
-        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-        <Route path="/reset-password" element={<ResetPasswordPage />} />
-        <Route path="/verify-email" element={<VerifyEmailPage />} />
-        <Route path="/auth/callback" element={<OAuthCallbackPage />} />
+        <Route path="/forgot-password" element={<Lazy><ForgotPasswordPage /></Lazy>} />
+        <Route path="/reset-password" element={<Lazy><ResetPasswordPage /></Lazy>} />
+        <Route path="/verify-email" element={<Lazy><VerifyEmailPage /></Lazy>} />
+        <Route path="/auth/callback" element={<Lazy><OAuthCallbackPage /></Lazy>} />
         <Route path="/" element={<RootPage />} />
-        <Route path="/privacy" element={<PrivacyPolicyPage />} />
-        <Route path="/terms" element={<TermsOfServicePage />} />
-        <Route path="/portal/:token" element={<ClientPortalPage />} />
+        <Route path="/privacy" element={<Lazy><PrivacyPolicyPage /></Lazy>} />
+        <Route path="/terms" element={<Lazy><TermsOfServicePage /></Lazy>} />
+        <Route path="/portal/:token" element={<Lazy><ClientPortalPage /></Lazy>} />
 
-        {/* Tracker routes — all authenticated users */}
         <Route path="/app" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
         <Route path="/time" element={<ProtectedRoute><TimeTrackingPage /></ProtectedRoute>} />
         <Route path="/timesheets" element={<RoleRoute path="/timesheets"><TimesheetsPage /></RoleRoute>} />
         <Route path="/activity" element={<ProtectedRoute><ActivityPage /></ProtectedRoute>} />
+        <Route path="/activity-feed" element={<ProtectedRoute><ActivityFeedPage /></ProtectedRoute>} />
+        <Route path="/onboarding" element={<ProtectedRoute><OnboardingPage /></ProtectedRoute>} />
         <Route path="/screenshots" element={<RoleRoute path="/screenshots"><ScreenshotsPage /></RoleRoute>} />
 
-        {/* Admin-only routes */}
         <Route path="/projects" element={<RoleRoute path="/projects"><ProjectsPage /></RoleRoute>} />
         <Route path="/billing" element={<RoleRoute path="/billing"><BillingPage /></RoleRoute>} />
         <Route path="/team" element={<RoleRoute path="/team"><TeamPage /></RoleRoute>} />
@@ -159,9 +182,20 @@ createRoot(document.getElementById('root')!).render(
         <Route path="/payroll/runs/:runId" element={<RoleRoute path="/payroll"><PayrollRunDetailPage /></RoleRoute>} />
         <Route path="/admin" element={<SuperAdminRoute><AdminDashboardPage /></SuperAdminRoute>} />
 
-        {/* Fallback */}
         <Route path="*" element={<FallbackRedirect />} />
       </Routes>
-    </Router>
+    </>
+  )
+}
+
+initDesktopLifecycle()
+
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <AppQueryProvider>
+      <Router>
+        <AppChrome />
+      </Router>
+    </AppQueryProvider>
   </StrictMode>,
 )

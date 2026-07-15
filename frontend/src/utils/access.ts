@@ -20,6 +20,7 @@ import {
   HeartPulse,
   FileCheck,
   Plug,
+  Rss,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -50,6 +51,7 @@ const ALL_NAV_ITEMS: NavItem[] = [
     showIf: (user) => canAccessScreenshotsPage(user),
   },
   { icon: Activity, label: 'Activity', path: '/activity', permission: 'activity.view_own' },
+  { icon: Rss, label: 'Activity Feed', path: '/activity-feed' },
   { icon: FileText, label: 'Invoices', path: '/invoices', permission: 'invoices.view' },
   { icon: Wallet, label: 'Payroll', path: '/payroll', permission: 'payroll.view' },
   {
@@ -97,6 +99,8 @@ const PATH_PERMISSIONS: Record<string, string | string[]> = {
   '/integrations/jira': [],
   '/integrations/github': [],
   '/integrations/slack': [],
+  '/activity-feed': [],
+  '/onboarding': [],
   '/settings': [],
   '/admin': '__super_admin__',
   '/team/member': ['time.view_team', 'screenshots.view_team', 'activity.view_team'],

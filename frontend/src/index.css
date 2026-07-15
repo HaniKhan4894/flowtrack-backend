@@ -27,14 +27,36 @@
   --color-secondary: var(--color-secondary-500);
 
   --color-accent: #F43F5E;
-  
+
+  --color-surface-50: rgba(255, 255, 255, 0.03);
+  --color-surface-100: rgba(255, 255, 255, 0.05);
+  --color-surface-200: rgba(255, 255, 255, 0.08);
+  --color-surface-300: rgba(255, 255, 255, 0.12);
+  --color-surface-700: #161922;
+  --color-surface-800: #12141C;
+  --color-surface-900: #0A0C12;
+
   --font-sans: "Inter", "system-ui", sans-serif;
   --font-display: "Outfit", "Inter", sans-serif;
 
   --background-image-ai-gradient: linear-gradient(135deg, #6366F1 0%, #06B6D4 100%);
-  
+  --background-image-surface-gradient: linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0) 100%);
+
   --shadow-glass: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
   --shadow-ai: 0 0 20px rgba(99, 102, 241, 0.3);
+
+  --animate-float: float 6s ease-in-out infinite;
+  --animate-shimmer: shimmer 1.6s ease-in-out infinite;
+
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+  }
+
+  @keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
 }
 
 @layer base {
@@ -150,5 +172,16 @@
   .modal-overlay {
     background: rgba(0, 0, 0, 0.88);
     backdrop-filter: blur(6px);
+  }
+
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.04) 25%,
+      rgba(255, 255, 255, 0.09) 50%,
+      rgba(255, 255, 255, 0.04) 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.6s ease-in-out infinite;
   }
 }

@@ -3,6 +3,7 @@ import { Plus, Loader2, Trash2, MapPin, Save } from 'lucide-react';
 import { officeLocationService, type OfficeLocation } from '../../api/officeLocationService';
 import { organizationService } from '../../api/organizationService';
 import { getApiErrorMessage } from '../../utils/apiError';
+import { Modal } from '../../components/ui';
 import { DEFAULT_OFFICE } from './orgSettingsDefaults';
 
 interface Props {
@@ -134,27 +135,23 @@ export function OfficeLocationsSettingsTab({ organizationId }: Props) {
         </table>
       </div>
 
-      {showModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 modal-overlay">
-          <button type="button" aria-label="Close" className="absolute inset-0" onClick={() => setShowModal(false)} />
-          <form onSubmit={handleCreate} className="relative z-10 w-full max-w-md modal-panel p-6 space-y-4">
-            <h4 className="text-lg font-bold text-white">Create office location</h4>
-            <input value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} placeholder="Location name" className="form-field" required />
-            <input value={form.public_ip} onChange={(e) => setForm((p) => ({ ...p, public_ip: e.target.value }))} placeholder="Public IP address (optional)" className="form-field" />
-            <input value={form.router_mac} onChange={(e) => setForm((p) => ({ ...p, router_mac: e.target.value }))} placeholder="Router MAC address (optional)" className="form-field" />
-            <select value={form.location_type} onChange={(e) => setForm((p) => ({ ...p, location_type: e.target.value as 'office' | 'non_office' }))} className="form-select">
-              <option value="office">Office</option>
-              <option value="non_office">Non-office</option>
-            </select>
-            <div className="flex justify-end gap-3">
-              <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-slate-400">Cancel</button>
-              <button type="submit" disabled={saving} className="flex items-center gap-2 px-5 py-2 rounded-xl font-bold bg-ai-gradient text-white disabled:opacity-50">
-                {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Save
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
+      <Modal open={showModal} onClose={() => setShowModal(false)} title="Create office location" size="sm">
+        <form onSubmit={handleCreate} className="space-y-4">
+          <input value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} placeholder="Location name" className="form-field" required />
+          <input value={form.public_ip} onChange={(e) => setForm((p) => ({ ...p, public_ip: e.target.value }))} placeholder="Public IP address (optional)" className="form-field" />
+          <input value={form.router_mac} onChange={(e) => setForm((p) => ({ ...p, router_mac: e.target.value }))} placeholder="Router MAC address (optional)" className="form-field" />
+          <select value={form.location_type} onChange={(e) => setForm((p) => ({ ...p, location_type: e.target.value as 'office' | 'non_office' }))} className="form-select">
+            <option value="office">Office</option>
+            <option value="non_office">Non-office</option>
+          </select>
+          <div className="flex justify-end gap-3">
+            <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-slate-400">Cancel</button>
+            <button type="submit" disabled={saving} className="flex items-center gap-2 px-5 py-2 rounded-xl font-bold bg-ai-gradient text-white disabled:opacity-50">
+              {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Save
+            </button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }

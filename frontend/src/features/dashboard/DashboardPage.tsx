@@ -1,15 +1,24 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Clock, TrendingUp, Users, Activity, Loader2, Timer, Radio } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { Clock, TrendingUp, Users, Activity, Timer, Radio } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { dashboardService, type DashboardStats } from '../../api/dashboardService';
-import { reportService, type ActiveSession } from '../../api/reportService';
+import { dashboardService } from '../../api/dashboardService';
+import { reportService } from '../../api/reportService';
 import { useAuthStore } from '../../store/authStore';
 import { useTimerStore } from '../../store/timerStore';
 import { canViewMemberTracking, canViewOrgPackage } from '../../utils/access';
 import { OnboardingChecklist } from './OnboardingChecklist';
+import { PageSkeleton, Badge } from '../../components/ui';
+import { DashboardLayoutEditor } from './dashboardLayout';
 
-const StatCard = ({ icon: Icon, label, value, trend, delay }: any) => (
+const StatCard = ({ icon: Icon, label, value, trend, delay }: {
+  icon: typeof Clock;
+  label: string;
+  value: string | number;
+  trend: number;
+  delay: number;
+}) => (
   <motion.div
     initial={{ opacity: 0, y: 20 }}
     animate={{ opacity: 1, y: 0 }}
@@ -20,9 +29,9 @@ const StatCard = ({ icon: Icon, label, value, trend, delay }: any) => (
       <div className="p-3 rounded-xl bg-primary-500/10 text-primary-400 group-hover:scale-110 transition-transform">
         <Icon size={24} />
       </div>
-      <span className={`text-xs font-semibold px-2 py-1 rounded-full ${trend >= 0 ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
+      <Badge variant={trend >= 0 ? 'success' : 'danger'}>
         {trend >= 0 ? '+' : ''}{trend}%
-      </span>
+      </Badge>
     </div>
     <div className="space-y-1">
       <p className="text-sm text-slate-400 font-medium">{label}</p>
@@ -31,78 +40,59 @@ const StatCard = ({ icon: Icon, label, value, trend, delay }: any) => (
   </motion.div>
 );
 
+function TargetIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-primary-400">
+      <circle cx="12" cy="12" r="10" />
+      <circle cx="12" cy="12" r="6" />
+      <circle cx="12" cy="12" r="2" />
+    </svg>
+  );
+}
+
 const DashboardPage = () => {
   const navigate = useNavigate();
   const user = useAuthStore((state) => state.user);
   const timerRunning = useTimerStore((state) => state.isRunning);
   const teamView = canViewMemberTracking(user);
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [activeSessions, setActiveSessions] = useState<ActiveSession[]>([]);
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (!user?.id) {
-      return;
-    }
-
-    let cancelled = false;
-    const fetchStats = async () => {
-      setLoading(true);
+  const statsQuery = useQuery({
+    queryKey: ['dashboard', 'stats', user?.organization_id, user?.id],
+    queryFn: async () => {
       try {
         const resp = await dashboardService.getStats();
-        if (!cancelled) {
-          setStats(resp.data);
-        }
-      } catch (e) {
-        console.error(e);
-        if (!cancelled) {
-          setStats({
-            total_hours: 0,
-            productivity_score: 0,
-            team_count: 0,
-            active_timers: 0,
-            recent_activity: [],
-            weekly_stats: [],
-          });
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    };
-
-    fetchStats();
-    return () => {
-      cancelled = true;
-    };
-  }, [user?.id, user?.organization_id]);
-
-  useEffect(() => {
-    const fetchSessions = async () => {
-      try {
-        const resp = await reportService.getActiveSessions();
-        setActiveSessions(resp.data ?? []);
+        return resp.data;
       } catch {
-        setActiveSessions([]);
+        return {
+          total_hours: 0,
+          productivity_score: 0,
+          team_count: 0,
+          active_timers: 0,
+          recent_activity: [] as { id: number; user: string; action: string; target: string; time: string; duration: string }[],
+          weekly_stats: [] as { day: string; hours: number }[],
+        };
       }
-    };
-    fetchSessions();
-    const interval = setInterval(fetchSessions, 30_000);
-    return () => clearInterval(interval);
-  }, []);
+    },
+    enabled: !!user?.id,
+  });
+
+  const sessionsQuery = useQuery({
+    queryKey: ['dashboard', 'active-sessions'],
+    queryFn: () => reportService.getActiveSessions().then((r) => r.data ?? []).catch(() => []),
+    refetchInterval: 30_000,
+  });
+
+  const stats = statsQuery.data;
+  const activeSessions = sessionsQuery.data ?? [];
+  const loading = statsQuery.isLoading || !stats;
 
   const maxWeeklyHours = useMemo(() => {
     if (!stats?.weekly_stats?.length) return 1;
     return Math.max(...stats.weekly_stats.map((d) => d.hours), 0.1);
   }, [stats]);
 
-  if (loading || !stats) {
-    return (
-      <div className="h-full flex items-center justify-center">
-        <Loader2 className="w-10 h-10 text-primary-500 animate-spin" />
-      </div>
-    );
+  if (loading) {
+    return <PageSkeleton />;
   }
 
   const hasWeeklyData = stats.weekly_stats.some((d) => d.hours > 0);
@@ -166,7 +156,7 @@ const DashboardPage = () => {
               className="h-full bg-ai-gradient rounded-full"
             />
           </div>
-          <p className="text-sm text-slate-400 mt-2">{pctOfTarget}% of today's target</p>
+          <p className="text-sm text-slate-400 mt-2">{pctOfTarget}% of today&apos;s target</p>
         </div>
 
         <div className="bg-white/5 border border-white/10 rounded-3xl p-6">
@@ -269,18 +259,10 @@ const DashboardPage = () => {
           </button>
         </div>
       </div>
+
+      <DashboardLayoutEditor />
     </div>
   );
 };
-
-function TargetIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-primary-400">
-      <circle cx="12" cy="12" r="10" />
-      <circle cx="12" cy="12" r="6" />
-      <circle cx="12" cy="12" r="2" />
-    </svg>
-  );
-}
 
 export default DashboardPage;

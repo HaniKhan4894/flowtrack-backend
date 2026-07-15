@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { CalendarDays, Plus, CheckCircle2, XCircle, Clock, Loader2 } from 'lucide-react';
-import { Button, Input } from '../../components/ui';
+import { CalendarDays, Plus, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
+import { Button, Input, Modal } from '../../components/ui';
 import { leaveService, type LeaveBalance, type LeaveRequest, type LeaveType } from '../../api/leaveService';
 import { useAuthStore } from '../../store/authStore';
 import { hasPermission } from '../../utils/access';
@@ -172,28 +172,21 @@ const LeavePage = () => {
         </table>
       </div>
 
-      {showForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="modal-panel w-full max-w-md p-6 space-y-4">
-            <h3 className="text-lg font-bold text-white flex items-center gap-2">
-              <Clock size={18} /> Request Leave
-            </h3>
-            <form onSubmit={handleRequest} className="space-y-4">
-              <select className="form-select" required value={form.leave_type_id} onChange={(e) => setForm((p) => ({ ...p, leave_type_id: e.target.value }))}>
-                <option value="">Select leave type</option>
-                {types.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-              </select>
-              <Input type="date" required value={form.start_date} onChange={(e) => setForm((p) => ({ ...p, start_date: e.target.value }))} />
-              <Input type="date" required value={form.end_date} onChange={(e) => setForm((p) => ({ ...p, end_date: e.target.value }))} />
-              <textarea value={form.reason} onChange={(e) => setForm((p) => ({ ...p, reason: e.target.value }))} placeholder="Reason (optional)" className="w-full h-20 bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white resize-none" />
-              <div className="flex gap-3">
-                <Button variant="secondary" type="button" className="flex-1" onClick={() => setShowForm(false)}>Cancel</Button>
-                <Button type="submit" className="flex-1" isLoading={submitting}>Submit</Button>
-              </div>
-            </form>
+      <Modal open={showForm} onClose={() => setShowForm(false)} title="Request Leave" size="sm">
+        <form onSubmit={handleRequest} className="space-y-4">
+          <select className="form-select" required value={form.leave_type_id} onChange={(e) => setForm((p) => ({ ...p, leave_type_id: e.target.value }))}>
+            <option value="">Select leave type</option>
+            {types.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+          <Input type="date" required value={form.start_date} onChange={(e) => setForm((p) => ({ ...p, start_date: e.target.value }))} />
+          <Input type="date" required value={form.end_date} onChange={(e) => setForm((p) => ({ ...p, end_date: e.target.value }))} />
+          <textarea value={form.reason} onChange={(e) => setForm((p) => ({ ...p, reason: e.target.value }))} placeholder="Reason (optional)" className="w-full h-20 bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white resize-none" />
+          <div className="flex gap-3">
+            <Button variant="secondary" type="button" className="flex-1" onClick={() => setShowForm(false)}>Cancel</Button>
+            <Button type="submit" className="flex-1" isLoading={submitting}>Submit</Button>
           </div>
-        </div>
-      )}
+        </form>
+      </Modal>
     </div>
   );
 };

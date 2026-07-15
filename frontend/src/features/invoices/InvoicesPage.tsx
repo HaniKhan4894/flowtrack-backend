@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { FileText, Plus, Download, Mail, MoreVertical, Search, Filter, CheckCircle2, Clock, X, ExternalLink, Sparkles } from 'lucide-react';
+import { FileText, Plus, Download, Mail, MoreVertical, Search, Filter, CheckCircle2, Clock, ExternalLink, Sparkles } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Button, SearchableSelect } from '../../components/ui';
+import { Button, Modal, SearchableSelect } from '../../components/ui';
 import { invoiceService, type Invoice } from '../../api/invoiceService';
 import { clientService, type Client } from '../../api/clientService';
 import { projectService, type Project } from '../../api/projectService';
@@ -331,174 +331,159 @@ const InvoicesPage = () => {
       </div>
     </div>
 
-    {showCreateModal && (
-      <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 modal-overlay">
-        <button
-          type="button"
-          aria-label="Close"
-          className="absolute inset-0"
-          onClick={() => setShowCreateModal(false)}
-        />
-        <form
-          onSubmit={handleCreateInvoice}
-          className="relative z-10 w-full max-w-xl modal-panel p-6 space-y-4 max-h-[90vh] overflow-y-auto"
-        >
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-xl font-bold text-white">Create Invoice</h3>
-              <p className="text-xs text-slate-500 mt-1">Link a client, add billing details, or pull tracked hours.</p>
-            </div>
-            <button type="button" onClick={() => setShowCreateModal(false)} className="text-slate-500 hover:text-white">
-              <X size={20} />
+    <Modal
+      open={showCreateModal}
+      onClose={() => setShowCreateModal(false)}
+      title="Create Invoice"
+      size="lg"
+    >
+      <p className="text-xs text-slate-500 -mt-2 mb-4">Link a client, add billing details, or pull tracked hours.</p>
+      <form onSubmit={handleCreateInvoice} className="space-y-4">
+        <div className="grid grid-cols-2 gap-2 p-1 rounded-xl bg-white/5 border border-white/10">
+          {([
+            ['manual', 'Blank invoice'],
+            ['from_time', 'From tracked time'],
+          ] as const).map(([mode, label]) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => setCreateMode(mode)}
+              className={`rounded-lg px-3 py-2 text-sm font-medium transition ${
+                createMode === mode ? 'bg-primary-500 text-white' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              {label}
             </button>
-          </div>
+          ))}
+        </div>
 
-          <div className="grid grid-cols-2 gap-2 p-1 rounded-xl bg-white/5 border border-white/10">
-            {([
-              ['manual', 'Blank invoice'],
-              ['from_time', 'From tracked time'],
-            ] as const).map(([mode, label]) => (
-              <button
-                key={mode}
-                type="button"
-                onClick={() => setCreateMode(mode)}
-                className={`rounded-lg px-3 py-2 text-sm font-medium transition ${
-                  createMode === mode ? 'bg-primary-500 text-white' : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+        <div>
+          <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Client</label>
+          <SearchableSelect
+            value={form.client_id}
+            onChange={(val) => applyClientSelection(String(val))}
+            options={clientOptions}
+            placeholder="Select existing client (optional)"
+            searchPlaceholder="Search clients…"
+            emptyMessage="No clients found"
+            className="mt-1"
+          />
+        </div>
 
+        <div className="grid sm:grid-cols-2 gap-3">
           <div>
-            <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Client</label>
-            <SearchableSelect
-              value={form.client_id}
-              onChange={(val) => applyClientSelection(String(val))}
-              options={clientOptions}
-              placeholder="Select existing client (optional)"
-              searchPlaceholder="Search clients…"
-              emptyMessage="No clients found"
-              className="mt-1"
+            <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Client name *</label>
+            <input
+              required
+              placeholder="Client name"
+              value={form.client_name}
+              onChange={(e) => setForm((f) => ({ ...f, client_name: e.target.value }))}
+              className={`${inputClass} mt-1`}
             />
           </div>
-
-          <div className="grid sm:grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Client name *</label>
-              <input
-                required
-                placeholder="Client name"
-                value={form.client_name}
-                onChange={(e) => setForm((f) => ({ ...f, client_name: e.target.value }))}
-                className={`${inputClass} mt-1`}
-              />
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Client email</label>
-              <input
-                type="email"
-                placeholder="Required to send invoice"
-                value={form.client_email}
-                onChange={(e) => setForm((f) => ({ ...f, client_email: e.target.value }))}
-                className={`${inputClass} mt-1`}
-              />
-            </div>
-          </div>
-
           <div>
-            <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Project</label>
-            <SearchableSelect
-              value={form.project_id}
-              onChange={(val) => setForm((f) => ({ ...f, project_id: String(val) }))}
-              options={projectOptions}
-              placeholder="No project / all projects"
-              searchPlaceholder="Search projects…"
-              emptyMessage="No projects found"
-              className="mt-1"
+            <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Client email</label>
+            <input
+              type="email"
+              placeholder="Required to send invoice"
+              value={form.client_email}
+              onChange={(e) => setForm((f) => ({ ...f, client_email: e.target.value }))}
+              className={`${inputClass} mt-1`}
             />
-            <p className="text-[11px] text-slate-500 mt-1">
-              {form.client_id
-                ? 'Showing projects for this client (or all if none linked yet).'
-                : 'Proof-of-Work Pack uses project time when linked.'}
+          </div>
+        </div>
+
+        <div>
+          <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Project</label>
+          <SearchableSelect
+            value={form.project_id}
+            onChange={(val) => setForm((f) => ({ ...f, project_id: String(val) }))}
+            options={projectOptions}
+            placeholder="No project / all projects"
+            searchPlaceholder="Search projects…"
+            emptyMessage="No projects found"
+            className="mt-1"
+          />
+          <p className="text-[11px] text-slate-500 mt-1">
+            {form.client_id
+              ? 'Showing projects for this client (or all if none linked yet).'
+              : 'Proof-of-Work Pack uses project time when linked.'}
+          </p>
+        </div>
+
+        {createMode === 'from_time' && (
+          <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 space-y-3">
+            <p className="text-sm font-medium text-emerald-300 flex items-center gap-2">
+              <Sparkles className="w-4 h-4" />
+              Pull billable hours into line items automatically
             </p>
-          </div>
-
-          {createMode === 'from_time' && (
-            <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 space-y-3">
-              <p className="text-sm font-medium text-emerald-300 flex items-center gap-2">
-                <Sparkles className="w-4 h-4" />
-                Pull billable hours into line items automatically
-              </p>
-              <div className="grid sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Period start *</label>
-                  <input
-                    required
-                    type="date"
-                    value={form.start_date}
-                    onChange={(e) => setForm((f) => ({ ...f, start_date: e.target.value }))}
-                    className={`${inputClass} mt-1`}
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Period end *</label>
-                  <input
-                    required
-                    type="date"
-                    value={form.end_date}
-                    onChange={(e) => setForm((f) => ({ ...f, end_date: e.target.value }))}
-                    className={`${inputClass} mt-1`}
-                  />
-                </div>
+            <div className="grid sm:grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Period start *</label>
+                <input
+                  required
+                  type="date"
+                  value={form.start_date}
+                  onChange={(e) => setForm((f) => ({ ...f, start_date: e.target.value }))}
+                  className={`${inputClass} mt-1`}
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Period end *</label>
+                <input
+                  required
+                  type="date"
+                  value={form.end_date}
+                  onChange={(e) => setForm((f) => ({ ...f, end_date: e.target.value }))}
+                  className={`${inputClass} mt-1`}
+                />
               </div>
             </div>
-          )}
-
-          <div className="grid sm:grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Due date *</label>
-              <input
-                required
-                type="date"
-                value={form.due_date}
-                onChange={(e) => setForm((f) => ({ ...f, due_date: e.target.value }))}
-                className={`${inputClass} mt-1`}
-              />
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Tax rate %</label>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder="0"
-                value={form.tax_rate}
-                onChange={(e) => setForm((f) => ({ ...f, tax_rate: e.target.value }))}
-                className={`${inputClass} mt-1`}
-              />
-            </div>
           </div>
+        )}
 
+        <div className="grid sm:grid-cols-2 gap-3">
           <div>
-            <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Notes</label>
-            <textarea
-              placeholder="Invoice notes"
-              value={form.notes}
-              onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-              className={`${inputClass} mt-1 min-h-24`}
+            <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Due date *</label>
+            <input
+              required
+              type="date"
+              value={form.due_date}
+              onChange={(e) => setForm((f) => ({ ...f, due_date: e.target.value }))}
+              className={`${inputClass} mt-1`}
             />
           </div>
+          <div>
+            <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Tax rate %</label>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="0"
+              value={form.tax_rate}
+              onChange={(e) => setForm((f) => ({ ...f, tax_rate: e.target.value }))}
+              className={`${inputClass} mt-1`}
+            />
+          </div>
+        </div>
 
-          {createError && <p className="text-sm text-rose-400">{createError}</p>}
+        <div>
+          <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Notes</label>
+          <textarea
+            placeholder="Invoice notes"
+            value={form.notes}
+            onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
+            className={`${inputClass} mt-1 min-h-24`}
+          />
+        </div>
 
-          <Button type="submit" isLoading={isCreating} className="w-full">
-            {createMode === 'from_time' ? 'Generate invoice from time' : 'Create & open invoice'}
-          </Button>
-        </form>
-      </div>
-    )}
+        {createError && <p className="text-sm text-rose-400">{createError}</p>}
+
+        <Button type="submit" isLoading={isCreating} className="w-full">
+          {createMode === 'from_time' ? 'Generate invoice from time' : 'Create & open invoice'}
+        </Button>
+      </form>
+    </Modal>
     </>
   );
 };

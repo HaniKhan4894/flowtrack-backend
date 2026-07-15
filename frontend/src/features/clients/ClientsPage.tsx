@@ -1,14 +1,15 @@
 import { useState, useEffect, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Building2, Plus, Search, Mail, Phone, X, Trash2, Edit2 } from 'lucide-react';
-import { Button, Input } from '../../components/ui';
+import { motion } from 'framer-motion';
+import { Building2, Plus, Search, Mail, Phone, Trash2, Edit2 } from 'lucide-react';
+import { Button, Input, Modal, EmptyState, SkeletonCard } from '../../components/ui';
 import { clientService, type Client } from '../../api/clientService';
 import { hasPermission } from '../../utils/access';
 import { useAuthStore } from '../../store/authStore';
 import { getApiErrorMessage } from '../../utils/apiError';
+import { toastError, toastSuccess } from '../../store/toastStore';
 
 const ClientsPage = () => {
-  const { user } = useAuthStore();
+  const user = useAuthStore((s) => s.user);
   const canEdit = hasPermission(user, 'invoices.edit') || hasPermission(user, 'invoices.create');
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
@@ -16,7 +17,6 @@ const ClientsPage = () => {
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<Client | null>(null);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({ name: '', email: '', phone: '', default_rate: '', notes: '' });
 
   const fetchClients = useCallback(async () => {
@@ -58,7 +58,6 @@ const ClientsPage = () => {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
-    setError(null);
     try {
       const payload = {
         name: form.name,
@@ -73,9 +72,10 @@ const ClientsPage = () => {
         await clientService.create(payload);
       }
       setShowModal(false);
+      toastSuccess(editing ? 'Client updated' : 'Client created');
       fetchClients();
     } catch (err) {
-      setError(getApiErrorMessage(err, 'Failed to save client'));
+      toastError(getApiErrorMessage(err, 'Failed to save client'));
     } finally {
       setSaving(false);
     }
@@ -85,9 +85,10 @@ const ClientsPage = () => {
     if (!confirm(`Delete client "${client.name}"?`)) return;
     try {
       await clientService.delete(client.id);
+      toastSuccess('Client deleted');
       fetchClients();
     } catch (err) {
-      setError(getApiErrorMessage(err, 'Failed to delete client'));
+      toastError(getApiErrorMessage(err, 'Failed to delete client'));
     }
   };
 
@@ -105,8 +106,6 @@ const ClientsPage = () => {
         )}
       </div>
 
-      {error && <p className="text-rose-400 text-sm">{error}</p>}
-
       <div className="relative max-w-md">
         <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 w-5 h-5" />
         <Input
@@ -119,12 +118,16 @@ const ClientsPage = () => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {loading ? (
-          [1, 2, 3].map((i) => <div key={i} className="glass-card animate-pulse h-48" />)
+          [1, 2, 3].map((i) => <SkeletonCard key={i} className="h-48" />)
         ) : clients.length === 0 ? (
-          <div className="col-span-full text-center py-20 text-slate-500">
-            <Building2 size={48} className="mx-auto mb-4 opacity-30" />
-            <p>No clients found.</p>
-          </div>
+          <EmptyState
+            className="col-span-full"
+            icon={Building2}
+            title="No clients found"
+            description="Add your first client to link projects and invoices."
+            actionLabel={canEdit ? 'New Client' : undefined}
+            onAction={canEdit ? openCreate : undefined}
+          />
         ) : (
           clients.map((client) => (
             <motion.div key={client.id} className="glass-card p-6 space-y-4" whileHover={{ y: -4 }}>
@@ -166,27 +169,20 @@ const ClientsPage = () => {
         )}
       </div>
 
-      <AnimatePresence>
-        {showModal && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 modal-overlay">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0" onClick={() => setShowModal(false)} />
-            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative z-10 w-full max-w-lg modal-panel p-8" onClick={(e) => e.stopPropagation()}>
-              <div className="flex justify-between mb-6">
-                <h2 className="text-2xl font-bold text-white">{editing ? 'Edit Client' : 'New Client'}</h2>
-                <button onClick={() => setShowModal(false)}><X size={24} className="text-slate-500" /></button>
-              </div>
-              <form onSubmit={handleSave} className="space-y-4">
-                <Input required value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} placeholder="Client name" />
-                <Input type="email" value={form.email} onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))} placeholder="Email" />
-                <Input value={form.phone} onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))} placeholder="Phone" />
-                <Input type="number" step="0.01" value={form.default_rate} onChange={(e) => setForm((p) => ({ ...p, default_rate: e.target.value }))} placeholder="Default hourly rate" />
-                <textarea value={form.notes} onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))} placeholder="Notes" className="w-full h-24 form-field resize-none" />
-                <Button type="submit" className="w-full" isLoading={saving}>{editing ? 'Save Changes' : 'Create Client'}</Button>
-              </form>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      <Modal
+        open={showModal}
+        onClose={() => setShowModal(false)}
+        title={editing ? 'Edit Client' : 'New Client'}
+      >
+        <form onSubmit={handleSave} className="space-y-4">
+          <Input required value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} placeholder="Client name" />
+          <Input type="email" value={form.email} onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))} placeholder="Email" />
+          <Input value={form.phone} onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))} placeholder="Phone" />
+          <Input type="number" step="0.01" value={form.default_rate} onChange={(e) => setForm((p) => ({ ...p, default_rate: e.target.value }))} placeholder="Default hourly rate" />
+          <textarea value={form.notes} onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))} placeholder="Notes" className="w-full h-24 form-field resize-none" />
+          <Button type="submit" className="w-full" isLoading={saving}>{editing ? 'Save Changes' : 'Create Client'}</Button>
+        </form>
+      </Modal>
     </div>
   );
 };

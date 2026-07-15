@@ -2,18 +2,19 @@ import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Camera, Calendar, ZoomIn, Trash2, Download, RefreshCw, X, Zap, ChevronLeft, ChevronRight } from 'lucide-react';
-import { Button } from '../../components/ui';
+import { Button, SkeletonCard, EmptyState } from '../../components/ui';
 import { screenshotService } from '../../api/screenshotService';
 import { monitoringService } from '../../api/monitoringService';
 import { TeamMemberFilter } from '../../components/TeamMemberFilter';
 import { useAuthStore } from '../../store/authStore';
 import { canViewMemberTracking, canViewOrgPackage, hasPermission, canAccessScreenshotsPage, areOwnScreenshotsHidden } from '../../utils/access';
 import { Link, Navigate } from 'react-router-dom';
+import { toastSuccess, toastError } from '../../store/toastStore';
 
 const PER_PAGE = 12;
 
 const ScreenshotsPage = () => {
-  const { user } = useAuthStore();
+  const user = useAuthStore((s) => s.user);
   const [searchParams] = useSearchParams();
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
   const [viewingMemberName, setViewingMemberName] = useState('');
@@ -24,7 +25,6 @@ const ScreenshotsPage = () => {
   const [isLoadingFull, setIsLoadingFull] = useState(false);
   const [selectedScreenshot, setSelectedScreenshot] = useState<any | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
-  const [captureToast, setCaptureToast] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({ current_page: 1, per_page: PER_PAGE, total: 0, total_pages: 1 });
 
@@ -149,16 +149,15 @@ const ScreenshotsPage = () => {
       const result = await monitoringService.captureNow();
       if (result.success) {
         const count = result.capturedScreens ?? 1;
-        setCaptureToast(`Screenshot captured from ${count} screen${count > 1 ? 's' : ''}!`);
+        toastSuccess(`Screenshot captured from ${count} screen${count > 1 ? 's' : ''}!`);
         setTimeout(() => fetchScreenshots(), 2000);
       } else {
-        setCaptureToast(result.error || 'Capture failed. Start a timer first.');
+        toastError(result.error || 'Capture failed. Start a timer first.');
       }
     } catch {
-      setCaptureToast('Capture failed.');
+      toastError('Capture failed.');
     } finally {
       setIsCapturing(false);
-      setTimeout(() => setCaptureToast(null), 3000);
     }
   };
 
@@ -181,12 +180,6 @@ const ScreenshotsPage = () => {
         <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 flex items-center justify-between gap-4">
           <p className="text-sm text-amber-200">Screenshots are not available on the Free plan — time tracking only.</p>
           <Link to="/billing" className="text-xs font-bold text-amber-300 hover:underline whitespace-nowrap">Upgrade plan</Link>
-        </div>
-      )}
-
-      {captureToast && (
-        <div className="fixed top-6 right-6 z-50 bg-surface-700 border border-white/10 text-white px-5 py-3 rounded-2xl shadow-2xl text-sm font-semibold">
-          {captureToast}
         </div>
       )}
 
@@ -260,20 +253,19 @@ const ScreenshotsPage = () => {
       </div>
 
       {isLoading ? (
-        <div className="flex items-center justify-center py-20">
-          <RefreshCw className="w-8 h-8 text-primary-500 animate-spin" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <SkeletonCard key={i} className="aspect-video" />
+          ))}
         </div>
       ) : screenshots.length === 0 ? (
-        <div className="glass-card flex flex-col items-center justify-center py-20 text-center">
-          <Camera className="w-16 h-16 text-slate-700 mb-4" />
-          <h3 className="text-xl font-bold text-white mb-2">No screenshots found</h3>
-          <p className="text-slate-400 max-w-sm mb-6">
-            There are no screenshots for {selectedDate === today ? 'today' : selectedDate}.
-          </p>
-          <Button variant="secondary" size="sm" onClick={() => { setSelectedDate(today); setPage(1); }}>
-            Go to Today
-          </Button>
-        </div>
+        <EmptyState
+          icon={Camera}
+          title="No screenshots found"
+          description={`There are no screenshots for ${selectedDate === today ? 'today' : selectedDate}.`}
+          actionLabel="Go to Today"
+          onAction={() => { setSelectedDate(today); setPage(1); }}
+        />
       ) : (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">

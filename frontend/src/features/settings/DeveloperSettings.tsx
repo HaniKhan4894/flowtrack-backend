@@ -12,6 +12,7 @@ import {
   type AutomationCondition,
 } from '../../api/developerService';
 import { getApiErrorMessage } from '../../utils/apiError';
+import { Modal } from '../../components/ui';
 
 type Section = 'api-keys' | 'webhooks' | 'automations';
 
@@ -514,81 +515,74 @@ const DeveloperSettings = () => {
       )}
 
       {/* ── Automation builder modal ─────────────────────────────────── */}
-      {showBuilder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="w-full max-w-lg glass border border-white/10 rounded-3xl p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+      <Modal open={showBuilder} onClose={() => setShowBuilder(false)} title="New automation">
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Name</label>
+            <input value={builder.name} onChange={(e) => setBuilder((b) => ({ ...b, name: e.target.value }))} placeholder="e.g. Ping Slack on overtime" className={inputClass} />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">When (trigger)</label>
+            <select value={builder.trigger_event} onChange={(e) => setBuilder((b) => ({ ...b, trigger_event: e.target.value }))} className="form-select w-full">
+              {meta.triggers.map((t) => <option key={t} value={t}>{humanize(t)}</option>)}
+            </select>
+          </div>
+
+          <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-bold text-white">New automation</h3>
-              <button onClick={() => setShowBuilder(false)} className="text-slate-500 hover:text-white"><X size={20} /></button>
+              <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Conditions (optional)</label>
+              <button onClick={addCondition} className="text-xs text-primary-400 hover:underline flex items-center gap-1"><Plus size={12} /> Add</button>
             </div>
-
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Name</label>
-              <input value={builder.name} onChange={(e) => setBuilder((b) => ({ ...b, name: e.target.value }))} placeholder="e.g. Ping Slack on overtime" className={inputClass} />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">When (trigger)</label>
-              <select value={builder.trigger_event} onChange={(e) => setBuilder((b) => ({ ...b, trigger_event: e.target.value }))} className="form-select w-full">
-                {meta.triggers.map((t) => <option key={t} value={t}>{humanize(t)}</option>)}
-              </select>
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Conditions (optional)</label>
-                <button onClick={addCondition} className="text-xs text-primary-400 hover:underline flex items-center gap-1"><Plus size={12} /> Add</button>
+            {builder.conditions.map((c, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <input value={c.field} onChange={(e) => updateCondition(i, { field: e.target.value })} placeholder="field (e.g. duration_minutes)" className="flex-1 h-10 bg-[#12141C] border border-white/10 rounded-lg px-3 text-white text-sm" />
+                <select value={c.op} onChange={(e) => updateCondition(i, { op: e.target.value as AutomationCondition['op'] })} className="form-select w-20">
+                  {CONDITION_OPS.map((op) => <option key={op} value={op}>{op}</option>)}
+                </select>
+                <input value={String(c.value ?? '')} onChange={(e) => updateCondition(i, { value: e.target.value })} placeholder="value" className="w-24 h-10 bg-[#12141C] border border-white/10 rounded-lg px-3 text-white text-sm" />
+                <button onClick={() => removeCondition(i)} className="text-slate-500 hover:text-rose-400"><X size={16} /></button>
               </div>
-              {builder.conditions.map((c, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <input value={c.field} onChange={(e) => updateCondition(i, { field: e.target.value })} placeholder="field (e.g. duration_minutes)" className="flex-1 h-10 bg-[#12141C] border border-white/10 rounded-lg px-3 text-white text-sm" />
-                  <select value={c.op} onChange={(e) => updateCondition(i, { op: e.target.value as AutomationCondition['op'] })} className="form-select w-20">
-                    {CONDITION_OPS.map((op) => <option key={op} value={op}>{op}</option>)}
+            ))}
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Then (actions)</label>
+              <button onClick={addAction} className="text-xs text-primary-400 hover:underline flex items-center gap-1"><Plus size={12} /> Add</button>
+            </div>
+            {builder.actions.map((a, i) => (
+              <div key={i} className="space-y-2 p-3 rounded-xl bg-white/5 border border-white/10">
+                <div className="flex items-center gap-2">
+                  <select value={a.type} onChange={(e) => updateAction(i, { type: e.target.value as AutomationAction['type'] })} className="form-select flex-1">
+                    {meta.actions.map((ac) => <option key={ac} value={ac}>{humanize(ac)}</option>)}
                   </select>
-                  <input value={String(c.value ?? '')} onChange={(e) => updateCondition(i, { value: e.target.value })} placeholder="value" className="w-24 h-10 bg-[#12141C] border border-white/10 rounded-lg px-3 text-white text-sm" />
-                  <button onClick={() => removeCondition(i)} className="text-slate-500 hover:text-rose-400"><X size={16} /></button>
+                  <button onClick={() => removeAction(i)} className="text-slate-500 hover:text-rose-400"><X size={16} /></button>
                 </div>
-              ))}
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Then (actions)</label>
-                <button onClick={addAction} className="text-xs text-primary-400 hover:underline flex items-center gap-1"><Plus size={12} /> Add</button>
+                {a.type === 'webhook' && (
+                  <input value={String(a.config.url ?? '')} onChange={(e) => updateActionConfig(i, 'url', e.target.value)} placeholder="https://…" className="w-full h-10 bg-[#12141C] border border-white/10 rounded-lg px-3 text-white text-sm" />
+                )}
+                {(a.type === 'slack_post' || a.type === 'notify_managers') && (
+                  <input value={String(a.config.message ?? '')} onChange={(e) => updateActionConfig(i, 'message', e.target.value)} placeholder="Message (use {user_name}, {project_name}…)" className="w-full h-10 bg-[#12141C] border border-white/10 rounded-lg px-3 text-white text-sm" />
+                )}
               </div>
-              {builder.actions.map((a, i) => (
-                <div key={i} className="space-y-2 p-3 rounded-xl bg-white/5 border border-white/10">
-                  <div className="flex items-center gap-2">
-                    <select value={a.type} onChange={(e) => updateAction(i, { type: e.target.value as AutomationAction['type'] })} className="form-select flex-1">
-                      {meta.actions.map((ac) => <option key={ac} value={ac}>{humanize(ac)}</option>)}
-                    </select>
-                    <button onClick={() => removeAction(i)} className="text-slate-500 hover:text-rose-400"><X size={16} /></button>
-                  </div>
-                  {a.type === 'webhook' && (
-                    <input value={String(a.config.url ?? '')} onChange={(e) => updateActionConfig(i, 'url', e.target.value)} placeholder="https://…" className="w-full h-10 bg-[#12141C] border border-white/10 rounded-lg px-3 text-white text-sm" />
-                  )}
-                  {(a.type === 'slack_post' || a.type === 'notify_managers') && (
-                    <input value={String(a.config.message ?? '')} onChange={(e) => updateActionConfig(i, 'message', e.target.value)} placeholder="Message (use {user_name}, {project_name}…)" className="w-full h-10 bg-[#12141C] border border-white/10 rounded-lg px-3 text-white text-sm" />
-                  )}
-                </div>
-              ))}
-            </div>
+            ))}
+          </div>
 
-            <label className="flex items-center gap-2 text-sm text-slate-300">
-              <input type="checkbox" checked={builder.is_active} onChange={(e) => setBuilder((b) => ({ ...b, is_active: e.target.checked }))} />
-              Active
-            </label>
+          <label className="flex items-center gap-2 text-sm text-slate-300">
+            <input type="checkbox" checked={builder.is_active} onChange={(e) => setBuilder((b) => ({ ...b, is_active: e.target.checked }))} />
+            Active
+          </label>
 
-            <div className="flex justify-end gap-3 pt-2">
-              <button onClick={() => setShowBuilder(false)} className="px-4 py-2 rounded-xl text-sm text-slate-400 hover:text-white bg-white/5 hover:bg-white/10">Cancel</button>
-              <button onClick={handleSaveAutomation} disabled={savingAuto} className="flex items-center gap-2 px-6 py-2 rounded-xl text-sm font-bold bg-ai-gradient text-white disabled:opacity-50">
-                {savingAuto ? <Loader2 size={16} className="animate-spin" /> : <Zap size={16} />}
-                Save automation
-              </button>
-            </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <button onClick={() => setShowBuilder(false)} className="px-4 py-2 rounded-xl text-sm text-slate-400 hover:text-white bg-white/5 hover:bg-white/10">Cancel</button>
+            <button onClick={handleSaveAutomation} disabled={savingAuto} className="flex items-center gap-2 px-6 py-2 rounded-xl text-sm font-bold bg-ai-gradient text-white disabled:opacity-50">
+              {savingAuto ? <Loader2 size={16} className="animate-spin" /> : <Zap size={16} />}
+              Save automation
+            </button>
           </div>
         </div>
-      )}
+      </Modal>
     </div>
   );
 };

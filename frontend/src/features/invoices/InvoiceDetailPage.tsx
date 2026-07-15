@@ -15,7 +15,7 @@ import {
   Sparkles,
   Pencil,
 } from 'lucide-react';
-import { Button, SearchableSelect } from '../../components/ui';
+import { Button, SearchableSelect, Modal } from '../../components/ui';
 import { invoiceService, type Invoice } from '../../api/invoiceService';
 import { clientService, type Client } from '../../api/clientService';
 import { projectService, type Project } from '../../api/projectService';
@@ -246,8 +246,6 @@ const InvoiceDetailPage = () => {
   };
 
   const inputClass = 'form-field';
-  const modalOverlay = 'fixed inset-0 z-[100] flex items-center justify-center p-4 modal-overlay';
-  const modalPanel = 'relative z-10 w-full modal-panel p-6 space-y-4';
 
   if (loading) {
     return (
@@ -443,115 +441,103 @@ const InvoiceDetailPage = () => {
         </motion.div>
       </div>
 
-      {showAddItem && (
-        <div className={modalOverlay}>
-          <button type="button" aria-label="Close" className="absolute inset-0" onClick={() => setShowAddItem(false)} />
-          <form onSubmit={handleAddItem} className={`${modalPanel} max-w-md`}>
-            <h3 className="text-lg font-bold text-white">Add line item</h3>
+      <Modal open={showAddItem} onClose={() => setShowAddItem(false)} title="Add line item" size="sm">
+        <form onSubmit={handleAddItem} className="space-y-4">
+          <input
+            required
+            placeholder="Description"
+            value={itemForm.description}
+            onChange={(e) => setItemForm((f) => ({ ...f, description: e.target.value }))}
+            className={inputClass}
+          />
+          <div className="grid grid-cols-2 gap-3">
             <input
               required
-              placeholder="Description"
-              value={itemForm.description}
-              onChange={(e) => setItemForm((f) => ({ ...f, description: e.target.value }))}
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="Quantity (hours)"
+              value={itemForm.quantity}
+              onChange={(e) => setItemForm((f) => ({ ...f, quantity: e.target.value }))}
               className={inputClass}
             />
-            <div className="grid grid-cols-2 gap-3">
-              <input
-                required
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder="Quantity (hours)"
-                value={itemForm.quantity}
-                onChange={(e) => setItemForm((f) => ({ ...f, quantity: e.target.value }))}
-                className={inputClass}
-              />
-              <input
-                required
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder="Unit price ($)"
-                value={itemForm.unit_price}
-                onChange={(e) => setItemForm((f) => ({ ...f, unit_price: e.target.value }))}
-                className={inputClass}
-              />
-            </div>
-            <div className="flex gap-3">
-              <Button variant="secondary" type="button" className="flex-1" onClick={() => setShowAddItem(false)}>
-                Cancel
-              </Button>
-              <Button type="submit" className="flex-1" isLoading={actionLoading}>
-                Add
-              </Button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {showEditMeta && (
-        <div className={modalOverlay}>
-          <button type="button" aria-label="Close" className="absolute inset-0" onClick={() => setShowEditMeta(false)} />
-          <form onSubmit={handleUpdateMeta} className={`${modalPanel} max-w-lg max-h-[90vh] overflow-y-auto`}>
-            <h3 className="text-lg font-bold text-white">Edit invoice details</h3>
-            <SearchableSelect
-              value={metaForm.client_id}
-              onChange={(val) => {
-                const clientId = String(val);
-                const selected = clients.find((c) => String(c.id) === clientId);
-                const nextProjects = filterProjectsForClient(projects, clients, clientId);
-                setMetaForm((f) => {
-                  const keepProject = nextProjects.some((p) => String(p.id) === f.project_id);
-                  return {
-                    ...f,
-                    client_id: clientId,
-                    client_name: selected?.name ?? f.client_name,
-                    client_email: selected?.email ?? f.client_email,
-                    project_id: keepProject ? f.project_id : '',
-                  };
-                });
-              }}
-              options={clientOptions}
-              placeholder="Link to client record (optional)"
-              searchPlaceholder="Search clients…"
+            <input
+              required
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="Unit price ($)"
+              value={itemForm.unit_price}
+              onChange={(e) => setItemForm((f) => ({ ...f, unit_price: e.target.value }))}
+              className={inputClass}
             />
-            <input required value={metaForm.client_name} onChange={(e) => setMetaForm((f) => ({ ...f, client_name: e.target.value }))} placeholder="Client name" className={inputClass} />
-            <input type="email" value={metaForm.client_email} onChange={(e) => setMetaForm((f) => ({ ...f, client_email: e.target.value }))} placeholder="Client email (required to send)" className={inputClass} />
-            <SearchableSelect
-              value={metaForm.project_id}
-              onChange={(val) => setMetaForm((f) => ({ ...f, project_id: String(val) }))}
-              options={projectOptions}
-              placeholder="No project"
-              searchPlaceholder="Search projects…"
-            />
-            <div className="grid grid-cols-2 gap-3">
-              <input required type="date" value={metaForm.due_date} onChange={(e) => setMetaForm((f) => ({ ...f, due_date: e.target.value }))} className={inputClass} />
-              <input type="number" min="0" step="0.01" placeholder="Tax rate %" value={metaForm.tax_rate} onChange={(e) => setMetaForm((f) => ({ ...f, tax_rate: e.target.value }))} className={inputClass} />
-            </div>
-            <textarea value={metaForm.notes} onChange={(e) => setMetaForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Notes" className={`${inputClass} min-h-24`} />
-            <div className="flex gap-3">
-              <Button variant="secondary" type="button" className="flex-1" onClick={() => setShowEditMeta(false)}>Cancel</Button>
-              <Button type="submit" className="flex-1" isLoading={actionLoading}>Save</Button>
-            </div>
-          </form>
-        </div>
-      )}
+          </div>
+          <div className="flex gap-3">
+            <Button variant="secondary" type="button" className="flex-1" onClick={() => setShowAddItem(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" className="flex-1" isLoading={actionLoading}>
+              Add
+            </Button>
+          </div>
+        </form>
+      </Modal>
 
-      {showGenerateTime && (
-        <div className={modalOverlay}>
-          <button type="button" aria-label="Close" className="absolute inset-0" onClick={() => setShowGenerateTime(false)} />
-          <form onSubmit={handleGenerateFromTime} className={`${modalPanel} max-w-md`}>
-            <h3 className="text-lg font-bold text-white">Generate from tracked time</h3>
-            <p className="text-sm text-slate-400">Adds line items from billable hours in the selected period to this draft invoice.</p>
-            <input required type="date" value={timeForm.start_date} onChange={(e) => setTimeForm((f) => ({ ...f, start_date: e.target.value }))} className={inputClass} />
-            <input required type="date" value={timeForm.end_date} onChange={(e) => setTimeForm((f) => ({ ...f, end_date: e.target.value }))} className={inputClass} />
-            <div className="flex gap-3">
-              <Button variant="secondary" type="button" className="flex-1" onClick={() => setShowGenerateTime(false)}>Cancel</Button>
-              <Button type="submit" className="flex-1" isLoading={actionLoading}>Generate</Button>
-            </div>
-          </form>
-        </div>
-      )}
+      <Modal open={showEditMeta} onClose={() => setShowEditMeta(false)} title="Edit invoice details" size="md">
+        <form onSubmit={handleUpdateMeta} className="space-y-4">
+          <SearchableSelect
+            value={metaForm.client_id}
+            onChange={(val) => {
+              const clientId = String(val);
+              const selected = clients.find((c) => String(c.id) === clientId);
+              const nextProjects = filterProjectsForClient(projects, clients, clientId);
+              setMetaForm((f) => {
+                const keepProject = nextProjects.some((p) => String(p.id) === f.project_id);
+                return {
+                  ...f,
+                  client_id: clientId,
+                  client_name: selected?.name ?? f.client_name,
+                  client_email: selected?.email ?? f.client_email,
+                  project_id: keepProject ? f.project_id : '',
+                };
+              });
+            }}
+            options={clientOptions}
+            placeholder="Link to client record (optional)"
+            searchPlaceholder="Search clients…"
+          />
+          <input required value={metaForm.client_name} onChange={(e) => setMetaForm((f) => ({ ...f, client_name: e.target.value }))} placeholder="Client name" className={inputClass} />
+          <input type="email" value={metaForm.client_email} onChange={(e) => setMetaForm((f) => ({ ...f, client_email: e.target.value }))} placeholder="Client email (required to send)" className={inputClass} />
+          <SearchableSelect
+            value={metaForm.project_id}
+            onChange={(val) => setMetaForm((f) => ({ ...f, project_id: String(val) }))}
+            options={projectOptions}
+            placeholder="No project"
+            searchPlaceholder="Search projects…"
+          />
+          <div className="grid grid-cols-2 gap-3">
+            <input required type="date" value={metaForm.due_date} onChange={(e) => setMetaForm((f) => ({ ...f, due_date: e.target.value }))} className={inputClass} />
+            <input type="number" min="0" step="0.01" placeholder="Tax rate %" value={metaForm.tax_rate} onChange={(e) => setMetaForm((f) => ({ ...f, tax_rate: e.target.value }))} className={inputClass} />
+          </div>
+          <textarea value={metaForm.notes} onChange={(e) => setMetaForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Notes" className={`${inputClass} min-h-24`} />
+          <div className="flex gap-3">
+            <Button variant="secondary" type="button" className="flex-1" onClick={() => setShowEditMeta(false)}>Cancel</Button>
+            <Button type="submit" className="flex-1" isLoading={actionLoading}>Save</Button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal open={showGenerateTime} onClose={() => setShowGenerateTime(false)} title="Generate from tracked time" size="sm">
+        <form onSubmit={handleGenerateFromTime} className="space-y-4">
+          <p className="text-sm text-slate-400">Adds line items from billable hours in the selected period to this draft invoice.</p>
+          <input required type="date" value={timeForm.start_date} onChange={(e) => setTimeForm((f) => ({ ...f, start_date: e.target.value }))} className={inputClass} />
+          <input required type="date" value={timeForm.end_date} onChange={(e) => setTimeForm((f) => ({ ...f, end_date: e.target.value }))} className={inputClass} />
+          <div className="flex gap-3">
+            <Button variant="secondary" type="button" className="flex-1" onClick={() => setShowGenerateTime(false)}>Cancel</Button>
+            <Button type="submit" className="flex-1" isLoading={actionLoading}>Generate</Button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 };
