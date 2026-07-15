@@ -13,6 +13,12 @@ import type { PayrollCompensation, PayrollRun, PayrollSummary } from '../../type
 const formatMoney = (amount: number, currency = 'USD') =>
   new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(amount);
 
+const getMemberUserId = (member: { user_id?: number | string; id?: number | string }) =>
+  Number(member.user_id ?? member.id);
+
+const getCompensationForUser = (rows: PayrollCompensation[], userId: number) =>
+  rows.find((c) => Number(c.user_id) === userId);
+
 const PayrollPage = () => {
   const { user } = useAuthStore();
   const currency = user?.organization?.currency ?? 'USD';
@@ -53,8 +59,10 @@ const PayrollPage = () => {
 
       const forms: typeof compForms = {};
       (teamResp.data ?? []).forEach((m: any) => {
-        const existing = (compResp.data ?? []).find((c) => c.user_id === m.user_id);
-        forms[m.user_id] = {
+        const userId = getMemberUserId(m);
+        if (!userId) return;
+        const existing = getCompensationForUser(compResp.data ?? [], userId);
+        forms[userId] = {
           pay_type: existing?.pay_type ?? 'hourly',
           hourly_rate: String(existing?.hourly_rate ?? m.hourly_rate ?? ''),
           fixed_amount: String(existing?.fixed_amount ?? ''),
@@ -97,7 +105,7 @@ const PayrollPage = () => {
     if (!form) return;
     setSavingComp(userId);
     try {
-      await payrollService.upsertCompensation({
+      const resp = await payrollService.upsertCompensation({
         user_id: userId,
         pay_type: form.pay_type,
         hourly_rate: form.hourly_rate ? parseFloat(form.hourly_rate) : null,
@@ -105,7 +113,20 @@ const PayrollPage = () => {
         currency,
         notes: form.notes || undefined,
       });
-      await load();
+      const saved = resp.data;
+      setCompensations((prev) => {
+        const next = prev.filter((c) => Number(c.user_id) !== Number(saved.user_id));
+        return [...next, saved];
+      });
+      setCompForms((prev) => ({
+        ...prev,
+        [Number(saved.user_id)]: {
+          pay_type: saved.pay_type,
+          hourly_rate: saved.hourly_rate != null ? String(saved.hourly_rate) : '',
+          fixed_amount: saved.fixed_amount != null ? String(saved.fixed_amount) : '',
+          notes: saved.notes ?? '',
+        },
+      }));
     } catch (err) {
       setError(getApiErrorMessage(err, 'Failed to save compensation'));
     } finally {
@@ -213,11 +234,13 @@ const PayrollPage = () => {
       ) : (
         <div className="space-y-4">
           {members.map((member) => {
-            const form = compForms[member.user_id];
+            const userId = getMemberUserId(member);
+            if (!userId) return null;
+            const form = compForms[userId];
             if (!form) return null;
-            const existing = compensations.find((c) => c.user_id === member.user_id);
+            const existing = getCompensationForUser(compensations, userId);
             return (
-              <div key={member.user_id} className="overlay-panel p-5">
+              <div key={userId} className="overlay-panel p-5">
                 <div className="flex items-center gap-3 mb-4">
                   <Users size={18} className="text-primary-400" />
                   <div>
@@ -237,7 +260,7 @@ const PayrollPage = () => {
                         value={form.pay_type}
                         onChange={(e) => setCompForms((p) => ({
                           ...p,
-                          [member.user_id]: { ...form, pay_type: e.target.value as 'hourly' | 'fixed' | 'custom' },
+                          [userId]: { ...form, pay_type: e.target.value as 'hourly' | 'fixed' | 'custom' },
                         }))}
                       >
                         <option value="hourly">Hourly</option>
@@ -255,7 +278,7 @@ const PayrollPage = () => {
                           value={form.hourly_rate}
                           onChange={(e) => setCompForms((p) => ({
                             ...p,
-                            [member.user_id]: { ...form, hourly_rate: e.target.value },
+                            [userId]: { ...form, hourly_rate: e.target.value },
                           }))}
                         />
                       </div>
@@ -270,7 +293,7 @@ const PayrollPage = () => {
                           value={form.fixed_amount}
                           onChange={(e) => setCompForms((p) => ({
                             ...p,
-                            [member.user_id]: { ...form, fixed_amount: e.target.value },
+                            [userId]: { ...form, fixed_amount: e.target.value },
                           }))}
                         />
                       </div>
@@ -283,17 +306,17 @@ const PayrollPage = () => {
                         value={form.notes}
                         onChange={(e) => setCompForms((p) => ({
                           ...p,
-                          [member.user_id]: { ...form, notes: e.target.value },
+                          [userId]: { ...form, notes: e.target.value },
                         }))}
                       />
                     </div>
                     <div className="flex items-end">
                       <button
-                        onClick={() => handleSaveCompensation(member.user_id)}
-                        disabled={savingComp === member.user_id}
+                        onClick={() => handleSaveCompensation(userId)}
+                        disabled={savingComp === userId}
                         className="bg-ai-gradient text-white px-6 py-3 rounded-xl font-bold disabled:opacity-50"
                       >
-                        {savingComp === member.user_id ? 'Saving...' : 'Save'}
+                        {savingComp === userId ? 'Saving...' : 'Save'}
                       </button>
                     </div>
                   </div>
