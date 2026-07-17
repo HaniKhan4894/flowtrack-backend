@@ -46,6 +46,14 @@ class ProjectController extends ResourceController
 
             $filters = array_filter($filters, fn($value) => $value !== null);
 
+            $userId = (int) ($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
+            $memberService = new \App\Services\ProjectMemberService();
+            if ($userId > 0 && !$memberService->canSeeAllProjects($organizationId, $userId)) {
+                $filters['assigned_user_id'] = $userId;
+            } else {
+                $filters['see_all'] = true;
+            }
+
             $result = $this->projectService->getProjects($filters);
 
             return $this->respond([
@@ -188,6 +196,76 @@ class ProjectController extends ResourceController
                 'message' => 'Project archived successfully'
             ]);
 
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+
+    /**
+     * GET /api/v1/projects/{id}/members
+     */
+    public function members($id = null)
+    {
+        try {
+            $organizationId = $this->requireOrganizationId();
+            if (!is_int($organizationId)) {
+                return $organizationId;
+            }
+
+            $service = new \App\Services\ProjectMemberService();
+            return $this->respond([
+                'success' => true,
+                'data' => $service->listMembersForProject($organizationId, (int) $id),
+            ]);
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+
+    /**
+     * PUT /api/v1/projects/{id}/members
+     * Body: { user_ids: number[] } — replaces project member list
+     */
+    public function syncMembers($id = null)
+    {
+        try {
+            $organizationId = $this->requireOrganizationId();
+            if (!is_int($organizationId)) {
+                return $organizationId;
+            }
+            $actorId = (int) ($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
+            $data = $this->request->getJSON(true) ?? [];
+            $userIds = is_array($data['user_ids'] ?? null) ? $data['user_ids'] : [];
+
+            $project = $this->projectService->getProjectById((int) $id);
+            if (!$project || (int) $project['organization_id'] !== $organizationId) {
+                return $this->failNotFound('Project not found');
+            }
+
+            $service = new \App\Services\ProjectMemberService();
+            // Sync by iterating: get current, remove missing, add new
+            $current = $service->listMembersForProject($organizationId, (int) $id);
+            $currentIds = array_map(static fn ($m) => (int) $m['user_id'], $current);
+            $desired = array_values(array_unique(array_filter(array_map('intval', $userIds))));
+
+            foreach (array_diff($currentIds, $desired) as $removeId) {
+                $assigned = $service->getProjectIdsForUser($organizationId, $removeId);
+                $service->syncUserProjects(
+                    $organizationId,
+                    $removeId,
+                    array_values(array_diff($assigned, [(int) $id])),
+                    $actorId ?: null
+                );
+            }
+            foreach (array_diff($desired, $currentIds) as $addId) {
+                $service->assignUserProjects($organizationId, $addId, [(int) $id], $actorId ?: null);
+            }
+
+            return $this->respond([
+                'success' => true,
+                'message' => 'Project members updated',
+                'data' => $service->listMembersForProject($organizationId, (int) $id),
+            ]);
         } catch (\Exception $e) {
             return $this->fail($e->getMessage(), 400);
         }

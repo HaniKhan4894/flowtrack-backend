@@ -293,10 +293,13 @@ class OrganizationService
         string $role = 'member',
         ?float $hourlyRate = null,
         ?string $email = null,
-        ?int $inviterUserId = null
+        ?int $inviterUserId = null,
+        array $projectIds = []
     ): array
     {
         $this->checkUserLimit($organizationId);
+        $projectIds = array_values(array_unique(array_filter(array_map('intval', $projectIds))));
+        $projectMemberService = new ProjectMemberService();
 
         // Case 1: Add existing user by ID or Email
         if (!$userId && $email) {
@@ -314,6 +317,18 @@ class OrganizationService
                 ->first();
 
             if ($existing) {
+                // Already in org: allow assigning additional projects instead of failing
+                if ($projectIds !== []) {
+                    $assigned = $projectMemberService->assignUserProjects(
+                        $organizationId,
+                        (int) $userId,
+                        $projectIds,
+                        $inviterUserId
+                    );
+                    $existing['project_ids'] = $assigned;
+                    $existing['status'] = 'projects_assigned';
+                    return $existing;
+                }
                 throw new \Exception('User is already a member');
             }
 
@@ -326,11 +341,24 @@ class OrganizationService
                 'hourly_rate' => $hourlyRate
             ]);
 
-            return $this->memberModel->find($memberId);
+            if ($projectIds !== []) {
+                $projectMemberService->assignUserProjects(
+                    $organizationId,
+                    (int) $userId,
+                    $projectIds,
+                    $inviterUserId
+                );
+            }
+
+            $member = $this->memberModel->find($memberId);
+            $member['project_ids'] = $projectMemberService->getProjectIdsForUser($organizationId, (int) $userId);
+            return $member;
         }
 
         // Case 2: Invite new user by Email
         if ($email) {
+            $projectIdsJson = $projectIds !== [] ? json_encode(array_values($projectIds)) : null;
+
             // Check if already invited
             $existingInvite = $this->invitationModel
                 ->where('organization_id', $organizationId)
@@ -343,12 +371,17 @@ class OrganizationService
                 $this->invitationModel->update($existingInvite['id'], [
                     'token' => $token,
                     'role' => $role,
+                    'project_ids' => $projectIdsJson,
                     'expires_at' => date('Y-m-d H:i:s', strtotime('+7 days'))
                 ]);
 
                 $this->notifyInvitation($organizationId, $email, $role, $token, $inviterUserId);
 
-                return array_merge($existingInvite, ['token' => $token, 'status' => 're-invited']);
+                return array_merge($existingInvite, [
+                    'token' => $token,
+                    'project_ids' => $projectIds,
+                    'status' => 're-invited',
+                ]);
             }
 
             // Create new invitation
@@ -357,18 +390,20 @@ class OrganizationService
                 'organization_id' => $organizationId,
                 'email' => $email,
                 'role' => $role,
+                'project_ids' => $projectIdsJson,
                 'token' => $token,
                 'expires_at' => date('Y-m-d H:i:s', strtotime('+7 days')),
                 'created_at' => date('Y-m-d H:i:s')
             ]);
 
             $invitation = $this->invitationModel->find($invitationId);
+            $invitation['project_ids'] = $projectIds;
             $this->notifyInvitation($organizationId, $email, $role, $token, $inviterUserId);
 
             return $invitation;
         }
 
-        throw new \Exception('User ID or Email is required');
+        throw new \Exception('Either user_id or email is required');
     }
 
     public function removeMember(int $organizationId, int $userId): bool
@@ -396,6 +431,14 @@ class OrganizationService
 
         $total = $builder->countAllResults(false);
         $members = $builder->limit($perPage, $offset)->get()->getResultArray();
+
+        $userIds = array_map(static fn ($m) => (int) ($m['user_id'] ?? 0), $members);
+        $projectMap = (new ProjectMemberService())->getProjectIdsByUsers($organizationId, $userIds);
+        foreach ($members as &$member) {
+            $uid = (int) ($member['user_id'] ?? 0);
+            $member['project_ids'] = $projectMap[$uid] ?? [];
+        }
+        unset($member);
 
         return [
             'data' => $members,

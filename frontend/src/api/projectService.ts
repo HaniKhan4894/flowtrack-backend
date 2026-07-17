@@ -36,4 +36,14 @@ export const projectService = {
     delete: async (id: number): Promise<void> => {
         await client.delete(`/projects/${id}`);
     },
+
+    getMembers: async (projectId: number): Promise<{ data: Array<{ user_id: number; first_name?: string; last_name?: string; email?: string }> }> => {
+        const response = await client.get(`/projects/${projectId}/members`);
+        return response.data;
+    },
+
+    syncMembers: async (projectId: number, userIds: number[]): Promise<{ data: unknown }> => {
+        const response = await client.put(`/projects/${projectId}/members`, { user_ids: userIds });
+        return response.data;
+    },
 };

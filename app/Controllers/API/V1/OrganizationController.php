@@ -170,7 +170,8 @@ class OrganizationController extends ResourceController
                 $data['role'] ?? 'member',
                 $data['hourly_rate'] ?? null,
                 $email,
-                $inviterUserId
+                $inviterUserId,
+                is_array($data['project_ids'] ?? null) ? $data['project_ids'] : []
             );
 
             // Check if it was an invitation
@@ -186,14 +187,20 @@ class OrganizationController extends ResourceController
                         'email' => $email,
                         'token' => $member['token'],
                         'expires_at' => $member['expires_at'],
+                        'project_ids' => $member['project_ids'] ?? [],
                         'link' => rtrim((string)getenv('app.frontendURL'), '/') . '/register?invitation_token=' . $member['token']
                     ]
                 ]);
             }
 
+            $message = 'Member added successfully';
+            if (($member['status'] ?? null) === 'projects_assigned') {
+                $message = 'Projects assigned to existing member';
+            }
+
             return $this->respondCreated([
                 'success' => true,
-                'message' => 'Member added successfully',
+                'message' => $message,
                 'data' => $member
             ]);
 
@@ -246,6 +253,49 @@ class OrganizationController extends ResourceController
                 'success' => true,
                 'message' => 'Member updated successfully',
                 'data' => $member,
+            ]);
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+
+    /**
+     * PUT /api/v1/organizations/{id}/members/{userId}/projects
+     * Body: { project_ids: number[] } — replaces the member's project assignments
+     */
+    public function syncMemberProjects($id = null, $userId = null)
+    {
+        try {
+            $organizationId = (int) $id;
+            $memberUserId = (int) $userId;
+            $actorId = (int) ($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
+            $data = $this->request->getJSON(true) ?? [];
+            $projectIds = is_array($data['project_ids'] ?? null) ? $data['project_ids'] : [];
+
+            $orgMember = (new \App\Models\OrganizationMemberModel())
+                ->where('organization_id', $organizationId)
+                ->where('user_id', $memberUserId)
+                ->first();
+
+            if (!$orgMember) {
+                return $this->failNotFound('Member not found in this organization');
+            }
+
+            $service = new \App\Services\ProjectMemberService();
+            $assigned = $service->syncUserProjects(
+                $organizationId,
+                $memberUserId,
+                $projectIds,
+                $actorId ?: null
+            );
+
+            return $this->respond([
+                'success' => true,
+                'message' => 'Member projects updated',
+                'data' => [
+                    'user_id' => $memberUserId,
+                    'project_ids' => $assigned,
+                ],
             ]);
         } catch (\Exception $e) {
             return $this->fail($e->getMessage(), 400);

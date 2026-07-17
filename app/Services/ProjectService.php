@@ -72,9 +72,9 @@ class ProjectService
         $builder = $this->db->table('projects p');
         $builder->select('p.*, 
             COALESCE(SUM(te.duration_seconds), 0) AS total_time_seconds,
-            COUNT(DISTINCT om.user_id) AS member_count');
+            COUNT(DISTINCT pm.user_id) AS member_count');
         $builder->join('time_entries te', 'te.project_id = p.id AND te.ended_at IS NOT NULL', 'left');
-        $builder->join('organization_members om', 'om.organization_id = p.organization_id', 'left');
+        $builder->join('project_members pm', 'pm.project_id = p.id', 'left');
         $builder->groupBy('p.id');
 
         if (isset($filters['organization_id'])) {
@@ -96,6 +96,16 @@ class ProjectService
                 ->groupEnd();
         }
 
+        // Restrict non-managers to assigned projects only
+        if (!empty($filters['assigned_user_id']) && empty($filters['see_all'])) {
+            $assignedUserId = (int) $filters['assigned_user_id'];
+            $builder->join(
+                'project_members pmu',
+                'pmu.project_id = p.id AND pmu.user_id = ' . $assignedUserId,
+                'inner'
+            );
+        }
+
         $page = $filters['page'] ?? 1;
         $perPage = $filters['per_page'] ?? 20;
         $offset = ($page - 1) * $perPage;
@@ -105,11 +115,22 @@ class ProjectService
         if (isset($filters['organization_id'])) {
             $countBuilder->where('p.organization_id', $filters['organization_id']);
         }
+        if (isset($filters['is_active'])) {
+            $countBuilder->where('p.is_active', $filters['is_active']);
+        }
         if (isset($filters['search'])) {
             $countBuilder->groupStart()
                 ->like('p.name', $filters['search'])
                 ->orLike('p.client_name', $filters['search'])
                 ->groupEnd();
+        }
+        if (!empty($filters['assigned_user_id']) && empty($filters['see_all'])) {
+            $assignedUserId = (int) $filters['assigned_user_id'];
+            $countBuilder->join(
+                'project_members pmu',
+                'pmu.project_id = p.id AND pmu.user_id = ' . $assignedUserId,
+                'inner'
+            );
         }
         $total = $countBuilder->countAllResults();
 

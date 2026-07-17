@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { UserPlus, Mail, Shield, Trash2, Search, Filter, Loader2, CheckCircle2, SlidersHorizontal, UsersRound, Target, Pencil, ShieldAlert, Info, ExternalLink } from 'lucide-react';
+import { UserPlus, Mail, Shield, Trash2, Search, Filter, Loader2, CheckCircle2, SlidersHorizontal, UsersRound, Target, Pencil, ShieldAlert, Info, ExternalLink, FolderKanban } from 'lucide-react';
 import { teamService, type TeamMember, type TeamGroup } from '../../api/teamService';
+import { projectService, type Project } from '../../api/projectService';
 import type { AdvancedMonitoringStatus } from '../../api/advancedMonitoringService';
 import { reportService } from '../../api/reportService';
 import { billingService, type SubscriptionUsage } from '../../api/billingService';
@@ -14,6 +15,7 @@ import axios from 'axios';
 
 const TeamPage = () => {
   const [members, setMembers] = useState<TeamMember[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedRole, setSelectedRole] = useState('all');
@@ -21,9 +23,14 @@ const TeamPage = () => {
   const [isInviting, setIsInviting] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState('member');
+  const [inviteProjectIds, setInviteProjectIds] = useState<number[]>([]);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('Invitation sent successfully');
   const [invitationLink, setInvitationLink] = useState('');
   const [showInvitationModal, setShowInvitationModal] = useState(false);
+  const [assignMember, setAssignMember] = useState<TeamMember | null>(null);
+  const [assignProjectIds, setAssignProjectIds] = useState<number[]>([]);
+  const [savingProjects, setSavingProjects] = useState(false);
   const [monitorMember, setMonitorMember] = useState<TeamMember | null>(null);
   const [monitorSettings, setMonitorSettings] = useState<MemberMonitoringSettings | null>(null);
   const [advancedData, setAdvancedData] = useState<AdvancedMonitoringStatus | null>(null);
@@ -54,6 +61,7 @@ const TeamPage = () => {
     fetchMembers();
     teamService.getTeams().then((r) => setTeams(r.data ?? [])).catch(() => setTeams([]));
     billingService.getUsage().then((r) => setUsage(r.data)).catch(() => setUsage(null));
+    projectService.getAll({ is_active: 1 }).then((r) => setProjects(r.data ?? [])).catch(() => setProjects([]));
   }, []);
 
   useEffect(() => {
@@ -79,20 +87,52 @@ const TeamPage = () => {
     }
   };
 
+  const toggleId = (list: number[], id: number) =>
+    list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
+
+  const projectNameById = (id: number) => projects.find((p) => p.id === id)?.name ?? `#${id}`;
+
+  const openAssignProjects = (member: TeamMember) => {
+    setAssignMember(member);
+    setAssignProjectIds([...(member.project_ids ?? [])]);
+  };
+
+  const saveAssignProjects = async () => {
+    if (!assignMember) return;
+    setSavingProjects(true);
+    try {
+      const memberUserId = assignMember.user_id ?? assignMember.id;
+      await teamService.syncMemberProjects(memberUserId, assignProjectIds);
+      setAssignMember(null);
+      fetchMembers();
+    } catch (e) {
+      console.error('Failed to assign projects', e);
+      alert('Could not update project assignments.');
+    } finally {
+      setSavingProjects(false);
+    }
+  };
+
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsInviting(true);
     setInviteError('');
     try {
-      const resp = await teamService.invite(inviteEmail, inviteRole);
+      const resp = await teamService.invite(inviteEmail, inviteRole, inviteProjectIds);
       setShowInviteModal(false);
-      
+      setInviteProjectIds([]);
+
       // Check if it was an invitation link
       if (resp.data && resp.data.invitation && resp.data.link) {
           setInvitationLink(resp.data.link);
           setShowInvitationModal(true);
       } else {
           setInviteEmail('');
+          setSuccessMessage(
+            resp.message?.includes('Projects assigned')
+              ? 'Projects assigned to existing member'
+              : 'Member added successfully'
+          );
           setShowSuccess(true);
           fetchMembers();
           billingService.getUsage().then((r) => setUsage(r.data)).catch(() => setUsage(null));
@@ -234,7 +274,7 @@ const TeamPage = () => {
             className="fixed bottom-12 right-12 z-50 bg-emerald-500 text-white px-6 py-3 rounded-2xl shadow-ai flex items-center gap-3"
           >
             <CheckCircle2 size={20} />
-            <span className="font-bold">Invitation sent successfully!</span>
+            <span className="font-bold">{successMessage}!</span>
           </motion.div>
         )}
       </AnimatePresence>
@@ -256,6 +296,7 @@ const TeamPage = () => {
         <Button
           onClick={() => {
             setInviteError('');
+            setInviteProjectIds([]);
             setShowInviteModal(true);
           }}
           className="w-fit"
@@ -381,6 +422,7 @@ const TeamPage = () => {
             <tr className="bg-white/5">
               <th className="px-6 py-4 text-sm font-bold text-slate-400 uppercase tracking-wider">Member</th>
               <th className="px-6 py-4 text-sm font-bold text-slate-400 uppercase tracking-wider">Role</th>
+              <th className="px-6 py-4 text-sm font-bold text-slate-400 uppercase tracking-wider">Projects</th>
               <th className="px-6 py-4 text-sm font-bold text-slate-400 uppercase tracking-wider">Monitoring</th>
               <th className="px-6 py-4 text-sm font-bold text-slate-400 uppercase tracking-wider">Daily Target</th>
               <th className="px-6 py-4 text-sm font-bold text-slate-400 uppercase tracking-wider">Joined</th>
@@ -416,6 +458,35 @@ const TeamPage = () => {
                     <Shield size={12} />
                     {member.role}
                   </span>
+                </td>
+                <td className="px-6 py-4">
+                  {['owner', 'admin', 'manager'].includes(String(member.role).toLowerCase()) ? (
+                    <span className="text-xs text-slate-500 font-medium">All projects</span>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={!canManageTeamAccess}
+                      onClick={() => canManageTeamAccess && openAssignProjects(member)}
+                      className="text-left text-sm text-slate-300 hover:text-primary-400 transition-colors disabled:hover:text-slate-300"
+                      title={canManageTeamAccess ? 'Assign projects' : undefined}
+                    >
+                      {(member.project_ids?.length ?? 0) > 0 ? (
+                        <span className="inline-flex flex-wrap gap-1">
+                          {(member.project_ids ?? []).slice(0, 2).map((pid) => (
+                            <span key={pid} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-white/5 border border-white/10 text-[11px] font-medium">
+                              <FolderKanban size={10} className="text-primary-400" />
+                              {projectNameById(pid)}
+                            </span>
+                          ))}
+                          {(member.project_ids?.length ?? 0) > 2 && (
+                            <span className="text-[11px] text-slate-500">+{(member.project_ids!.length - 2)}</span>
+                          )}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-amber-400/80">{canManageTeamAccess ? 'Assign projects…' : 'None'}</span>
+                      )}
+                    </button>
+                  )}
                 </td>
                 <td className="px-6 py-4">
                   {(() => {
@@ -476,6 +547,15 @@ const TeamPage = () => {
                       >
                         Tracking
                       </Link>
+                    )}
+                    {canManageTeamAccess && (
+                      <button
+                        className="p-2 rounded-lg text-slate-500 hover:text-primary-400 hover:bg-primary-500/10 transition-all"
+                        title="Assign projects"
+                        onClick={() => openAssignProjects(member)}
+                      >
+                        <FolderKanban size={18} />
+                      </button>
                     )}
                     {canManageTeamAccess && (
                       <button
@@ -558,6 +638,41 @@ const TeamPage = () => {
             </div>
           </div>
 
+          <div className="space-y-3">
+            <label className="text-sm font-bold text-slate-400 uppercase tracking-wider ml-1 flex items-center gap-2">
+              <FolderKanban size={16} /> Assign to projects
+            </label>
+            <p className="text-xs text-slate-500 ml-1">
+              Member can start the timer only on these projects. Admins/managers see all projects anyway.
+            </p>
+            {projects.length === 0 ? (
+              <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+                No active projects yet. Create a project first, then invite members.
+              </div>
+            ) : (
+              <div className="max-h-48 overflow-y-auto space-y-2 rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+                {projects.map((p) => {
+                  const checked = inviteProjectIds.includes(p.id);
+                  return (
+                    <label
+                      key={p.id}
+                      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer transition-colors ${checked ? 'bg-primary-500/10 border border-primary-500/30' : 'hover:bg-white/5 border border-transparent'}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => setInviteProjectIds((ids) => toggleId(ids, p.id))}
+                        className="w-4 h-4 accent-primary-500"
+                      />
+                      <span className="text-sm text-white font-medium">{p.name}</span>
+                      {p.client_name && <span className="text-[11px] text-slate-500 ml-auto">{p.client_name}</span>}
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
           <div className="pt-4 flex gap-4">
             <Button variant="secondary" type="button" className="flex-1" onClick={() => setShowInviteModal(false)}>
               Cancel
@@ -567,6 +682,54 @@ const TeamPage = () => {
             </Button>
           </div>
         </form>
+      </Modal>
+
+      {/* Assign Projects Modal */}
+      <Modal
+        open={!!assignMember}
+        onClose={() => setAssignMember(null)}
+        title="Assign Projects"
+      >
+        {assignMember && (
+          <div className="space-y-6">
+            <p className="text-slate-400 text-sm -mt-2">
+              {assignMember.first_name} {assignMember.last_name} — select projects they can track time on.
+            </p>
+            {projects.length === 0 ? (
+              <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+                No active projects. Create projects first.
+              </div>
+            ) : (
+              <div className="max-h-64 overflow-y-auto space-y-2 rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+                {projects.map((p) => {
+                  const checked = assignProjectIds.includes(p.id);
+                  return (
+                    <label
+                      key={p.id}
+                      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer transition-colors ${checked ? 'bg-primary-500/10 border border-primary-500/30' : 'hover:bg-white/5 border border-transparent'}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => setAssignProjectIds((ids) => toggleId(ids, p.id))}
+                        className="w-4 h-4 accent-primary-500"
+                      />
+                      <span className="text-sm text-white font-medium">{p.name}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+            <div className="flex gap-4 pt-2">
+              <Button variant="secondary" type="button" className="flex-1" onClick={() => setAssignMember(null)}>
+                Cancel
+              </Button>
+              <Button type="button" className="flex-1" isLoading={savingProjects} onClick={saveAssignProjects}>
+                Save Projects
+              </Button>
+            </div>
+          </div>
+        )}
       </Modal>
 
       {/* Invitation Link Modal */}

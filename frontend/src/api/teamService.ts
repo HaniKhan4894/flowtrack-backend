@@ -7,6 +7,7 @@ export interface TeamMember extends User {
     joined_at: string;
     user_id?: number;
     team_id?: number | null;
+    project_ids?: number[];
     daily_hours_target?: number | null;
     tracking_enabled?: boolean;
     screenshots_enabled?: boolean;
@@ -42,8 +43,12 @@ export const teamService = {
         return response.data;
     },
 
-    invite: async (email: string, role: string): Promise<any> => {
-        const response = await client.post(`/organizations/${getOrgId()}/members`, { email, role });
+    invite: async (email: string, role: string, projectIds: number[] = []): Promise<any> => {
+        const response = await client.post(`/organizations/${getOrgId()}/members`, {
+            email,
+            role,
+            project_ids: projectIds,
+        });
         return response.data;
     },
 
@@ -54,6 +59,13 @@ export const teamService = {
 
     updateMember: async (userId: string | number, data: { daily_hours_target?: number | null; role?: string }): Promise<{ data: TeamMember }> => {
         const response = await client.put(`/organizations/${getOrgId()}/members/${userId}`, data);
+        return response.data;
+    },
+
+    syncMemberProjects: async (userId: string | number, projectIds: number[]): Promise<{ data: { user_id: number; project_ids: number[] } }> => {
+        const response = await client.put(`/organizations/${getOrgId()}/members/${userId}/projects`, {
+            project_ids: projectIds,
+        });
         return response.data;
     },
 

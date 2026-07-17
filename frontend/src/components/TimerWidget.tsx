@@ -150,7 +150,7 @@ export const TimerWidget = () => {
         <span className="text-xs text-amber-200">
           {isOrgAdmin(user)
             ? 'Create your first project to start tracking.'
-            : 'Ask your admin to create a project.'}
+            : 'No projects assigned yet. Ask your admin to assign you to a project.'}
         </span>
         {canManageProjects(user) && (
           <Link to="/projects" className="text-xs font-bold text-amber-300 hover:underline whitespace-nowrap">

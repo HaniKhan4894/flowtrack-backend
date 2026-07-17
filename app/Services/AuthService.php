@@ -86,7 +86,10 @@ class AuthService
                     (int) $invite['organization_id'],
                     (int) $user['id'],
                     (string) $invite['role'],
-                    null
+                    null,
+                    null,
+                    null,
+                    $this->decodeInviteProjectIds($invite['project_ids'] ?? null)
                 );
                 $this->db->table('organization_invitations')->where('id', $invite['id'])->delete();
             } else {
@@ -284,7 +287,10 @@ class AuthService
                     (int) $invite['organization_id'],
                     (int) $user['id'],
                     (string) $invite['role'],
-                    null
+                    null,
+                    null,
+                    null,
+                    $this->decodeInviteProjectIds($invite['project_ids'] ?? null)
                 );
                 $this->db->table('organization_invitations')->where('id', $invite['id'])->delete();
             } else {
@@ -723,6 +729,26 @@ class AuthService
         }
 
         return $features;
+    }
+
+    /**
+     * @return int[]
+     */
+    private function decodeInviteProjectIds(mixed $raw): array
+    {
+        if ($raw === null || $raw === '') {
+            return [];
+        }
+        if (is_array($raw)) {
+            return array_values(array_filter(array_map('intval', $raw)));
+        }
+        if (is_string($raw)) {
+            $decoded = json_decode($raw, true);
+            if (is_array($decoded)) {
+                return array_values(array_filter(array_map('intval', $decoded)));
+            }
+        }
+        return [];
     }
 
     private function sanitizeUser(array $user): array

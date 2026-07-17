@@ -70,11 +70,16 @@ class TimeEntryService
             throw new \Exception('You already have an active timer running');
         }
 
-        // Validate project belongs to organization
+        // Validate project belongs to organization and user is allowed to use it
         if (isset($data['project_id'])) {
             $project = $this->projectModel->find($data['project_id']);
             if (!$project || $project['organization_id'] != $organizationId) {
                 throw new \Exception('Invalid project');
+            }
+
+            $projectMemberService = new ProjectMemberService();
+            if (!$projectMemberService->isAssigned($organizationId, $userId, (int) $data['project_id'])) {
+                throw new \Exception('You are not assigned to this project');
             }
         }
 
