@@ -152,13 +152,13 @@ const DailyStandupPage = () => {
               <select
                 value={selectedUserId}
                 onChange={(e) => setSelectedUserId(Number(e.target.value))}
-                className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-slate-200 outline-none focus:border-primary-500/50 min-w-[200px]"
+                className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-slate-200 outline-none focus:border-primary-500/50 min-w-[200px] [&>option]:bg-[#1A1C26] [&>option]:text-slate-200"
               >
                 <option value={user?.id ?? 0}>Myself</option>
                 {members
-                  .filter((m) => (m.user_id ?? m.id) !== user?.id)
+                  .filter((m) => Number(m.user_id ?? m.id) !== Number(user?.id))
                   .map((m) => (
-                    <option key={m.user_id ?? m.id} value={m.user_id ?? m.id}>
+                    <option key={m.user_id ?? m.id} value={Number(m.user_id ?? m.id)}>
                       {m.first_name} {m.last_name}
                     </option>
                   ))}

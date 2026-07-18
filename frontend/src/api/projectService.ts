@@ -18,8 +18,10 @@ export interface Project {
 }
 
 export const projectService = {
-    getAll: async (params?: { search?: string; is_active?: number }): Promise<{ data: Project[] }> => {
-        const response = await client.get<{ data: Project[] }>('/projects', { params });
+    getAll: async (params?: { search?: string; is_active?: number; per_page?: number }): Promise<{ data: Project[] }> => {
+        const response = await client.get<{ data: Project[] }>('/projects', {
+            params: { per_page: 200, ...params },
+        });
         return response.data;
     },
 

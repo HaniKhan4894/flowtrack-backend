@@ -294,7 +294,40 @@ class OrganizationController extends ResourceController
                 'message' => 'Member projects updated',
                 'data' => [
                     'user_id' => $memberUserId,
-                    'project_ids' => $assigned,
+                    'project_ids' => array_values(array_map('intval', $assigned)),
+                ],
+            ]);
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+
+    /**
+     * GET /api/v1/organizations/{id}/members/{userId}/projects
+     */
+    public function getMemberProjects($id = null, $userId = null)
+    {
+        try {
+            $organizationId = (int) $id;
+            $memberUserId = (int) $userId;
+
+            $orgMember = (new \App\Models\OrganizationMemberModel())
+                ->where('organization_id', $organizationId)
+                ->where('user_id', $memberUserId)
+                ->first();
+
+            if (!$orgMember) {
+                return $this->failNotFound('Member not found in this organization');
+            }
+
+            $service = new \App\Services\ProjectMemberService();
+            $assigned = $service->getProjectIdsForUser($organizationId, $memberUserId);
+
+            return $this->respond([
+                'success' => true,
+                'data' => [
+                    'user_id' => $memberUserId,
+                    'project_ids' => array_values(array_map('intval', $assigned)),
                 ],
             ]);
         } catch (\Exception $e) {

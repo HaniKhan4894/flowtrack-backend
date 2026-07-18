@@ -39,7 +39,9 @@ function getOrgId(): number {
 
 export const teamService = {
     getAll: async (): Promise<{ data: TeamMember[] }> => {
-        const response = await client.get(`/organizations/${getOrgId()}/members`);
+        const response = await client.get(`/organizations/${getOrgId()}/members`, {
+            params: { per_page: 200 },
+        });
         return response.data;
     },
 
@@ -62,9 +64,14 @@ export const teamService = {
         return response.data;
     },
 
+    getMemberProjects: async (userId: string | number): Promise<{ data: { user_id: number; project_ids: number[] } }> => {
+        const response = await client.get(`/organizations/${getOrgId()}/members/${userId}/projects`);
+        return response.data;
+    },
+
     syncMemberProjects: async (userId: string | number, projectIds: number[]): Promise<{ data: { user_id: number; project_ids: number[] } }> => {
         const response = await client.put(`/organizations/${getOrgId()}/members/${userId}/projects`, {
-            project_ids: projectIds,
+            project_ids: projectIds.map(Number).filter((n) => n > 0),
         });
         return response.data;
     },

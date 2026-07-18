@@ -30,6 +30,7 @@ const TeamPage = () => {
   const [showInvitationModal, setShowInvitationModal] = useState(false);
   const [assignMember, setAssignMember] = useState<TeamMember | null>(null);
   const [assignProjectIds, setAssignProjectIds] = useState<number[]>([]);
+  const [loadingAssignProjects, setLoadingAssignProjects] = useState(false);
   const [savingProjects, setSavingProjects] = useState(false);
   const [monitorMember, setMonitorMember] = useState<TeamMember | null>(null);
   const [monitorSettings, setMonitorSettings] = useState<MemberMonitoringSettings | null>(null);
@@ -61,7 +62,15 @@ const TeamPage = () => {
     fetchMembers();
     teamService.getTeams().then((r) => setTeams(r.data ?? [])).catch(() => setTeams([]));
     billingService.getUsage().then((r) => setUsage(r.data)).catch(() => setUsage(null));
-    projectService.getAll({ is_active: 1 }).then((r) => setProjects(r.data ?? [])).catch(() => setProjects([]));
+    projectService.getAll({ is_active: 1 }).then((r) => {
+      setProjects(
+        (r.data ?? []).map((p) => ({
+          ...p,
+          id: Number(p.id),
+          organization_id: Number(p.organization_id),
+        }))
+      );
+    }).catch(() => setProjects([]));
   }, []);
 
   useEffect(() => {
@@ -78,7 +87,12 @@ const TeamPage = () => {
   const fetchMembers = async () => {
     try {
       const resp = await teamService.getAll();
-      setMembers(resp.data);
+      const list = (resp.data ?? []).map((m) => ({
+        ...m,
+        user_id: Number(m.user_id ?? 0) || undefined,
+        project_ids: normalizeIds(m.project_ids),
+      }));
+      setMembers(list);
     } catch (e) {
       console.error(e);
       setMembers([]);
@@ -87,24 +101,47 @@ const TeamPage = () => {
     }
   };
 
-  const toggleId = (list: number[], id: number) =>
-    list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
+  const normalizeIds = (ids: Array<number | string> | null | undefined): number[] =>
+    Array.from(new Set((ids ?? []).map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0)));
 
-  const projectNameById = (id: number) => projects.find((p) => p.id === id)?.name ?? `#${id}`;
+  const memberUserId = (member: TeamMember): number =>
+    Number(member.user_id ?? 0) || Number(member.id);
 
-  const openAssignProjects = (member: TeamMember) => {
+  const toggleId = (list: number[], id: number | string) => {
+    const n = Number(id);
+    return list.includes(n) ? list.filter((x) => x !== n) : [...list, n];
+  };
+
+  const projectNameById = (id: number | string) => {
+    const n = Number(id);
+    return projects.find((p) => Number(p.id) === n)?.name ?? `#${n}`;
+  };
+
+  const openAssignProjects = async (member: TeamMember) => {
     setAssignMember(member);
-    setAssignProjectIds([...(member.project_ids ?? [])]);
+    setAssignProjectIds(normalizeIds(member.project_ids));
+    setLoadingAssignProjects(true);
+    try {
+      const resp = await teamService.getMemberProjects(memberUserId(member));
+      setAssignProjectIds(normalizeIds(resp.data?.project_ids));
+    } catch (e) {
+      console.error('Failed to load member projects', e);
+    } finally {
+      setLoadingAssignProjects(false);
+    }
   };
 
   const saveAssignProjects = async () => {
     if (!assignMember) return;
     setSavingProjects(true);
     try {
-      const memberUserId = assignMember.user_id ?? assignMember.id;
-      await teamService.syncMemberProjects(memberUserId, assignProjectIds);
+      const uid = memberUserId(assignMember);
+      const resp = await teamService.syncMemberProjects(uid, assignProjectIds);
+      const savedIds = normalizeIds(resp.data?.project_ids ?? assignProjectIds);
+      setMembers((prev) =>
+        prev.map((m) => (memberUserId(m) === uid ? { ...m, project_ids: savedIds } : m))
+      );
       setAssignMember(null);
-      fetchMembers();
     } catch (e) {
       console.error('Failed to assign projects', e);
       alert('Could not update project assignments.');
@@ -652,7 +689,7 @@ const TeamPage = () => {
             ) : (
               <div className="max-h-48 overflow-y-auto space-y-2 rounded-2xl border border-white/10 bg-white/[0.03] p-3">
                 {projects.map((p) => {
-                  const checked = inviteProjectIds.includes(p.id);
+                  const checked = inviteProjectIds.includes(Number(p.id));
                   return (
                     <label
                       key={p.id}
@@ -702,7 +739,7 @@ const TeamPage = () => {
             ) : (
               <div className="max-h-64 overflow-y-auto space-y-2 rounded-2xl border border-white/10 bg-white/[0.03] p-3">
                 {projects.map((p) => {
-                  const checked = assignProjectIds.includes(p.id);
+                  const checked = assignProjectIds.includes(Number(p.id));
                   return (
                     <label
                       key={p.id}
@@ -720,11 +757,16 @@ const TeamPage = () => {
                 })}
               </div>
             )}
+            {loadingAssignProjects && (
+              <p className="text-xs text-slate-500 flex items-center gap-2">
+                <Loader2 size={12} className="animate-spin" /> Loading current assignments…
+              </p>
+            )}
             <div className="flex gap-4 pt-2">
               <Button variant="secondary" type="button" className="flex-1" onClick={() => setAssignMember(null)}>
                 Cancel
               </Button>
-              <Button type="button" className="flex-1" isLoading={savingProjects} onClick={saveAssignProjects}>
+              <Button type="button" className="flex-1" isLoading={savingProjects || loadingAssignProjects} onClick={saveAssignProjects}>
                 Save Projects
               </Button>
             </div>

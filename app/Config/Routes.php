@@ -103,6 +103,7 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\API\V1'], function ($r
     $routes->post('organizations/(:num)/members', 'OrganizationController::addMember/$1', ['filter' => 'permission:users.create']);
     $routes->delete('organizations/(:num)/members/(:num)', 'OrganizationController::removeMember/$1/$2', ['filter' => 'permission:users.delete']);
     $routes->put('organizations/(:num)/members/(:num)', 'OrganizationController::updateMember/$1/$2', ['filter' => 'permission:users.edit']);
+    $routes->get('organizations/(:num)/members/(:num)/projects', 'OrganizationController::getMemberProjects/$1/$2', ['filter' => 'permission:users.edit']);
     $routes->put('organizations/(:num)/members/(:num)/projects', 'OrganizationController::syncMemberProjects/$1/$2', ['filter' => 'permission:users.edit']);
     $routes->get('organizations/(:num)/members/(:num)/monitoring', 'OrganizationController::getMemberMonitoring/$1/$2', ['filter' => 'permission:users.edit']);
     $routes->put('organizations/(:num)/members/(:num)/monitoring', 'OrganizationController::updateMemberMonitoring/$1/$2', ['filter' => 'permission:users.edit']);

@@ -436,7 +436,10 @@ class OrganizationService
         $projectMap = (new ProjectMemberService())->getProjectIdsByUsers($organizationId, $userIds);
         foreach ($members as &$member) {
             $uid = (int) ($member['user_id'] ?? 0);
-            $member['project_ids'] = $projectMap[$uid] ?? [];
+            $member['id'] = (int) ($member['id'] ?? 0);
+            $member['user_id'] = $uid;
+            $member['organization_id'] = (int) ($member['organization_id'] ?? $organizationId);
+            $member['project_ids'] = array_values(array_map('intval', $projectMap[$uid] ?? []));
         }
         unset($member);
 

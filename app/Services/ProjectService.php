@@ -136,6 +136,15 @@ class ProjectService
 
         $projects = $builder->orderBy('p.created_at', 'DESC')->limit($perPage, $offset)->get()->getResultArray();
 
+        foreach ($projects as &$project) {
+            $project['id'] = (int) ($project['id'] ?? 0);
+            $project['organization_id'] = (int) ($project['organization_id'] ?? 0);
+            if (isset($project['member_count'])) {
+                $project['member_count'] = (int) $project['member_count'];
+            }
+        }
+        unset($project);
+
         return [
             'data' => $projects,
             'pagination' => [
