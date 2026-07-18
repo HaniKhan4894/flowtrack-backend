@@ -11,7 +11,7 @@ interface TimerState {
     elapsed: number;
     isRunning: boolean;
     isPaused: boolean;
-    start: (projectId: number, description?: string, taskId?: number) => Promise<void>;
+    start: (projectId?: number | null, description?: string, taskId?: number) => Promise<void>;
     stop: () => Promise<void>;
     pause: () => Promise<void>;
     resume: () => Promise<void>;
@@ -62,7 +62,7 @@ export const useTimerStore = create<TimerState>((set, get) => ({
             elapsed: 0,
             activeEntry: {
                 id: optimisticId,
-                project_id: projectId,
+                project_id: projectId ?? null,
                 task_id: taskId ?? null,
                 description: description ?? '',
                 started_at: new Date().toISOString(),
@@ -74,7 +74,7 @@ export const useTimerStore = create<TimerState>((set, get) => ({
         setTrackingSessionActive(true);
         try {
             const response = await timeService.startTimer({
-                project_id: projectId,
+                project_id: projectId ?? undefined,
                 task_id: taskId,
                 description,
             });

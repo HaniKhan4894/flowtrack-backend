@@ -408,6 +408,8 @@ class OrganizationService
 
     public function removeMember(int $organizationId, int $userId): bool
     {
+        (new ProjectMemberService())->clearUserProjects($organizationId, $userId);
+
         return $this->memberModel
             ->where('organization_id', $organizationId)
             ->where('user_id', $userId)

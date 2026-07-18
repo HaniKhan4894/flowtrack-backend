@@ -12,6 +12,7 @@ import { canManageTeam, canViewMemberTracking, hasPermission } from '../../utils
 import { Link } from 'react-router-dom';
 import type { MemberMonitoringSettings } from '../../types';
 import axios from 'axios';
+import { toastSuccess, toastError } from '../../store/toastStore';
 
 const TeamPage = () => {
   const [members, setMembers] = useState<TeamMember[]>([]);
@@ -142,9 +143,14 @@ const TeamPage = () => {
         prev.map((m) => (memberUserId(m) === uid ? { ...m, project_ids: savedIds } : m))
       );
       setAssignMember(null);
+      toastSuccess(
+        savedIds.length > 0
+          ? `Assigned ${savedIds.length} project${savedIds.length === 1 ? '' : 's'}`
+          : 'Cleared project restrictions — member can use all projects'
+      );
     } catch (e) {
       console.error('Failed to assign projects', e);
-      alert('Could not update project assignments.');
+      toastError('Could not update project assignments.');
     } finally {
       setSavingProjects(false);
     }
@@ -520,7 +526,7 @@ const TeamPage = () => {
                           )}
                         </span>
                       ) : (
-                        <span className="text-xs text-amber-400/80">{canManageTeamAccess ? 'Assign projects…' : 'None'}</span>
+                        <span className="text-xs text-emerald-400/80">{canManageTeamAccess ? 'All projects' : 'All projects'}</span>
                       )}
                     </button>
                   )}
@@ -680,7 +686,7 @@ const TeamPage = () => {
               <FolderKanban size={16} /> Assign to projects
             </label>
             <p className="text-xs text-slate-500 ml-1">
-              Member can start the timer only on these projects. Admins/managers see all projects anyway.
+              Optional. Leave empty for normal tracking on all projects. If you select projects, the member can only use those (pre-selected on their timer).
             </p>
             {projects.length === 0 ? (
               <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
@@ -730,7 +736,7 @@ const TeamPage = () => {
         {assignMember && (
           <div className="space-y-6">
             <p className="text-slate-400 text-sm -mt-2">
-              {assignMember.first_name} {assignMember.last_name} — select projects they can track time on.
+              {assignMember.first_name} {assignMember.last_name} — leave empty for access to all projects; select to restrict.
             </p>
             {projects.length === 0 ? (
               <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">

@@ -39,9 +39,34 @@ class ProjectMemberService
         return in_array($role, ['owner', 'admin', 'manager'], true);
     }
 
-    public function isAssigned(int $organizationId, int $userId, int $projectId): bool
+    /**
+     * True when this user has at least one row in project_members.
+     * Empty assignment list = unrestricted (normal tracking on any org project).
+     */
+    public function hasExplicitAssignments(int $organizationId, int $userId): bool
+    {
+        return $this->memberModel
+            ->where('organization_id', $organizationId)
+            ->where('user_id', $userId)
+            ->countAllResults() > 0;
+    }
+
+    /**
+     * Restrict project list / timer to assigned projects only when the user
+     * is not an admin/manager and has explicit assignments.
+     */
+    public function isProjectAccessRestricted(int $organizationId, int $userId): bool
     {
         if ($this->canSeeAllProjects($organizationId, $userId)) {
+            return false;
+        }
+
+        return $this->hasExplicitAssignments($organizationId, $userId);
+    }
+
+    public function isAssigned(int $organizationId, int $userId, int $projectId): bool
+    {
+        if (!$this->isProjectAccessRestricted($organizationId, $userId)) {
             return true;
         }
 
@@ -50,6 +75,17 @@ class ProjectMemberService
             ->where('user_id', $userId)
             ->where('project_id', $projectId)
             ->first();
+    }
+
+    /**
+     * Remove all project assignments for a user in an org (e.g. on member remove).
+     */
+    public function clearUserProjects(int $organizationId, int $userId): void
+    {
+        $this->memberModel
+            ->where('organization_id', $organizationId)
+            ->where('user_id', $userId)
+            ->delete();
     }
 
     /**

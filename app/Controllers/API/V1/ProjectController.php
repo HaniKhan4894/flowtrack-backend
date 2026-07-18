@@ -48,7 +48,9 @@ class ProjectController extends ResourceController
 
             $userId = (int) ($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
             $memberService = new \App\Services\ProjectMemberService();
-            if ($userId > 0 && !$memberService->canSeeAllProjects($organizationId, $userId)) {
+            // Only filter when member has explicit project assignments.
+            // No assignments = normal access to all org projects.
+            if ($userId > 0 && $memberService->isProjectAccessRestricted($organizationId, $userId)) {
                 $filters['assigned_user_id'] = $userId;
             } else {
                 $filters['see_all'] = true;
@@ -111,6 +113,21 @@ class ProjectController extends ResourceController
             }
 
             $project = $this->projectService->createProject($organizationId, $data);
+
+            $actorId = (int) ($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
+            if ($actorId > 0 && !empty($project['id'])) {
+                $memberService = new \App\Services\ProjectMemberService();
+                // Admins/managers already see all projects — only auto-assign restricted roles
+                // so the creator keeps access if they later get other assignments.
+                if (!$memberService->canSeeAllProjects($organizationId, $actorId)) {
+                    $memberService->assignUserProjects(
+                        $organizationId,
+                        $actorId,
+                        [(int) $project['id']],
+                        $actorId
+                    );
+                }
+            }
 
             return $this->respondCreated([
                 'success' => true,

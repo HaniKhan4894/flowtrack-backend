@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Play, Square, ChevronDown, Pause, Download, AlertCircle } from 'lucide-react';
+import { Play, Square, ChevronDown, Pause, Download } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { useTimerStore } from '../store/timerStore';
@@ -69,9 +69,16 @@ export const TimerWidget = () => {
 
   const fetchProjects = useCallback(async () => {
     try {
-      const resp = await projectService.getAll();
-      setProjects(resp.data);
-      if (resp.data.length > 0) setSelectedProjectId(resp.data[0].id);
+      const resp = await projectService.getAll({ is_active: 1, per_page: 200 });
+      const list = (resp.data ?? []).map((p) => ({ ...p, id: Number(p.id) }));
+      setProjects(list);
+      // Default to first available project (assigned list when restricted, all when open)
+      if (list.length > 0) {
+        setSelectedProjectId((prev) => {
+          if (prev && list.some((p) => p.id === prev)) return prev;
+          return list[0].id;
+        });
+      }
     } catch (e) {
       console.error(e);
     }
@@ -93,14 +100,11 @@ export const TimerWidget = () => {
     setError(null);
     try {
       if (isRunning) {
-        // Optimistic: clear UI immediately while request completes
         await stop();
         toastSuccess('Timer stopped');
       } else {
-        if (!selectedProjectId) {
-          setError('Please select a project first');
-          return;
-        }
+        // Project is optional: members with no assignments can track normally without one.
+        // When projects exist, first is pre-selected by default.
         await start(selectedProjectId, description, selectedTaskId ?? undefined);
         toastSuccess('Timer started');
       }
@@ -110,8 +114,6 @@ export const TimerWidget = () => {
       toastError(msg);
     }
   };
-
-  const noProjects = projects.length === 0;
 
   if (!isDesktop) {
     return (
@@ -143,24 +145,6 @@ export const TimerWidget = () => {
     );
   }
 
-  if (noProjects && !isRunning) {
-    return (
-      <div className="flex items-center gap-3 bg-amber-500/10 border border-amber-500/20 rounded-2xl px-4 py-2">
-        <AlertCircle size={16} className="text-amber-400 shrink-0" />
-        <span className="text-xs text-amber-200">
-          {isOrgAdmin(user)
-            ? 'Create your first project to start tracking.'
-            : 'No projects assigned yet. Ask your admin to assign you to a project.'}
-        </span>
-        {canManageProjects(user) && (
-          <Link to="/projects" className="text-xs font-bold text-amber-300 hover:underline whitespace-nowrap">
-            Create project
-          </Link>
-        )}
-      </div>
-    );
-  }
-
   return (
     <div className="flex items-center gap-4 bg-white/5 border border-white/10 rounded-2xl px-4 py-2 glass shadow-ai">
       {idleNotice && (
@@ -176,7 +160,7 @@ export const TimerWidget = () => {
               onClick={() => setShowProjectSelect(!showProjectSelect)}
               className="flex items-center gap-2 text-xs font-bold text-slate-400 hover:text-white transition-colors uppercase tracking-wider bg-white/5 px-3 py-1.5 rounded-lg"
             >
-              {projects.find((p) => p.id === selectedProjectId)?.name || 'Select Project'}
+              {projects.find((p) => p.id === selectedProjectId)?.name || 'No project'}
               <ChevronDown size={14} />
             </button>
 
@@ -186,20 +170,40 @@ export const TimerWidget = () => {
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: 10 }}
-                  className="absolute top-full mt-2 left-0 w-48 bg-[#1A1C26] border border-white/10 rounded-xl overflow-hidden z-50 shadow-2xl"
+                  className="absolute top-full mt-2 left-0 w-52 bg-[#1A1C26] border border-white/10 rounded-xl overflow-hidden z-50 shadow-2xl"
                 >
-                  {projects.map((p) => (
-                    <button
-                      key={p.id}
-                      onClick={() => {
-                        setSelectedProjectId(p.id);
-                        setShowProjectSelect(false);
-                      }}
-                      className="w-full text-left px-4 py-2.5 text-sm text-slate-300 hover:bg-primary-500/10 hover:text-primary-400 transition-colors border-b border-white/5 last:border-0"
-                    >
-                      {p.name}
-                    </button>
-                  ))}
+                  <button
+                    onClick={() => {
+                      setSelectedProjectId(null);
+                      setShowProjectSelect(false);
+                    }}
+                    className="w-full text-left px-4 py-2.5 text-sm text-slate-400 hover:bg-primary-500/10 hover:text-primary-400 transition-colors border-b border-white/5"
+                  >
+                    No project (general)
+                  </button>
+                  {projects.length === 0 ? (
+                    <div className="px-4 py-2.5 text-xs text-slate-500">
+                      {isOrgAdmin(user) ? 'Create a project to categorize time.' : 'No projects available yet.'}
+                      {canManageProjects(user) && (
+                        <Link to="/projects" className="block mt-1 text-primary-400 font-bold hover:underline">
+                          Create project
+                        </Link>
+                      )}
+                    </div>
+                  ) : (
+                    projects.map((p) => (
+                      <button
+                        key={p.id}
+                        onClick={() => {
+                          setSelectedProjectId(p.id);
+                          setShowProjectSelect(false);
+                        }}
+                        className="w-full text-left px-4 py-2.5 text-sm text-slate-300 hover:bg-primary-500/10 hover:text-primary-400 transition-colors border-b border-white/5 last:border-0"
+                      >
+                        {p.name}
+                      </button>
+                    ))
+                  )}
                 </motion.div>
               )}
             </AnimatePresence>

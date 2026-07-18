@@ -71,7 +71,7 @@ class TimeEntryService
         }
 
         // Validate project belongs to organization and user is allowed to use it
-        if (isset($data['project_id'])) {
+        if (!empty($data['project_id'])) {
             $project = $this->projectModel->find($data['project_id']);
             if (!$project || $project['organization_id'] != $organizationId) {
                 throw new \Exception('Invalid project');
@@ -306,6 +306,17 @@ class TimeEntryService
         $this->db->transStart();
 
         try {
+            if (!empty($data['project_id'])) {
+                $project = $this->projectModel->find($data['project_id']);
+                if (!$project || (int) $project['organization_id'] !== $organizationId) {
+                    throw new \Exception('Invalid project');
+                }
+                $projectMemberService = new ProjectMemberService();
+                if (!$projectMemberService->isAssigned($organizationId, $userId, (int) $data['project_id'])) {
+                    throw new \Exception('You are not assigned to this project');
+                }
+            }
+
             $duration = strtotime($data['ended_at']) - strtotime($data['started_at']);
 
             $entryData = [
@@ -367,6 +378,11 @@ class TimeEntryService
             $project = $this->projectModel->find($updates['project_id']);
             if (!$project || (int) $project['organization_id'] !== $organizationId) {
                 throw new \Exception('Invalid project');
+            }
+            $targetUserId = (int) ($entry['user_id'] ?? $actorUserId);
+            $projectMemberService = new ProjectMemberService();
+            if (!$projectMemberService->isAssigned($organizationId, $targetUserId, (int) $updates['project_id'])) {
+                throw new \Exception('You are not assigned to this project');
             }
         }
 

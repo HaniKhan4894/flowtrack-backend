@@ -4,11 +4,13 @@ import { Plus, Search, MoreVertical, Folder, Palette, Clock, Users, Archive, Tra
 import { Button, Input, Modal } from '../../components/ui';
 import { projectService, type Project } from '../../api/projectService';
 import { clientService, type Client } from '../../api/clientService';
+import { teamService, type TeamMember } from '../../api/teamService';
 import { useAuthStore } from '../../store/authStore';
 import { taskService } from '../../api/taskService';
 import type { Task } from '../../types';
 import { hasPermission } from '../../utils/access';
 import { getApiErrorMessage } from '../../utils/apiError';
+import { toastSuccess, toastError } from '../../store/toastStore';
 
 function formatDuration(seconds: number): string {
   if (!seconds) return '0h 0m';
@@ -23,6 +25,7 @@ export const ProjectsPage = () => {
   const canCreateProjects = hasPermission(user, 'projects.create');
   const [projects, setProjects] = useState<Project[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
+  const [orgMembers, setOrgMembers] = useState<TeamMember[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
@@ -38,6 +41,10 @@ export const ProjectsPage = () => {
   const [taskForm, setTaskForm] = useState({ name: '', description: '', estimated_hours: '' });
   const [taskSaving, setTaskSaving] = useState(false);
   const [taskError, setTaskError] = useState<string | null>(null);
+  const [assignProject, setAssignProject] = useState<Project | null>(null);
+  const [assignUserIds, setAssignUserIds] = useState<number[]>([]);
+  const [savingMembers, setSavingMembers] = useState(false);
+  const [loadingMembers, setLoadingMembers] = useState(false);
 
   // Create state
   const [newProject, setNewProject] = useState({
@@ -53,7 +60,47 @@ export const ProjectsPage = () => {
 
   useEffect(() => {
     clientService.getAll({ is_active: 1 }).then((r) => setClients(r.data ?? [])).catch(() => undefined);
-  }, []);
+    if (canEditProjects) {
+      teamService.getAll().then((r) => setOrgMembers(r.data ?? [])).catch(() => setOrgMembers([]));
+    }
+  }, [canEditProjects]);
+
+  const openAssignMembers = async (project: Project) => {
+    setAssignProject(project);
+    setMenuOpenId(null);
+    setLoadingMembers(true);
+    try {
+      const resp = await projectService.getMembers(project.id);
+      setAssignUserIds((resp.data ?? []).map((m) => Number(m.user_id)).filter((id) => id > 0));
+    } catch (e) {
+      console.error(e);
+      setAssignUserIds([]);
+      toastError('Could not load project members');
+    } finally {
+      setLoadingMembers(false);
+    }
+  };
+
+  const saveAssignMembers = async () => {
+    if (!assignProject) return;
+    setSavingMembers(true);
+    try {
+      await projectService.syncMembers(assignProject.id, assignUserIds);
+      toastSuccess('Project members updated');
+      setAssignProject(null);
+      fetchProjects();
+    } catch (e) {
+      toastError(getApiErrorMessage(e, 'Could not update members'));
+    } finally {
+      setSavingMembers(false);
+    }
+  };
+
+  const toggleAssignUser = (userId: number) => {
+    setAssignUserIds((ids) =>
+      ids.includes(userId) ? ids.filter((id) => id !== userId) : [...ids, userId]
+    );
+  };
 
   const fetchProjects = useCallback(async () => {
     setIsLoading(true);
@@ -272,6 +319,15 @@ export const ProjectsPage = () => {
                           exit={{ opacity: 0, scale: 0.95, y: -5 }}
                           className="absolute right-0 top-8 z-50 w-44 glass border border-white/10 rounded-2xl overflow-hidden shadow-2xl"
                         >
+                          {canEditProjects && (
+                            <button
+                              onClick={() => openAssignMembers(project)}
+                              className="flex items-center gap-3 w-full px-4 py-3 text-sm text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
+                            >
+                              <Users size={16} />
+                              Assign members
+                            </button>
+                          )}
                           <button
                             onClick={() => handleArchive(project.id)}
                             className="flex items-center gap-3 w-full px-4 py-3 text-sm text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
@@ -348,12 +404,18 @@ export const ProjectsPage = () => {
 
               <div className="mt-8 pt-6 border-t border-white/10 flex items-center justify-between">
                 {/* Member count */}
-                <div className="flex items-center gap-2 text-slate-400">
+                <button
+                  type="button"
+                  disabled={!canEditProjects}
+                  onClick={() => canEditProjects && openAssignMembers(project)}
+                  className="flex items-center gap-2 text-slate-400 hover:text-primary-400 transition-colors disabled:hover:text-slate-400"
+                  title={canEditProjects ? 'Assign members' : undefined}
+                >
                   <Users size={16} className="text-primary-400" />
                   <span className="text-sm font-medium">
                     {project.member_count ?? 0} member{project.member_count !== 1 ? 's' : ''}
                   </span>
-                </div>
+                </button>
                 {/* Time spent */}
                 <div className="flex items-center gap-2 text-right">
                   <Clock size={14} className="text-primary-400" />
@@ -498,6 +560,59 @@ export const ProjectsPage = () => {
             </Button>
           </div>
         </form>
+      </Modal>
+
+      <Modal
+        open={!!assignProject}
+        onClose={() => setAssignProject(null)}
+        title="Assign Members"
+      >
+        {assignProject && (
+          <div className="space-y-5">
+            <p className="text-slate-400 text-sm -mt-2">
+              {assignProject.name} — members listed here can track time on this project when restricted.
+            </p>
+            {loadingMembers ? (
+              <p className="text-sm text-slate-500">Loading…</p>
+            ) : orgMembers.length === 0 ? (
+              <p className="text-sm text-slate-500">No team members found.</p>
+            ) : (
+              <div className="max-h-72 overflow-y-auto space-y-2 rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+                {orgMembers
+                  .filter((m) => !['owner', 'admin', 'manager'].includes(String(m.role).toLowerCase()))
+                  .map((m) => {
+                    const uid = Number(m.user_id ?? m.id);
+                    const checked = assignUserIds.includes(uid);
+                    return (
+                      <label
+                        key={uid}
+                        className={`flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer transition-colors ${checked ? 'bg-primary-500/10 border border-primary-500/30' : 'hover:bg-white/5 border border-transparent'}`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleAssignUser(uid)}
+                          className="w-4 h-4 accent-primary-500"
+                        />
+                        <span className="text-sm text-white font-medium">
+                          {m.first_name} {m.last_name}
+                        </span>
+                        <span className="text-[11px] text-slate-500 ml-auto capitalize">{m.role}</span>
+                      </label>
+                    );
+                  })}
+              </div>
+            )}
+            <div className="flex gap-4 pt-1">
+              <Button variant="secondary" type="button" className="flex-1" onClick={() => setAssignProject(null)}>
+                Cancel
+              </Button>
+              <Button type="button" className="flex-1" isLoading={savingMembers || loadingMembers} onClick={saveAssignMembers}>
+                Save Members
+              </Button>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   );

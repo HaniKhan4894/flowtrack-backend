@@ -1,7 +1,7 @@
 import client from './client';
 
 export const timeService = {
-    startTimer: async (data: { project_id: number; task_id?: number; description?: string }) => {
+    startTimer: async (data: { project_id?: number | null; task_id?: number; description?: string }) => {
         const response = await client.post('/time-entries/start', data);
         return response.data;
     },
