@@ -232,6 +232,10 @@ class SubscriptionController extends ResourceController
                 }
             }
 
+            if (is_array($subscription)) {
+                $subscription['trial_eligible'] = $this->subscriptionService->qualifiesForTrial((int) $organizationId);
+            }
+
             return $this->respond([
                 'success' => true,
                 'data' => $subscription // Returns null if not found, which is better than 404 for frontend
@@ -249,26 +253,26 @@ class SubscriptionController extends ResourceController
     public function upgrade()
     {
         try {
-            $data = $this->request->getJSON(true);
-
-            $rules = [
-                'organization_id' => 'required|is_natural_no_zero',
-                'plan_id' => 'required|is_natural_no_zero',
-            ];
-
-            if (!$this->validate($rules)) {
-                return $this->failValidationErrors($this->validator->getErrors());
+            $organizationId = (int) ($this->request->getServer('FLOWTRACK_ORGANIZATION_ID') ?? 0);
+            $data = $this->request->getJSON(true) ?? [];
+            if (!$organizationId) {
+                $organizationId = (int) ($data['organization_id'] ?? 0);
             }
 
-            $subscription = $this->subscriptionService->upgrade(
-                $data['organization_id'],
-                $data['plan_id']
-            );
+            $planId = (int) ($data['plan_id'] ?? 0);
+            if (!$organizationId || !$planId) {
+                return $this->fail('organization_id and plan_id are required', 422);
+            }
+
+            $subscription = $this->subscriptionService->upgrade($organizationId, $planId);
+            if (is_array($subscription)) {
+                $subscription['trial_eligible'] = false;
+            }
 
             return $this->respond([
                 'success' => true,
                 'message' => 'Subscription upgraded successfully',
-                'data' => $subscription
+                'data' => $subscription,
             ]);
 
         } catch (\Exception $e) {

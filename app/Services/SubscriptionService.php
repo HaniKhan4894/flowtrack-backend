@@ -194,12 +194,13 @@ class SubscriptionService
         return max($minUsers, $count);
     }
 
-    private function qualifiesForTrial(int $organizationId, array $plan): bool
+    public function qualifiesForTrial(int $organizationId, ?array $plan = null): bool
     {
-        if ((int) ($plan['trial_days'] ?? 0) <= 0) {
+        if ($plan !== null && (int) ($plan['trial_days'] ?? 0) <= 0) {
             return false;
         }
 
+        // One Stripe trial per organization — upgrades keep the original trial window.
         $priorStripe = (int) $this->db->table('organization_subscriptions')
             ->where('organization_id', $organizationId)
             ->where('stripe_subscription_id IS NOT NULL', null, false)
@@ -285,35 +286,62 @@ class SubscriptionService
             throw new \Exception('Plan not found');
         }
 
+        if ((int) ($currentSubscription['plan_id'] ?? 0) === $newPlanId) {
+            throw new \Exception('You are already on this plan');
+        }
+
+        if (empty($currentSubscription['stripe_subscription_id'])) {
+            throw new \Exception('No Stripe subscription to upgrade. Start checkout for this plan instead.');
+        }
+
         $billingCycle = $currentSubscription['billing_cycle'] ?? 'monthly';
-        $priceId = $this->resolveStripePriceId($newPlan, $billingCycle);
+        $userCount = $this->resolveBillableUserCount($organizationId, $newPlan);
+        $this->validatePlanUserCapacity($newPlanId, $userCount);
 
         $this->db->transStart();
 
         try {
-            if (!empty($currentSubscription['stripe_subscription_id']) && $priceId) {
-                $stripeSub = $this->getStripeClient()->subscriptions->retrieve($currentSubscription['stripe_subscription_id']);
-                $itemId = $stripeSub->items->data[0]->id ?? null;
-                if ($itemId) {
-                    $this->getStripeClient()->subscriptions->update($currentSubscription['stripe_subscription_id'], [
-                        'items' => [['id' => $itemId, 'price' => $priceId]],
-                        'proration_behavior' => 'create_prorations',
-                        'metadata' => [
-                            'organization_id' => (string) $organizationId,
-                            'plan_id' => (string) $newPlanId,
-                        ],
-                    ]);
-                }
+            $stripeSub = $this->getStripeClient()->subscriptions->retrieve($currentSubscription['stripe_subscription_id']);
+            $items = [];
+            foreach ($stripeSub->items->data ?? [] as $existingItem) {
+                $items[] = ['id' => $existingItem->id, 'deleted' => true];
             }
 
-            $amount = $this->calculatePrice($newPlanId, (int) $currentSubscription['user_count'], $billingCycle);
+            foreach ($this->buildCheckoutLineItems($newPlan, $billingCycle, $userCount) as $line) {
+                $items[] = [
+                    'price' => $line['price'],
+                    'quantity' => $line['quantity'],
+                ];
+            }
 
-            $this->subscriptionModel->update($currentSubscription['id'], [
+            // Keep existing Stripe trial_end — do not restart a new trial on upgrade.
+            $this->getStripeClient()->subscriptions->update($currentSubscription['stripe_subscription_id'], [
+                'items' => $items,
+                'proration_behavior' => 'create_prorations',
+                'metadata' => [
+                    'organization_id' => (string) $organizationId,
+                    'plan_id' => (string) $newPlanId,
+                    'billing_cycle' => $billingCycle,
+                    'user_count' => (string) $userCount,
+                ],
+            ]);
+
+            $amount = $this->calculatePrice($newPlanId, $userCount, $billingCycle);
+            $stillInTrial = ($currentSubscription['status'] ?? '') === 'trial'
+                && !empty($currentSubscription['trial_ends_at'])
+                && strtotime((string) $currentSubscription['trial_ends_at']) > time();
+
+            $update = [
                 'plan_id' => $newPlanId,
                 'amount' => $amount,
-                'status' => 'active',
+                'user_count' => $userCount,
                 'cancel_at_period_end' => false,
-            ]);
+            ];
+            if (!$stillInTrial) {
+                $update['status'] = 'active';
+            }
+
+            $this->subscriptionModel->update($currentSubscription['id'], $update);
 
             $this->logHistory(
                 $organizationId,
@@ -326,7 +354,13 @@ class SubscriptionService
 
             $this->db->transComplete();
 
-            return $this->subscriptionModel->find($currentSubscription['id']);
+            return $this->syncStripeSubscription(
+                $organizationId,
+                (string) $currentSubscription['stripe_subscription_id'],
+                $newPlanId,
+                $billingCycle,
+                $userCount
+            );
         } catch (\Exception $e) {
             $this->db->transRollback();
             throw $e;

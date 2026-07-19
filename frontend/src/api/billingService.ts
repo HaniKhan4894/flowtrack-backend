@@ -14,6 +14,8 @@ export interface Subscription {
     stripe_subscription_id?: string | null;
     stripe_customer_id?: string | null;
     user_count?: number;
+    /** False once the org has used a Stripe trial / paid checkout. */
+    trial_eligible?: boolean;
 }
 
 /** Raw API shape — MySQL booleans may arrive as 0/1 or "0"/"1". */
@@ -74,6 +76,13 @@ export const billingService = {
     openBillingPortal: async (): Promise<{ data: { url: string } }> => {
         const response = await client.post('/subscriptions/billing-portal');
         return response.data;
+    },
+    upgrade: async (planId: number): Promise<{ data: Subscription | null; message?: string }> => {
+        const response = await client.put('/subscriptions/upgrade', { plan_id: planId });
+        return {
+            ...response.data,
+            data: normalizeSubscription(response.data?.data ?? null),
+        };
     },
     cancel: async (): Promise<any> => {
         const response = await client.post('/subscriptions/cancel');

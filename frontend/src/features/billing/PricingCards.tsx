@@ -13,6 +13,8 @@ interface PricingCardsProps {
   showAnnualBadge?: boolean;
   getStartedHref?: string;
   mode?: 'billing' | 'marketing';
+  /** When false, paid CTAs say Upgrade (org already used / is in a trial). */
+  trialEligible?: boolean;
 }
 
 export function PricingCards({
@@ -24,6 +26,7 @@ export function PricingCards({
   showAnnualBadge = true,
   getStartedHref = '/register',
   mode = 'marketing',
+  trialEligible = true,
 }: PricingCardsProps) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
@@ -90,8 +93,13 @@ export function PricingCards({
               )}
 
               <p className="text-xs text-primary-300/80 mt-2">{plan.billingNote}</p>
-              {plan.trialHint && !isLocked && (
+              {plan.trialHint && !isLocked && trialEligible && (
                 <p className="text-[10px] text-slate-500 mt-1">{plan.trialHint}</p>
+              )}
+              {!trialEligible && !plan.isFree && !isLocked && !isCurrent && isBilling && (
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Switches your current subscription — remaining trial days stay the same.
+                </p>
               )}
             </div>
 
@@ -120,9 +128,9 @@ export function PricingCards({
                     ? plan.disabledReason ?? 'Not available'
                     : plan.isFree
                       ? 'Included free'
-                      : plan.trialDays > 0
+                      : trialEligible && plan.trialDays > 0
                         ? `Start ${plan.trialDays}-day trial`
-                        : 'Subscribe'}
+                        : 'Upgrade'}
               </Button>
             ) : (
               <div className="mt-auto">

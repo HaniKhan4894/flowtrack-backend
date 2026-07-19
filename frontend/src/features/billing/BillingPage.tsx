@@ -90,6 +90,15 @@ const BillingPage = () => {
     setSubscribingId(plan.id);
     setError(null);
     try {
+      // Already on Stripe (trial or paid) → in-place upgrade keeps remaining trial days.
+      if (currentSub?.stripe_subscription_id) {
+        await billingService.upgrade(plan.id);
+        await fetchSubscription();
+        setShowSuccess(true);
+        setTimeout(() => setShowSuccess(false), 5000);
+        return;
+      }
+
       const resp = await billingService.createCheckoutSession(plan.id, billingCycle);
       const checkoutUrl = resp?.data?.url;
       if (!checkoutUrl) throw new Error('Checkout URL not returned');
@@ -125,6 +134,12 @@ const BillingPage = () => {
   }
 
   const hasPaidStripe = !!currentSub?.stripe_customer_id;
+  const trialEligible = currentSub?.trial_eligible !== false && !currentSub?.stripe_subscription_id;
+  const successMessage = currentSub?.status === 'trial' || trialEligible
+    ? (currentSub?.stripe_subscription_id
+      ? 'Plan upgraded — your remaining trial days stay the same. First charge still happens when the trial ends.'
+      : "You're all set! Your trial has started — billing begins after 14 days unless you cancel.")
+    : 'Plan upgraded successfully.';
 
   return (
     <div className="space-y-12 pb-12">
@@ -134,10 +149,10 @@ const BillingPage = () => {
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
-            className="fixed top-8 left-1/2 -translate-x-1/2 z-50 bg-emerald-500 text-white px-8 py-4 rounded-3xl shadow-ai flex items-center gap-3"
+            className="fixed top-8 left-1/2 -translate-x-1/2 z-50 bg-emerald-500 text-white px-8 py-4 rounded-3xl shadow-ai flex items-center gap-3 max-w-xl"
           >
-            <PartyPopper size={24} />
-            <span className="font-bold">You're all set! Your trial has started — billing begins after 14 days unless you cancel.</span>
+            <PartyPopper size={24} className="shrink-0" />
+            <span className="font-bold">{successMessage}</span>
           </motion.div>
         )}
       </AnimatePresence>
@@ -170,10 +185,10 @@ const BillingPage = () => {
           <div className="flex items-start gap-4">
             <Sparkles className="text-primary-400 shrink-0 mt-0.5" size={22} />
             <div>
-              <p className="font-bold text-primary-200">14-day free trial active</p>
+              <p className="font-bold text-primary-200">Free trial active</p>
               <p className="text-sm text-primary-100/80 mt-1">
                 {currentSub.trial_ends_at
-                  ? <>First charge on {formatApiDate(currentSub.trial_ends_at)}. Cancel before then from Manage billing — no charge.</>
+                  ? <>First charge on {formatApiDate(currentSub.trial_ends_at)}. Upgrade anytime — remaining trial days carry over. Cancel before then from Manage billing — no charge.</>
                   : <>Your card is on file. Cancel anytime from Manage billing before the trial ends — no charge.</>}
               </p>
             </div>
@@ -235,7 +250,8 @@ const BillingPage = () => {
           <div className="space-y-2 text-sm text-slate-300">
             <p className="font-bold text-white text-base">How billing works</p>
             <ul className="list-disc pl-5 space-y-1.5 text-slate-400">
-              <li>Paid plans include a <strong className="text-slate-200">14-day free trial</strong> — we collect your card at checkout but do not charge until the trial ends.</li>
+              <li>First paid plan includes a <strong className="text-slate-200">one-time 14-day free trial</strong> — card on file, charged only after the trial ends.</li>
+              <li>Upgrading mid-trial (e.g. Starter → Professional) <strong className="text-slate-200">keeps the same trial end date</strong> — you do not get a fresh 14 days.</li>
               <li>Pricing is <strong className="text-slate-200">per user</strong> — charged for actual members + pending invites after trial, not the slider preview.</li>
               <li>Slider shows estimated cost; checkout always uses your real team size ({billableUsers ?? '…'} user{billableUsers === 1 ? '' : 's'}).</li>
               <li>Cancel anytime from <strong className="text-slate-200">Manage billing</strong> before the trial ends to avoid any charge.</li>
@@ -249,7 +265,8 @@ const BillingPage = () => {
       <div className="text-center max-w-2xl mx-auto">
         <h1 className="text-4xl font-extrabold text-white mb-4">Simple, <span className="gradient-text">affordable</span> pricing</h1>
         <p className="text-slate-400">
-          Per-user pricing below competitors. Drag the slider to preview your team cost — 14-day trial on every paid plan.
+          Per-user pricing below competitors. Drag the slider to preview your team cost
+          {trialEligible ? ' — 14-day trial on your first paid plan.' : ' — upgrades keep your current billing / trial window.'}
         </p>
 
         <div className="flex items-center justify-center gap-4 mt-8">
@@ -293,6 +310,7 @@ const BillingPage = () => {
           onSubscribe={handleSubscribe}
           subscribingId={subscribingId}
           mode="billing"
+          trialEligible={trialEligible}
         />
       ) : (
         <div className="flex justify-center py-12">
