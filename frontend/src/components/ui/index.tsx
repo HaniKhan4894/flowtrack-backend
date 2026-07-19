@@ -6,6 +6,7 @@ export type { ModalSize } from './Modal';
 export { ToastViewport } from './Toast';
 export { Skeleton, SkeletonText, SkeletonCard, SkeletonStat, SkeletonTableRow, PageSkeleton } from './Skeleton';
 export { EmptyState } from './EmptyState';
+export { PlanLockedState } from './PlanLockedState';
 export { Card, CardHeader } from './Card';
 export { Badge } from './Badge';
 export type { BadgeVariant } from './Badge';

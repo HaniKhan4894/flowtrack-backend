@@ -18,7 +18,7 @@ const statusColor = (status: string) => {
 
 const LeavePage = () => {
   const { user } = useAuthStore();
-  const canReview = hasPermission(user, 'users.edit');
+  const canReview = hasPermission(user, 'leave.approve') || hasPermission(user, 'users.edit');
   const [types, setTypes] = useState<LeaveType[]>([]);
   const [balances, setBalances] = useState<LeaveBalance[]>([]);
   const [requests, setRequests] = useState<LeaveRequest[]>([]);

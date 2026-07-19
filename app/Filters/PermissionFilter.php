@@ -59,10 +59,8 @@ class PermissionFilter implements FilterInterface
 
         $userId = isset($userData['user_id']) ? (int) $userData['user_id'] : null;
 
-        // Check permission if specified
+        // Check permission if specified (multiple args = OR)
         if (!empty($arguments)) {
-            $requiredPermission = $arguments[0];
-
             // Get organization ID from request (set by AuthFilter) or query or token
             $organizationId = $request->getServer('FLOWTRACK_ORGANIZATION_ID') ?? $userData['organization_id'] ?? null;
 
@@ -89,18 +87,25 @@ class PermissionFilter implements FilterInterface
                     ->setStatusCode(400);
             }
 
-            $hasPermission = $this->permissionService->userHasPermission(
-                $userId,
-                $organizationId,
-                $requiredPermission
-            );
+            $requiredPermissions = array_values(array_filter(array_map('strval', $arguments)));
+            $hasPermission = false;
+            foreach ($requiredPermissions as $requiredPermission) {
+                if ($this->permissionService->userHasPermission(
+                    $userId,
+                    $organizationId,
+                    $requiredPermission
+                )) {
+                    $hasPermission = true;
+                    break;
+                }
+            }
 
             if (!$hasPermission) {
                 return service('response')
                     ->setJSON([
                         'success' => false,
                         'message' => 'Insufficient permissions',
-                        'required_permission' => $requiredPermission
+                        'required_permission' => $requiredPermissions[0] ?? null,
                     ])
                     ->setStatusCode(403);
             }

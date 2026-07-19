@@ -9,12 +9,8 @@ use CodeIgniter\Router\RouteCollection;
 // Default route
 $routes->get('/', 'Home::index');
 
-// CORS preflight: return 204 for OPTIONS requests (including nested API paths)
+// CORS preflight for nested API paths (global CorsFilter also handles OPTIONS)
 $routes->options('api/v1/(:any)', 'App\Controllers\API\V1\CorsController::preflight');
-$routes->options('api/v1/(:any)/(:any)', 'App\Controllers\API\V1\CorsController::preflight');
-$routes->options('api/v1/(:any)/(:any)/(:any)', 'App\Controllers\API\V1\CorsController::preflight');
-$routes->options('api/v1/(:any)/(:any)/(:any)/(:any)', 'App\Controllers\API\V1\CorsController::preflight');
-$routes->options('api/v1/(:any)/(:any)/(:any)/(:any)/(:any)', 'App\Controllers\API\V1\CorsController::preflight');
 
 /*
  * --------------------------------------------------------------------
@@ -248,7 +244,7 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\API\V1'], function ($r
     $routes->get('leave/balances', 'LeaveController::balances', ['filter' => 'auth']);
     $routes->get('leave/requests', 'LeaveController::requests', ['filter' => 'auth']);
     $routes->post('leave/requests', 'LeaveController::requestLeave', ['filter' => 'auth']);
-    $routes->post('leave/requests/(:num)/review', 'LeaveController::review/$1', ['filter' => 'permission:users.edit']);
+    $routes->post('leave/requests/(:num)/review', 'LeaveController::review/$1', ['filter' => 'permission:leave.approve,users.edit']);
     $routes->post('leave/requests/(:num)/cancel', 'LeaveController::cancel/$1', ['filter' => 'auth']);
 
     // Schedule & Overtime Routes

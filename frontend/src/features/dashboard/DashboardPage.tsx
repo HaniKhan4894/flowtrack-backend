@@ -7,7 +7,7 @@ import { dashboardService } from '../../api/dashboardService';
 import { reportService } from '../../api/reportService';
 import { useAuthStore } from '../../store/authStore';
 import { useTimerStore } from '../../store/timerStore';
-import { canViewMemberTracking, canViewOrgPackage } from '../../utils/access';
+import { canViewMemberTracking, canViewOrgPackage, hasPlanFeature } from '../../utils/access';
 import { OnboardingChecklist } from './OnboardingChecklist';
 import { PageSkeleton, Badge } from '../../components/ui';
 import { DashboardLayoutEditor } from './dashboardLayout';
@@ -114,13 +114,15 @@ const DashboardPage = () => {
       ];
 
   const showOnboarding = Boolean(user?.onboarding && !user.onboarding.is_complete);
+  const hasActivityTracking = hasPlanFeature(user, 'activity_tracking');
+  const isFreePlan = user?.plan?.slug === 'free';
 
   return (
     <div className="space-y-8">
-      {canViewOrgPackage(user) && user?.plan?.slug === 'free' && user?.features?.screenshots === false && (
+      {canViewOrgPackage(user) && isFreePlan && (
         <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 flex items-center justify-between gap-4">
           <p className="text-sm text-amber-200">
-            Screenshots are not available on the Free plan — time tracking only.
+            Free plan includes time tracking &amp; projects. Upgrade for screenshots, activity monitoring, invoicing, and AI insights.
           </p>
           <button
             type="button"
@@ -250,13 +252,23 @@ const DashboardPage = () => {
               <p className="text-sm text-slate-500">No recent activity yet.</p>
             )}
           </div>
-          <button
-            type="button"
-            onClick={() => navigate('/activity')}
-            className="w-full mt-8 py-3 text-sm text-primary-400 font-bold hover:text-primary-300 transition-colors border border-primary-500/20 rounded-xl hover:bg-primary-500/5"
-          >
-            View All Activity
-          </button>
+          {hasActivityTracking ? (
+            <button
+              type="button"
+              onClick={() => navigate('/activity')}
+              className="w-full mt-8 py-3 text-sm text-primary-400 font-bold hover:text-primary-300 transition-colors border border-primary-500/20 rounded-xl hover:bg-primary-500/5"
+            >
+              View All Activity
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => navigate(canViewOrgPackage(user) ? '/billing' : '/time')}
+              className="w-full mt-8 py-3 text-sm text-primary-400 font-bold hover:text-primary-300 transition-colors border border-primary-500/20 rounded-xl hover:bg-primary-500/5"
+            >
+              {canViewOrgPackage(user) ? 'Unlock activity monitoring' : 'Go to Time Tracking'}
+            </button>
+          )}
         </div>
       </div>
 

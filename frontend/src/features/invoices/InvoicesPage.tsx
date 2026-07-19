@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { FileText, Plus, Download, Mail, MoreVertical, Search, Filter, CheckCircle2, Clock, ExternalLink, Sparkles } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Button, Modal, SearchableSelect } from '../../components/ui';
+import { Button, Modal, SearchableSelect, EmptyState } from '../../components/ui';
 import { invoiceService, type Invoice } from '../../api/invoiceService';
 import { clientService, type Client } from '../../api/clientService';
 import { projectService, type Project } from '../../api/projectService';
@@ -272,6 +272,16 @@ const InvoicesPage = () => {
         </div>
 
         <div className="overflow-x-auto">
+          {invoices.length === 0 ? (
+            <EmptyState
+              icon={FileText}
+              title="No invoices yet"
+              description="Create a draft invoice or generate one from tracked time to bill your clients."
+              actionLabel="Create invoice"
+              onAction={() => setShowCreateModal(true)}
+              className="py-16"
+            />
+          ) : (
           <table className="w-full text-left">
             <thead>
               <tr className="border-b border-white/5 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
@@ -327,6 +337,7 @@ const InvoicesPage = () => {
               })}
             </tbody>
           </table>
+          )}
         </div>
       </div>
     </div>

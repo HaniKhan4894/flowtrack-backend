@@ -7,7 +7,7 @@ import {
 import { Modal } from './ui/Modal';
 import { useUiChromeStore } from '../store/uiChromeStore';
 import { useAuthStore } from '../store/authStore';
-import { getNavItemsForUser } from '../utils/access';
+import { getNavItemsForUser, canAccessPath } from '../utils/access';
 import { useTimerStore } from '../store/timerStore';
 import { toastSuccess, toastError } from '../store/toastStore';
 import { getApiErrorMessage } from '../utils/apiError';
@@ -42,31 +42,35 @@ export function CommandPalette() {
       run: () => navigate(item.path),
     }));
 
-    const quick: Action[] = [
+    const quickCandidates: Array<Action & { path?: string }> = [
       {
         id: 'go-time',
         label: 'Open Time Tracking',
         hint: 'Start or manage timer',
         icon: Clock,
         keywords: 'timer track time',
+        path: '/time',
         run: () => navigate('/time'),
       },
       {
         id: 'go-dashboard',
         label: 'Go to Dashboard',
         icon: LayoutDashboard,
+        path: '/app',
         run: () => navigate('/app'),
       },
       {
         id: 'go-projects',
         label: 'Projects',
         icon: Briefcase,
+        path: '/projects',
         run: () => navigate('/projects'),
       },
       {
         id: 'go-team',
         label: 'Team',
         icon: Users,
+        path: '/team',
         run: () => navigate('/team'),
       },
       {
@@ -74,36 +78,42 @@ export function CommandPalette() {
         label: 'Integrations',
         icon: Plug,
         keywords: 'slack jira github',
+        path: '/integrations',
         run: () => navigate('/integrations'),
       },
       {
         id: 'go-slack',
         label: 'Slack Workspace',
         icon: MessageSquare,
+        path: '/integrations/slack',
         run: () => navigate('/integrations/slack'),
       },
       {
         id: 'go-jira',
         label: 'Jira Workspace',
         icon: Briefcase,
+        path: '/integrations/jira',
         run: () => navigate('/integrations/jira'),
       },
       {
         id: 'go-github',
         label: 'GitHub Workspace',
         icon: Sparkles,
+        path: '/integrations/github',
         run: () => navigate('/integrations/github'),
       },
       {
         id: 'go-invoices',
         label: 'Invoices',
         icon: FileText,
+        path: '/invoices',
         run: () => navigate('/invoices'),
       },
       {
         id: 'go-insights',
         label: 'Insights',
         icon: Brain,
+        path: '/insights',
         run: () => navigate('/insights'),
       },
       {
@@ -111,21 +121,26 @@ export function CommandPalette() {
         label: 'Activity Feed',
         icon: Activity,
         keywords: 'notifications feed',
+        path: '/activity-feed',
         run: () => navigate('/activity-feed'),
       },
       {
         id: 'go-settings',
         label: 'Settings',
         icon: Settings,
+        path: '/settings',
         run: () => navigate('/settings'),
       },
       {
         id: 'go-onboarding',
         label: 'Onboarding / Getting Started',
         icon: Plus,
+        path: '/onboarding',
         run: () => navigate('/onboarding'),
       },
     ];
+
+    const quick = quickCandidates.filter((a) => !a.path || canAccessPath(user, a.path));
 
     if (isRunning) {
       quick.unshift({

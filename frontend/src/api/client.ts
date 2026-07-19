@@ -97,18 +97,20 @@ client.interceptors.response.use(
 
         if (error.response?.status === 403 && error.response.data?.error_code === 'PLAN_LIMIT_REACHED') {
             const message = error.response.data?.message || 'Plan limit reached. Please upgrade your subscription.';
+            const upgradeUrl = typeof error.response.data?.upgrade_url === 'string'
+                ? error.response.data.upgrade_url
+                : '/billing';
             if (typeof window !== 'undefined') {
-                window.dispatchEvent(new CustomEvent('plan-limit-reached', { detail: { message } }));
-                try {
-                    // Dynamic import to avoid circular deps with UI stores
-                    void import('../store/toastStore').then(({ toastWarning }) => {
-                        toastWarning(message, 'Plan limit');
-                    });
-                } catch {
-                    /* ignore */
-                }
-                if (window.location.pathname !== '/billing' && confirm(`${message}\n\nOpen billing to upgrade?`)) {
-                    window.location.href = '/billing';
+                window.dispatchEvent(new CustomEvent('plan-limit-reached', {
+                    detail: { message, upgrade_url: upgradeUrl },
+                }));
+                void import('../store/toastStore').then(({ toastWarning }) => {
+                    toastWarning(message, 'Plan limit');
+                }).catch(() => undefined);
+                if (window.location.pathname !== upgradeUrl && window.location.pathname !== '/billing') {
+                    if (confirm(`${message}\n\nOpen billing to upgrade?`)) {
+                        window.location.href = upgradeUrl.startsWith('/') ? upgradeUrl : '/billing';
+                    }
                 }
             }
         }

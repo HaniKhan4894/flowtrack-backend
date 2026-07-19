@@ -4,7 +4,7 @@ import { CheckCircle2, Circle, Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 import { authService } from '../../api/authService';
-import { canManageProjects } from '../../utils/access';
+import { canManageProjects, hasPlanFeature } from '../../utils/access';
 import type { OnboardingProgress } from '../../types';
 
 const STEP_LINKS: Record<string, string> = {
@@ -22,6 +22,7 @@ interface OnboardingChecklistProps {
 export function OnboardingChecklist({ compact = false }: OnboardingChecklistProps) {
   const { user, setUser } = useAuthStore();
   const onboarding: OnboardingProgress | null | undefined = user?.onboarding;
+  const hasActivity = hasPlanFeature(user, 'activity_tracking');
 
   useEffect(() => {
     if (!user || onboarding?.is_complete) return;
@@ -64,6 +65,9 @@ export function OnboardingChecklist({ compact = false }: OnboardingChecklistProp
           let link = STEP_LINKS[step.key];
           if (step.key === 'project' && !canManageProjects(user)) {
             link = '/app';
+          }
+          if (step.key === 'activity' && !hasActivity) {
+            link = '/billing';
           }
           const content = (
             <div className="flex items-center gap-3">

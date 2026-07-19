@@ -10,7 +10,7 @@ import { isDesktopApp } from './utils/electronAuth'
 import { initDesktopLifecycle } from './utils/desktopLifecycle'
 import { DesktopTitleBar } from './components/WindowControls'
 import { AppQueryProvider } from './lib/queryClient'
-import { ToastViewport, PageSkeleton } from './components/ui'
+import { ToastViewport, PageSkeleton, PlanLockedState } from './components/ui'
 import { CommandPalette } from './components/CommandPalette'
 import { ShortcutsHelp } from './components/ShortcutsHelp'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
@@ -101,7 +101,14 @@ const RoleRoute = ({ path, children }: { path: string; children: ReactNode }) =>
   if (!sessionReady) return <AuthBootLoader />
   if (!isAuthenticated) return <Navigate to="/login" />
   if (!canAccessPath(user, path)) {
-    return <Navigate to={isPathPlanLocked(user, path) ? '/billing' : '/app'} replace />
+    if (isPathPlanLocked(user, path)) {
+      return (
+        <Shell>
+          <PlanLockedState featureLabel="This feature" />
+        </Shell>
+      )
+    }
+    return <Navigate to="/app" replace />
   }
   return <Shell><Lazy>{children}</Lazy></Shell>
 }

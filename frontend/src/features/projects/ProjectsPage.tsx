@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Search, MoreVertical, Folder, Palette, Clock, Users, Archive, Trash2, ChevronDown, ChevronUp, ListTodo } from 'lucide-react';
-import { Button, Input, Modal } from '../../components/ui';
+import { Button, Input, Modal, EmptyState } from '../../components/ui';
 import { projectService, type Project } from '../../api/projectService';
 import { clientService, type Client } from '../../api/clientService';
 import { teamService, type TeamMember } from '../../api/teamService';
@@ -284,10 +284,14 @@ export const ProjectsPage = () => {
             <div key={i} className="glass-card animate-pulse h-64 border border-white/5"></div>
           ))
         ) : projects.length === 0 ? (
-          <div className="col-span-3 text-center py-20 text-slate-500">
-            <Folder size={48} className="mx-auto mb-4 opacity-30" />
-            <p className="text-lg font-medium">No projects found</p>
-            <p className="text-sm mt-1">{searchTerm ? 'Try a different search term.' : 'Create your first project!'}</p>
+          <div className="col-span-3">
+            <EmptyState
+              icon={Folder}
+              title="No projects found"
+              description={searchTerm ? 'Try a different search term.' : 'Create your first project to organize timers and team work.'}
+              actionLabel={!searchTerm && canCreateProjects ? 'New project' : undefined}
+              onAction={!searchTerm && canCreateProjects ? () => setShowCreateModal(true) : undefined}
+            />
           </div>
         ) : (
           projects.map((project) => (
