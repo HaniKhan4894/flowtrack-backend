@@ -446,9 +446,72 @@ class InvoiceService
                 $client = $this->db->table('clients')->where('id', (int) $invoice['client_id'])->get()->getRowArray();
                 $invoice['client_ref_name'] = $client['name'] ?? null;
             }
+
+            $invoice['next_step'] = $this->resolveNextStep($invoice);
         }
 
         return $invoice;
+    }
+
+    /**
+     * Guided happy-path hint for invoice operators.
+     *
+     * @return array{key: string, label: string, action: string}|null
+     */
+    public function resolveNextStep(array $invoice): ?array
+    {
+        $status = $invoice['status'] ?? 'draft';
+        $items = $invoice['items'] ?? [];
+        $hasItems = is_array($items) && count($items) > 0;
+        $hasEmail = !empty($invoice['client_email']);
+
+        if ($status === 'draft') {
+            if (!$hasItems) {
+                return [
+                    'key' => 'add_items',
+                    'label' => 'Add line items or populate from tracked time',
+                    'action' => 'populate_or_add_items',
+                ];
+            }
+            if (!$hasEmail) {
+                return [
+                    'key' => 'add_email',
+                    'label' => 'Add a client email before sending',
+                    'action' => 'edit_details',
+                ];
+            }
+            return [
+                'key' => 'send',
+                'label' => 'Send this invoice to your client',
+                'action' => 'send',
+            ];
+        }
+
+        if (in_array($status, ['sent', 'pending_approval', 'approved'], true)) {
+            return [
+                'key' => 'share_portal',
+                'label' => 'Share the client portal link for approval & payment',
+                'action' => 'portal',
+            ];
+        }
+
+        if ($status === 'partially_paid') {
+            return [
+                'key' => 'collect_payment',
+                'label' => 'Record the remaining payment',
+                'action' => 'payments',
+            ];
+        }
+
+        if ($status === 'overdue') {
+            return [
+                'key' => 'follow_up',
+                'label' => 'Follow up with the client or resend the portal link',
+                'action' => 'portal',
+            ];
+        }
+
+        return null;
     }
 
     public function updateInvoiceStatus(int $id, string $status): bool

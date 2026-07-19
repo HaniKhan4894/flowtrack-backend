@@ -5,7 +5,7 @@ import './index.css'
 
 import { Shell } from './layouts/Shell'
 import { useAuthStore } from './store/authStore'
-import { canAccessPath, isSuperAdmin } from './utils/access'
+import { canAccessPath, isSuperAdmin, isPathPlanLocked } from './utils/access'
 import { isDesktopApp } from './utils/electronAuth'
 import { initDesktopLifecycle } from './utils/desktopLifecycle'
 import { DesktopTitleBar } from './components/WindowControls'
@@ -100,7 +100,9 @@ const RoleRoute = ({ path, children }: { path: string; children: ReactNode }) =>
   const sessionReady = useAuthStore((s) => s.sessionReady)
   if (!sessionReady) return <AuthBootLoader />
   if (!isAuthenticated) return <Navigate to="/login" />
-  if (!canAccessPath(user, path)) return <Navigate to="/app" replace />
+  if (!canAccessPath(user, path)) {
+    return <Navigate to={isPathPlanLocked(user, path) ? '/billing' : '/app'} replace />
+  }
   return <Shell><Lazy>{children}</Lazy></Shell>
 }
 

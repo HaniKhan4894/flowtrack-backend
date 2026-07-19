@@ -29,50 +29,128 @@ export interface NavItem {
   label: string;
   path: string;
   permission?: string;
+  /** Plan feature key required (boolean or truthy tier string). */
+  feature?: string;
   showIf?: (user: User | null | undefined) => boolean;
 }
 
-const ALL_NAV_ITEMS: NavItem[] = [
-  { icon: LayoutDashboard, label: 'Dashboard', path: '/app' },
-  { icon: Clock, label: 'Time Tracking', path: '/time', permission: 'time.view_own' },
-  { icon: ClipboardList, label: 'Timesheets', path: '/timesheets', permission: 'timesheet.submit' },
+export interface NavGroup {
+  id: string;
+  label: string;
+  items: NavItem[];
+}
+
+const ALL_NAV_GROUPS: NavGroup[] = [
   {
-    icon: Briefcase,
-    label: 'Projects',
-    path: '/projects',
-    showIf: (user) => canManageProjects(user),
+    id: 'work',
+    label: 'Work',
+    items: [
+      { icon: LayoutDashboard, label: 'Dashboard', path: '/app' },
+      { icon: Clock, label: 'Time Tracking', path: '/time', permission: 'time.view_own' },
+      { icon: ClipboardList, label: 'Timesheets', path: '/timesheets', permission: 'timesheet.submit' },
+      {
+        icon: Briefcase,
+        label: 'Projects',
+        path: '/projects',
+        showIf: (user) => canManageProjects(user),
+      },
+    ],
   },
-  { icon: Building2, label: 'Clients', path: '/clients', permission: 'invoices.view' },
-  { icon: CalendarDays, label: 'Leave', path: '/leave' },
   {
-    icon: Camera,
-    label: 'Screenshots',
-    path: '/screenshots',
-    showIf: (user) => canAccessScreenshotsPage(user),
+    id: 'people',
+    label: 'People',
+    items: [
+      {
+        icon: Users,
+        label: 'Team',
+        path: '/team',
+        showIf: (user) => canViewTeam(user),
+      },
+      { icon: CalendarDays, label: 'Leave', path: '/leave' },
+      {
+        icon: Camera,
+        label: 'Screenshots',
+        path: '/screenshots',
+        feature: 'screenshots',
+        showIf: (user) => canAccessScreenshotsPage(user),
+      },
+      {
+        icon: Activity,
+        label: 'Activity',
+        path: '/activity',
+        permission: 'activity.view_own',
+        feature: 'activity_tracking',
+      },
+      {
+        icon: Rss,
+        label: 'Activity Feed',
+        path: '/activity-feed',
+        feature: 'activity_tracking',
+      },
+    ],
   },
-  { icon: Activity, label: 'Activity', path: '/activity', permission: 'activity.view_own' },
-  { icon: Rss, label: 'Activity Feed', path: '/activity-feed' },
-  { icon: FileText, label: 'Invoices', path: '/invoices', permission: 'invoices.view' },
-  { icon: Wallet, label: 'Payroll', path: '/payroll', permission: 'payroll.view' },
   {
-    icon: Users,
-    label: 'Team',
-    path: '/team',
-    showIf: (user) => canViewTeam(user),
+    id: 'money',
+    label: 'Money',
+    items: [
+      { icon: Building2, label: 'Clients', path: '/clients', permission: 'invoices.view', feature: 'invoicing' },
+      { icon: FileText, label: 'Invoices', path: '/invoices', permission: 'invoices.view', feature: 'invoicing' },
+      { icon: Wallet, label: 'Payroll', path: '/payroll', permission: 'payroll.view', feature: 'payroll' },
+      { icon: CreditCard, label: 'Billing', path: '/billing', permission: 'settings.billing' },
+    ],
   },
-  { icon: Sparkles, label: 'Analytics', path: '/analytics', permission: 'reports.view_own' },
-  { icon: Brain, label: 'Insights', path: '/insights', permission: 'reports.view_own' },
-  { icon: MessageSquare, label: 'Standup', path: '/standup', permission: 'reports.view_own' },
-  { icon: HeartPulse, label: 'Wellbeing', path: '/wellbeing', permission: 'reports.view_own' },
   {
-    icon: FileCheck,
-    label: 'Proof of Work',
-    path: '/proof-of-work',
-    showIf: (user) => canViewTeam(user),
+    id: 'insights',
+    label: 'Insights',
+    items: [
+      { icon: Sparkles, label: 'Analytics', path: '/analytics', permission: 'reports.view_own' },
+      {
+        icon: Brain,
+        label: 'Insights',
+        path: '/insights',
+        permission: 'reports.view_own',
+        feature: 'ai_insights',
+      },
+      {
+        icon: MessageSquare,
+        label: 'Standup',
+        path: '/standup',
+        permission: 'reports.view_own',
+        feature: 'ai_insights',
+      },
+      {
+        icon: HeartPulse,
+        label: 'Wellbeing',
+        path: '/wellbeing',
+        permission: 'reports.view_own',
+        feature: 'wellbeing',
+      },
+      {
+        icon: FileCheck,
+        label: 'Proof of Work',
+        path: '/proof-of-work',
+        feature: 'proof_of_work',
+        showIf: (user) => canViewTeam(user),
+      },
+    ],
   },
-  { icon: CreditCard, label: 'Billing', path: '/billing', permission: 'settings.billing' },
-  { icon: Plug, label: 'Integrations', path: '/integrations', showIf: (user) => canManageIntegrations(user) },
+  {
+    id: 'connect',
+    label: 'Connect',
+    items: [
+      {
+        icon: Plug,
+        label: 'Integrations',
+        path: '/integrations',
+        feature: 'integrations',
+        showIf: (user) => canManageIntegrations(user),
+      },
+    ],
+  },
 ];
+
+/** Flat list kept for command palette / path lookups. */
+const ALL_NAV_ITEMS: NavItem[] = ALL_NAV_GROUPS.flatMap((g) => g.items);
 
 export const SETTINGS_NAV_ITEM: NavItem = { icon: Settings, label: 'Settings', path: '/settings', permission: 'settings.view' };
 export const ADMIN_NAV_ITEM: NavItem = { icon: Shield, label: 'Platform Admin', path: '/admin' };
@@ -105,6 +183,34 @@ const PATH_PERMISSIONS: Record<string, string | string[]> = {
   '/admin': '__super_admin__',
   '/team/member': ['time.view_team', 'screenshots.view_team', 'activity.view_team'],
 };
+
+const PATH_FEATURES: Record<string, string> = {
+  '/clients': 'invoicing',
+  '/invoices': 'invoicing',
+  '/payroll': 'payroll',
+  '/screenshots': 'screenshots',
+  '/activity': 'activity_tracking',
+  '/activity-feed': 'activity_tracking',
+  '/insights': 'ai_insights',
+  '/standup': 'ai_insights',
+  '/wellbeing': 'wellbeing',
+  '/proof-of-work': 'proof_of_work',
+  '/integrations': 'integrations',
+  '/integrations/jira': 'integrations',
+  '/integrations/github': 'integrations',
+  '/integrations/slack': 'integrations',
+};
+
+/** True when the org plan includes this feature (boolean true or non-false tier string). */
+export function hasPlanFeature(user: User | null | undefined, featureKey: string): boolean {
+  if (!user?.features) return false;
+  const value = user.features[featureKey];
+  if (value === true) return true;
+  if (value === false || value === 0 || value === 'false' || value === '0') return false;
+  if (typeof value === 'string' && value.length > 0) return true;
+  if (typeof value === 'number' && value > 0) return true;
+  return false;
+}
 
 export function canManageIntegrations(user: User | null | undefined): boolean {
   if (!user) return false;
@@ -145,6 +251,13 @@ export function hasAnyPermission(user: User | null | undefined, slugs: string[])
   return slugs.some((slug) => hasPermission(user, slug));
 }
 
+function navItemVisible(user: User | null | undefined, item: NavItem): boolean {
+  if (item.feature && !hasPlanFeature(user, item.feature)) return false;
+  if (item.showIf) return item.showIf(user);
+  if (!item.permission) return true;
+  return hasPermission(user, item.permission);
+}
+
 export function canAccessPath(user: User | null | undefined, path: string): boolean {
   if (!user) return false;
 
@@ -154,6 +267,11 @@ export function canAccessPath(user: User | null | undefined, path: string): bool
 
   if (path.startsWith('/team/member')) {
     return hasAnyPermission(user, ['time.view_team', 'screenshots.view_team', 'activity.view_team', 'reports.view_team']);
+  }
+
+  const featureKey = PATH_FEATURES[path];
+  if (featureKey && !hasPlanFeature(user, featureKey)) {
+    return false;
   }
 
   const rule = PATH_PERMISSIONS[path];
@@ -169,12 +287,25 @@ export function canAccessPath(user: User | null | undefined, path: string): bool
   return hasPermission(user, rule);
 }
 
+/** Whether a denied path is due to plan (vs permission) — used to route to billing. */
+export function isPathPlanLocked(user: User | null | undefined, path: string): boolean {
+  if (!user) return false;
+  const featureKey = PATH_FEATURES[path];
+  if (!featureKey) return false;
+  return !hasPlanFeature(user, featureKey);
+}
+
 export function getNavItemsForUser(user: User | null | undefined): NavItem[] {
-  return ALL_NAV_ITEMS.filter((item) => {
-    if (item.showIf) return item.showIf(user);
-    if (!item.permission) return true;
-    return hasPermission(user, item.permission);
-  });
+  return ALL_NAV_ITEMS.filter((item) => navItemVisible(user, item));
+}
+
+export function getNavGroupsForUser(user: User | null | undefined): NavGroup[] {
+  return ALL_NAV_GROUPS
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => navItemVisible(user, item)),
+    }))
+    .filter((group) => group.items.length > 0);
 }
 
 export function canViewOrgPackage(user: User | null | undefined): boolean {
@@ -207,6 +338,7 @@ export function areOwnScreenshotsHidden(user: User | null | undefined): boolean 
 
 export function canAccessScreenshotsPage(user: User | null | undefined): boolean {
   if (!user) return false;
+  if (!hasPlanFeature(user, 'screenshots')) return false;
   if (hasPermission(user, 'screenshots.view_team')) {
     return hasAnyPermission(user, ['screenshots.view_team', 'screenshots.view_own']);
   }

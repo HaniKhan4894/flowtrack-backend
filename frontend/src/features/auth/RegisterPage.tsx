@@ -116,7 +116,7 @@ const RegisterPage = () => {
             </div>
             
             <Input label="Email Address" name="email" type="email" placeholder="john@company.com" required />
-            <Input label="Password" name="password" type="password" placeholder="••••••••" required />
+            <Input label="Password" name="password" type="password" placeholder="At least 8 characters" required minLength={8} />
 
             <Button type="submit" className="w-full mt-6" isLoading={isLoading}>
               <UserPlus className="w-4 h-4 mr-2" />

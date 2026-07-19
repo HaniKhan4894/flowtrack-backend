@@ -38,7 +38,12 @@ class PlanFeatureFilter implements FilterInterface
         }
 
         if (!$organizationId) {
-            return $request; // Let it pass if no org ID, other filters will catch auth issues
+            $response = service('response');
+            return $response->setJSON([
+                'success' => false,
+                'message' => 'Organization context is required for this feature.',
+                'error_code' => 'ORGANIZATION_REQUIRED',
+            ])->setStatusCode(400);
         }
 
         $subscriptionService = new SubscriptionService();
@@ -49,7 +54,7 @@ class PlanFeatureFilter implements FilterInterface
                 'success' => false,
                 'message' => "The '{$featureKey}' feature is not available on your current plan. Please upgrade to access this feature.",
                 'error_code' => 'PLAN_LIMIT_REACHED',
-                'upgrade_url' => '/billing/plans'
+                'upgrade_url' => '/billing'
             ])->setStatusCode(403);
         }
 

@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>FlowTrack — Seed Investment Memorandum</title>
+<style>
+  :root{
+    --primary:#6366F1;
+    --primary-dark:#4338CA;
+    --violet:#7C3AED;
+    --ink:#1c2030;
+    --muted:#6b7280;
+    --line:#e5e7eb;
+    --soft:#f7f8fc;
+    --green:#059669;
+    --green-soft:#ecfdf5;
+  }
+  *{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  html,body{margin:0;padding:0;font-family:"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);font-size:12px;line-height:1.55;}
+  @page{size:A4;margin:15mm 13mm;}
+  .page{max-width:810px;margin:0 auto;}
+  .page-break{page-break-before:always;}
+
+  /* Cover */
+  .cover{position:relative;background:linear-gradient(135deg,#4338CA 0%,#6366F1 50%,#7C3AED 100%);color:#fff;border-radius:18px;padding:46px 38px;overflow:hidden;margin-bottom:20px;}
+  .cover:after{content:"";position:absolute;right:-60px;top:-60px;width:230px;height:230px;border-radius:50%;background:rgba(255,255,255,.08);}
+  .cover:before{content:"";position:absolute;right:40px;bottom:-90px;width:180px;height:180px;border-radius:50%;background:rgba(255,255,255,.06);}
+  .cover .brand{font-size:13px;letter-spacing:4px;text-transform:uppercase;opacity:.9;font-weight:800;}
+  .cover h1{font-size:32px;margin:14px 0 8px;font-weight:800;line-height:1.15;position:relative;z-index:2;}
+  .cover .tag{font-size:14px;opacity:.95;max-width:560px;position:relative;z-index:2;}
+  .cover .pill-row{margin-top:22px;display:flex;gap:10px;position:relative;z-index:2;}
+  .pill{background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.25);border-radius:30px;padding:7px 14px;font-size:11px;font-weight:700;}
+  .cover .meta{margin-top:22px;font-size:11px;opacity:.85;position:relative;z-index:2;}
+
+  h2.section{font-size:17px;color:var(--primary-dark);margin:24px 0 4px;padding-bottom:6px;border-bottom:2px solid var(--line);}
+  h3.sub{font-size:12.5px;margin:15px 0 7px;text-transform:uppercase;letter-spacing:.6px;color:var(--ink);}
+  p.lead{color:var(--muted);margin:4px 0 12px;}
+  p{margin:6px 0;}
+
+  .cards{display:flex;gap:11px;margin:14px 0;}
+  .card{flex:1;border:1px solid var(--line);border-radius:12px;padding:13px 15px;background:#fff;}
+  .card .k{font-size:9.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:800;}
+  .card .v{font-size:20px;font-weight:800;margin-top:3px;color:var(--primary-dark);}
+  .card .v.green{color:var(--green);}
+  .card .note{font-size:9.5px;color:var(--muted);margin-top:1px;}
+
+  table{width:100%;border-collapse:collapse;margin:8px 0 14px;font-size:11.5px;}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);}
+  th{background:var(--soft);font-weight:800;color:#374151;font-size:10px;text-transform:uppercase;letter-spacing:.4px;}
+  td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;}
+  tr.total-row td{font-weight:800;background:#eef1ff;border-top:2px solid var(--primary);border-bottom:none;}
+  tr.profit-row td{font-weight:800;background:var(--green-soft);color:var(--green);}
+
+  .callout{background:var(--green-soft);border-left:4px solid var(--green);border-radius:8px;padding:12px 16px;margin:14px 0;font-size:12px;}
+  .callout b{color:var(--green);}
+  .quote{background:#eef1ff;border-left:4px solid var(--primary);border-radius:8px;padding:12px 16px;margin:14px 0;font-size:12.5px;font-style:italic;color:#3730a3;}
+
+  ul.clean{margin:6px 0 12px;padding-left:18px;}
+  ul.clean li{margin:5px 0;}
+  .grid2{display:flex;gap:18px;}
+  .grid2>div{flex:1;}
+
+  .prob{border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:8px 0;background:#fff;}
+  .prob b{color:var(--primary-dark);}
+
+  /* bar chart */
+  .chart{display:flex;align-items:flex-end;gap:26px;height:190px;padding:14px 10px 0;border-bottom:2px solid var(--line);margin:10px 0 4px;}
+  .bar-wrap{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;}
+  .bar{width:70%;border-radius:8px 8px 0 0;background:linear-gradient(180deg,#818cf8,#4338CA);position:relative;}
+  .bar .val{position:absolute;top:-18px;left:50%;transform:translateX(-50%);font-size:11px;font-weight:800;color:var(--primary-dark);white-space:nowrap;}
+  .bar-label{margin-top:8px;font-size:10.5px;font-weight:700;color:var(--muted);text-align:center;}
+
+  /* use of funds bar */
+  .uof{display:flex;height:34px;border-radius:8px;overflow:hidden;margin:12px 0 6px;font-size:10px;font-weight:800;color:#fff;}
+  .uof div{display:flex;align-items:center;justify-content:center;}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;margin:6px 0 14px;font-size:11px;}
+  .legend span{display:flex;align-items:center;gap:6px;}
+  .dot{width:11px;height:11px;border-radius:3px;display:inline-block;}
+
+  .footer{margin-top:24px;padding-top:12px;border-top:1px solid var(--line);font-size:10px;color:var(--muted);text-align:center;}
+  .confidential{font-size:9px;color:#9ca3af;text-transform:uppercase;letter-spacing:1px;}
+</style>
+</head>
+<body>
+
+<!-- ============ PAGE 1 — COVER + SUMMARY ============ -->
+<div class="page">
+  <div class="cover">
+    <div class="brand">FlowTrack</div>
+    <h1>Seed Investment Memorandum</h1>
+    <div class="tag">An AI-powered workforce productivity &amp; time-intelligence platform — already built, live, and capital-efficient. Raising to scale go-to-market.</div>
+    <div class="pill-row">
+      <span class="pill">Raising $10,000 (Seed)</span>
+      <span class="pill">Product Live</span>
+      <span class="pill">~82% Gross Margin</span>
+    </div>
+    <div class="meta">Confidential &nbsp;•&nbsp; July 2026 &nbsp;•&nbsp; Prepared for prospective investors</div>
+  </div>
+
+  <h2 class="section">Executive Summary</h2>
+  <p class="lead">FlowTrack helps teams track time, monitor productivity, and get paid — with automated screenshots/activity, payroll &amp; invoicing, a client portal with verifiable "Proof-of-Work", and AI (standups, insights, forecasting) plus Slack/Jira/GitHub integrations.</p>
+
+  <div class="cards">
+    <div class="card"><div class="k">The Ask</div><div class="v">$10K</div><div class="note">Kickstart round</div></div>
+    <div class="card"><div class="k">Gross Margin</div><div class="v green">~82%</div><div class="note">$3.30 per user</div></div>
+    <div class="card"><div class="k">Break-even</div><div class="v">~355</div><div class="note">paying users (Phase 1)</div></div>
+    <div class="card"><div class="k">Yr-3 ARR (target)</div><div class="v">~$432K</div><div class="note">at 9,000 seats</div></div>
+  </div>
+
+  <div class="quote">
+    “The product is finished and running. Unlike most seed-stage startups, we are not asking for capital to build — we are asking to <b>grow</b>. Nearly every dollar goes to customer acquisition, not R&amp;D.”
+  </div>
+
+  <h3 class="sub">Why this is a strong bet</h3>
+  <ul class="clean">
+    <li><b>Product risk removed:</b> full platform is built and live (time tracking, monitoring, payroll, invoicing, AI, integrations).</li>
+    <li><b>Extremely lean cost base:</b> hosting is only ~$175/month at launch; the software is done.</li>
+    <li><b>Attractive unit economics:</b> ~$4 net revenue per user, ~$3.30 gross profit (82% margin), LTV ≈ $82.</li>
+    <li><b>Low break-even:</b> profitable at just ~355 paying users — reachable within the first year.</li>
+    <li><b>Large market:</b> global time-tracking &amp; workforce-analytics is a $5B+ and growing category.</li>
+  </ul>
+</div>
+
+<!-- ============ PAGE 2 — PROBLEM + SOLUTION ============ -->
+<div class="page page-break">
+  <h2 class="section">1. The Problem</h2>
+  <p class="lead">Distributed and hybrid teams struggle to answer three simple questions — and stitch together 4–5 tools to try.</p>
+
+  <div class="prob"><b>Where did the time go?</b> Manual timesheets are inaccurate; managers lack real visibility into remote work.</div>
+  <div class="prob"><b>Is the work real &amp; billable?</b> Agencies and outsourcing firms can't easily prove work to clients, causing payment disputes.</div>
+  <div class="prob"><b>Too many disconnected tools.</b> Time tracking, monitoring, payroll, invoicing and reporting live in separate products, wasting money and admin hours.</div>
+
+  <h2 class="section">2. The Solution — FlowTrack</h2>
+  <p class="lead">One platform that turns tracked time into payroll, invoices, and provable results — enhanced with AI. All of the following is <b>already built and live</b>:</p>
+
+  <div class="grid2">
+    <div>
+      <h3 class="sub">Core</h3>
+      <ul class="clean">
+        <li>Time tracking + desktop app (Windows &amp; macOS)</li>
+        <li>Screenshots &amp; activity monitoring (with advanced mode)</li>
+        <li>Projects, tasks &amp; per-project team assignment</li>
+        <li>Payroll runs &amp; invoicing</li>
+      </ul>
+    </div>
+    <div>
+      <h3 class="sub">Differentiators</h3>
+      <ul class="clean">
+        <li>Client portal + verifiable "Proof-of-Work" certificates</li>
+        <li>AI: auto-standups, insights, forecasting, "Ask FlowTrack"</li>
+        <li>Integrations: Slack, Jira, GitHub, Calendar</li>
+        <li>Role-based access, plan gating &amp; Stripe billing</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout"><b>Status:</b> Not a prototype. The platform is production-ready with billing, permissions, integrations and a developer API already shipped.</div>
+
+  <h2 class="section">3. Market Opportunity</h2>
+  <table>
+    <thead><tr><th>Layer</th><th>Definition</th><th class="num">Size</th></tr></thead>
+    <tbody>
+      <tr><td><b>TAM</b></td><td>Global time tracking &amp; workforce analytics</td><td class="num">$5B+</td></tr>
+      <tr><td><b>SAM</b></td><td>SMB agencies, dev shops, remote/outsourcing teams</td><td class="num">~$1.2B</td></tr>
+      <tr><td><b>SOM (3 yr)</b></td><td>Initial focus: South-Asia outsourcing + global remote SMBs</td><td class="num">~$20M</td></tr>
+    </tbody>
+  </table>
+  <p>Tailwinds: permanent shift to remote/hybrid work, growth of the outsourcing economy, and rising demand for accountable, provable billing.</p>
+</div>
+
+<!-- ============ PAGE 3 — MODEL + UNIT ECONOMICS ============ -->
+<div class="page page-break">
+  <h2 class="section">4. Business Model &amp; Pricing</h2>
+  <p class="lead">Simple per-seat SaaS with a freemium funnel and a 14-day trial on all paid tiers.</p>
+  <table>
+    <thead><tr><th>Plan</th><th class="num">Price / user / mo</th><th class="num">Seat cap</th><th>Best for</th></tr></thead>
+    <tbody>
+      <tr><td>Free</td><td class="num">$0</td><td class="num">1</td><td>Solo trial</td></tr>
+      <tr><td>Starter</td><td class="num">$2.49</td><td class="num">5</td><td>Small teams</td></tr>
+      <tr><td>Professional ★</td><td class="num">$3.99</td><td class="num">25</td><td>Growing teams</td></tr>
+      <tr><td>Enterprise</td><td class="num">$5.99</td><td class="num">Unlimited</td><td>Larger orgs</td></tr>
+    </tbody>
+  </table>
+
+  <h2 class="section">5. Unit Economics — Capital Efficiency</h2>
+  <p class="lead">Because the product is built and infrastructure is cheap, margins are strong from the first customers.</p>
+  <div class="cards">
+    <div class="card"><div class="k">Net ARPU / user</div><div class="v">$4.00</div><div class="note">blended / month</div></div>
+    <div class="card"><div class="k">Cost / user</div><div class="v">$0.70</div><div class="note">Stripe + infra</div></div>
+    <div class="card"><div class="k">Gross profit / user</div><div class="v green">$3.30</div><div class="note">~82% margin</div></div>
+    <div class="card"><div class="k">LTV / user</div><div class="v">~$82</div><div class="note">~25-mo lifetime</div></div>
+  </div>
+
+  <h3 class="sub">Infrastructure cost stays tiny vs. revenue</h3>
+  <table>
+    <thead><tr><th>Stage</th><th class="num">Users</th><th class="num">Infra / mo</th><th class="num">Revenue / mo</th><th class="num">Infra as % of revenue</th></tr></thead>
+    <tbody>
+      <tr><td>Phase 1</td><td class="num">1,500</td><td class="num">~$175</td><td class="num">$6,000</td><td class="num">~3%</td></tr>
+      <tr><td>Phase 2</td><td class="num">4,000</td><td class="num">~$320</td><td class="num">$16,000</td><td class="num">~2%</td></tr>
+      <tr><td>Scale</td><td class="num">10,000</td><td class="num">~$370</td><td class="num">$40,000</td><td class="num">~1%</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout"><b>Key insight:</b> Only ~355 paying users are needed to cover all costs in Phase 1. Every user beyond that is ~82% profit.</div>
+</div>
+
+<!-- ============ PAGE 4 — FINANCIAL PROJECTIONS ============ -->
+<div class="page page-break">
+  <h2 class="section">6. Financial Projections (3 Years)</h2>
+  <p class="lead">Conservative per-seat growth driven by funded marketing. Revenue shown as annual recurring revenue (ARR) at year end.</p>
+
+  <div class="chart">
+    <div class="bar-wrap"><div class="bar" style="height:16%"><span class="val">$72K</span></div><div class="bar-label">Year 1<br/>1,500 users</div></div>
+    <div class="bar-wrap"><div class="bar" style="height:44%"><span class="val">$192K</span></div><div class="bar-label">Year 2<br/>4,000 users</div></div>
+    <div class="bar-wrap"><div class="bar" style="height:100%"><span class="val">$432K</span></div><div class="bar-label">Year 3<br/>9,000 users</div></div>
+  </div>
+  <p style="text-align:center;font-size:10px;color:var(--muted);margin-top:0;">Projected ARR at year end</p>
+
+  <table>
+    <thead><tr><th>Metric</th><th class="num">Year 1</th><th class="num">Year 2</th><th class="num">Year 3</th></tr></thead>
+    <tbody>
+      <tr><td>Paying users (year end)</td><td class="num">1,500</td><td class="num">4,000</td><td class="num">9,000</td></tr>
+      <tr><td>ARR (year end)</td><td class="num">$72,000</td><td class="num">$192,000</td><td class="num">$432,000</td></tr>
+      <tr><td>Gross profit (~82%)</td><td class="num">$59,000</td><td class="num">$157,000</td><td class="num">$354,000</td></tr>
+      <tr><td>Infrastructure</td><td class="num">~$2,100</td><td class="num">~$3,800</td><td class="num">~$4,400</td></tr>
+      <tr><td>Marketing &amp; growth</td><td class="num">$10,000</td><td class="num">$25,000</td><td class="num">$55,000</td></tr>
+      <tr><td>Team &amp; operations</td><td class="num">$12,000</td><td class="num">$30,000</td><td class="num">$70,000</td></tr>
+      <tr class="profit-row"><td>Net (approx.)</td><td class="num">~$35,000</td><td class="num">~$98,000</td><td class="num">~$225,000</td></tr>
+    </tbody>
+  </table>
+  <p style="font-size:10px;color:var(--muted);">Figures are directional and rounded; actuals depend on conversion, churn and marketing efficiency. The model is intentionally conservative and reaches profitability early due to the low cost base.</p>
+
+  <div class="callout"><b>Capital-efficient path:</b> The business can reach cash-flow break-even within the first year at ~355 paying users, then compound — the raise accelerates growth rather than funding survival.</div>
+</div>
+
+<!-- ============ PAGE 5 — THE ASK ============ -->
+<div class="page page-break">
+  <h2 class="section">7. The Ask — $10,000 Kickstart</h2>
+  <p class="lead">A minimal, accessible raise — enough to launch marketing and cover infrastructure until early revenue sustains the business. Because the product is already built, a small cheque goes a long way.</p>
+
+  <div class="uof">
+    <div style="width:60%;background:#4338CA;">Marketing 60%</div>
+    <div style="width:20%;background:#6366F1;">Infra 20%</div>
+    <div style="width:20%;background:#a78bfa;">Ops/Buffer 20%</div>
+  </div>
+  <div class="legend">
+    <span><i class="dot" style="background:#4338CA"></i> Marketing &amp; growth — $6,000</span>
+    <span><i class="dot" style="background:#6366F1"></i> Infrastructure &amp; tools — $2,000</span>
+    <span><i class="dot" style="background:#a78bfa"></i> Operations, legal &amp; buffer — $2,000</span>
+  </div>
+
+  <table>
+    <thead><tr><th>Use of funds</th><th class="num">Allocation</th><th class="num">Amount</th></tr></thead>
+    <tbody>
+      <tr><td>Marketing &amp; growth (ads, content, SEO, referrals)</td><td class="num">60%</td><td class="num">$6,000</td></tr>
+      <tr><td>Infrastructure &amp; tools (AWS, S3, email, monitoring)</td><td class="num">20%</td><td class="num">$2,000</td></tr>
+      <tr><td>Operations, legal &amp; buffer</td><td class="num">20%</td><td class="num">$2,000</td></tr>
+      <tr class="total-row"><td>Total raise</td><td class="num">100%</td><td class="num">$10,000</td></tr>
+    </tbody>
+  </table>
+
+  <h3 class="sub">Milestones this unlocks (18–24 months)</h3>
+  <table>
+    <thead><tr><th>Milestone</th><th class="num">Target</th></tr></thead>
+    <tbody>
+      <tr><td>Reach cash-flow break-even</td><td class="num">~355 paying users</td></tr>
+      <tr><td>Phase 1 server full &amp; profitable</td><td class="num">1,500 users</td></tr>
+      <tr><td>Scale infrastructure (Phase 2)</td><td class="num">4,000 users</td></tr>
+      <tr><td>Annual recurring revenue</td><td class="num">$190K+ ARR</td></tr>
+    </tbody>
+  </table>
+
+  <h2 class="section">8. Competitive Edge</h2>
+  <div class="grid2">
+    <div><ul class="clean">
+      <li><b>Lower price</b> than Hubstaff / Time Doctor, with more built in.</li>
+      <li><b>AI-native</b> (standups, insights, forecasting) out of the box.</li>
+    </ul></div>
+    <div><ul class="clean">
+      <li><b>All-in-one</b>: tracking + payroll + invoicing + portal.</li>
+      <li><b>Proof-of-Work</b> certificates — unique trust layer for agencies.</li>
+    </ul></div>
+  </div>
+</div>
+
+<!-- ============ PAGE 6 — ROADMAP + TEAM + CLOSE ============ -->
+<div class="page page-break">
+  <h2 class="section">9. Roadmap</h2>
+  <table>
+    <thead><tr><th>Horizon</th><th>Focus</th></tr></thead>
+    <tbody>
+      <tr><td>0–6 months</td><td>Launch marketing engine, onboarding &amp; activation improvements, first paying cohorts.</td></tr>
+      <tr><td>6–12 months</td><td>Reach break-even (~355 users), fill Phase 1 server (1,500), expand integrations marketplace.</td></tr>
+      <tr><td>12–24 months</td><td>Scale to 4,000+ users, Enterprise/SSO push, mobile companion, partner &amp; reseller channels.</td></tr>
+    </tbody>
+  </table>
+
+  <h2 class="section">10. Team</h2>
+  <p class="lead">A lean, technical team that has already shipped a complete, production-grade platform — proof of strong execution and capital efficiency.</p>
+  <table>
+    <thead><tr><th>Role</th><th>Responsibility</th></tr></thead>
+    <tbody>
+      <tr><td>[Founder / CEO]</td><td>Product vision, strategy, fundraising</td></tr>
+      <tr><td>[Technical Lead]</td><td>Platform, infrastructure &amp; roadmap delivery</td></tr>
+      <tr><td>[Growth / Marketing]</td><td>Acquisition, content &amp; partnerships (to be scaled with this raise)</td></tr>
+    </tbody>
+  </table>
+  <p style="font-size:10px;color:var(--muted);">Replace bracketed fields with names/bios before sending to investors.</p>
+
+  <h2 class="section">11. Why Invest Now</h2>
+  <ul class="clean">
+    <li><b>De-risked:</b> product is built, live and billing — capital funds growth, not development.</li>
+    <li><b>Efficient:</b> ~82% gross margins and a ~$175/month cost base to launch.</li>
+    <li><b>Early break-even:</b> profitable at ~355 paying users.</li>
+    <li><b>Scalable:</b> infrastructure remains 1–3% of revenue at every stage.</li>
+  </ul>
+
+  <div class="quote">A rare seed opportunity: a finished, revenue-ready SaaS with strong margins — raising modestly to turn a working product into a growing business.</div>
+
+  <div style="margin-top:26px;padding:18px 22px;background:linear-gradient(135deg,#4338CA,#7C3AED);border-radius:14px;color:#fff;">
+    <div style="font-size:15px;font-weight:800;">Let's talk</div>
+    <div style="font-size:12px;opacity:.92;margin-top:4px;">[Founder Name] &nbsp;•&nbsp; [email@flowtrack.com] &nbsp;•&nbsp; [phone] &nbsp;•&nbsp; [website]</div>
+  </div>
+
+  <div class="footer">
+    <div class="confidential">Confidential — for discussion purposes only</div>
+    FlowTrack Seed Investment Memorandum &nbsp;•&nbsp; July 2026
+  </div>
+</div>
+
+</body>
+</html>

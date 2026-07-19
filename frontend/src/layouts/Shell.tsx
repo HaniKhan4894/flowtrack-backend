@@ -20,7 +20,7 @@ import { TimerWidget } from '../components/TimerWidget';
 import { notificationService } from '../api/notificationService';
 import { useTimerStore } from '../store/timerStore';
 import { timeService } from '../api/timeService';
-import { getNavItemsForUser, isSuperAdmin, canViewOrgPackage } from '../utils/access';
+import { getNavGroupsForUser, getNavItemsForUser, isSuperAdmin, canViewOrgPackage } from '../utils/access';
 import { hardRedirectToLogin, isDesktopApp } from '../utils/electronAuth';
 import { isDesktopForeground } from '../utils/desktopLifecycle';
 import { Avatar } from '../components/ui/Avatar';
@@ -71,7 +71,7 @@ function SidebarContent({
   onNavigate?: () => void;
 }) {
   const user = useAuthStore((s) => s.user);
-  const navItems = getNavItemsForUser(user);
+  const navGroups = getNavGroupsForUser(user);
 
   return (
     <>
@@ -92,9 +92,18 @@ function SidebarContent({
           )}
         </AnimatePresence>
       </div>
-      <nav className="flex-1 px-4 space-y-2 mt-2 no-drag overflow-y-auto pb-4">
-        {navItems.map((item) => (
-          <SidebarItem key={item.path} {...item} isCollapsed={isCollapsed} onNavigate={onNavigate} />
+      <nav className="flex-1 px-4 space-y-5 mt-2 no-drag overflow-y-auto pb-4">
+        {navGroups.map((group) => (
+          <div key={group.id} className="space-y-1">
+            {!isCollapsed && (
+              <div className="px-4 pt-1 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                {group.label}
+              </div>
+            )}
+            {group.items.map((item) => (
+              <SidebarItem key={item.path} {...item} isCollapsed={isCollapsed} onNavigate={onNavigate} />
+            ))}
+          </div>
         ))}
       </nav>
     </>

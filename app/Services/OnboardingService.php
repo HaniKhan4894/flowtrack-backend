@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\OrganizationMemberModel;
+use App\Models\SubscriptionModel;
 use App\Models\UserModel;
 
 class OnboardingService
@@ -11,6 +12,7 @@ class OnboardingService
         'avatar' => 'Upload your profile photo',
         'project' => 'Create or join a project',
         'timer' => 'Start your first timer',
+        'invite' => 'Invite a teammate',
         'activity' => 'Sync desktop activity',
     ];
 
@@ -29,11 +31,12 @@ class OnboardingService
     {
         $detected = $this->detectSteps($userId, $organizationId);
         $stored = $this->getStoredState($userId, $organizationId);
+        $applicable = $this->applicableSteps($userId, $organizationId);
 
         $steps = [];
         $completedCount = 0;
 
-        foreach (self::STEPS as $key => $label) {
+        foreach ($applicable as $key => $label) {
             $completed = !empty($detected[$key]) || !empty($stored['completed'][$key]);
             if ($completed) {
                 $completedCount++;
@@ -46,8 +49,8 @@ class OnboardingService
             ];
         }
 
-        $total = count(self::STEPS);
-        $percent = $total > 0 ? (int) round(($completedCount / $total) * 100) : 0;
+        $total = count($applicable);
+        $percent = $total > 0 ? (int) round(($completedCount / $total) * 100) : 100;
 
         $state = [
             'completed' => array_merge($stored['completed'] ?? [], $detected),
@@ -62,8 +65,56 @@ class OnboardingService
             'completed_count' => $completedCount,
             'total_steps' => $total,
             'percent' => $percent,
-            'is_complete' => $completedCount >= $total,
+            'is_complete' => $total === 0 || $completedCount >= $total,
         ];
+    }
+
+    /**
+     * Plan- and role-aware steps so Free users are not pushed to paid desktop monitoring.
+     *
+     * @return array<string, string>
+     */
+    public function applicableSteps(int $userId, int $organizationId): array
+    {
+        $steps = [
+            'avatar' => self::STEPS['avatar'],
+            'project' => self::STEPS['project'],
+            'timer' => self::STEPS['timer'],
+        ];
+
+        $member = $this->memberModel
+            ->where('organization_id', $organizationId)
+            ->where('user_id', $userId)
+            ->first();
+        $role = $member['role'] ?? 'member';
+        $canInvite = in_array($role, ['owner', 'admin', 'manager'], true);
+
+        $subscription = (new SubscriptionModel())->getActiveSubscription($organizationId);
+        $planId = $subscription['plan_id'] ?? null;
+        $hasActivityTracking = false;
+        $maxUsers = 1;
+
+        if ($planId) {
+            $planModel = new \App\Models\PlanModel();
+            $activityValue = $planModel->getFeatureValue((int) $planId, 'activity_tracking');
+            $hasActivityTracking = $activityValue === 'true';
+            $maxUsersRaw = $planModel->getFeatureValue((int) $planId, 'max_users');
+            if ($maxUsersRaw === 'unlimited') {
+                $maxUsers = PHP_INT_MAX;
+            } elseif (is_numeric($maxUsersRaw)) {
+                $maxUsers = (int) $maxUsersRaw;
+            }
+        }
+
+        if ($canInvite && $maxUsers > 1) {
+            $steps['invite'] = self::STEPS['invite'];
+        }
+
+        if ($hasActivityTracking) {
+            $steps['activity'] = self::STEPS['activity'];
+        }
+
+        return $steps;
     }
 
     /**
@@ -97,10 +148,19 @@ class OnboardingService
             ->where('time_entries.organization_id', $organizationId)
             ->countAllResults() > 0;
 
+        $memberCount = $this->db->table('organization_members')
+            ->where('organization_id', $organizationId)
+            ->countAllResults();
+        $hasInvite = $memberCount > 1
+            || $this->db->table('invitations')
+                ->where('organization_id', $organizationId)
+                ->countAllResults() > 0;
+
         return [
             'avatar' => $hasAvatar,
             'project' => $hasProject,
             'timer' => $hasTimer,
+            'invite' => $hasInvite,
             'activity' => $hasActivity,
         ];
     }

@@ -11,6 +11,7 @@ const STEP_LINKS: Record<string, string> = {
   avatar: '/settings',
   project: '/projects',
   timer: '/app',
+  invite: '/team',
   activity: '/activity',
 };
 

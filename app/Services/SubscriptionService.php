@@ -474,13 +474,18 @@ class SubscriptionService
             return true;
         }
 
-        if ($featureValue === 'false') {
+        if ($featureValue === 'false' || $featureValue === '0') {
             return false;
         }
 
         // Check numeric limit
         if (is_numeric($featureValue)) {
             return $currentCount < (int)$featureValue;
+        }
+
+        // Qualitative tiers (basic/advanced/full/limited/csv/all/…) count as enabled
+        if (is_string($featureValue) && $featureValue !== '') {
+            return true;
         }
 
         return false;

@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>FlowTrack — Infrastructure & Growth Cost Plan</title>
+<style>
+  :root {
+    --primary: #6366F1;
+    --primary-dark: #4338CA;
+    --ink: #1e2233;
+    --muted: #6b7280;
+    --line: #e5e7eb;
+    --bg-soft: #f8f9fc;
+    --green: #059669;
+    --green-soft: #ecfdf5;
+    --amber: #b45309;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--ink);
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  @page {
+    size: A4;
+    margin: 16mm 14mm;
+  }
+  .page {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 0 4px;
+  }
+  .page-break { page-break-before: always; }
+
+  /* Cover / header */
+  .cover {
+    background: linear-gradient(135deg, #4338CA 0%, #6366F1 55%, #7C3AED 100%);
+    color: #fff;
+    border-radius: 16px;
+    padding: 34px 32px;
+    margin-bottom: 22px;
+  }
+  .cover .brand {
+    font-size: 13px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    opacity: .85;
+    font-weight: 700;
+  }
+  .cover h1 {
+    font-size: 27px;
+    margin: 10px 0 6px;
+    font-weight: 800;
+  }
+  .cover p {
+    margin: 0;
+    opacity: .92;
+    font-size: 13px;
+    max-width: 560px;
+  }
+  .cover .meta {
+    margin-top: 18px;
+    font-size: 11px;
+    opacity: .8;
+  }
+
+  h2.section {
+    font-size: 17px;
+    color: var(--primary-dark);
+    margin: 26px 0 4px;
+    padding-bottom: 6px;
+    border-bottom: 2px solid var(--line);
+  }
+  h3.sub {
+    font-size: 13px;
+    margin: 16px 0 8px;
+    color: var(--ink);
+    text-transform: uppercase;
+    letter-spacing: .6px;
+  }
+  p.lead { color: var(--muted); margin: 4px 0 14px; }
+
+  .phase-badge {
+    display: inline-block;
+    background: var(--primary);
+    color: #fff;
+    font-weight: 700;
+    font-size: 11px;
+    padding: 4px 12px;
+    border-radius: 20px;
+    letter-spacing: .5px;
+    margin-bottom: 6px;
+  }
+  .phase-badge.p2 { background: #7C3AED; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 8px 0 14px;
+    font-size: 11.5px;
+  }
+  th, td {
+    text-align: left;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--line);
+  }
+  th {
+    background: var(--bg-soft);
+    font-weight: 700;
+    color: #374151;
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: .4px;
+  }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  tr.total-row td {
+    font-weight: 800;
+    background: #eef1ff;
+    border-top: 2px solid var(--primary);
+    border-bottom: none;
+  }
+  tr.profit-row td {
+    font-weight: 800;
+    background: var(--green-soft);
+    color: var(--green);
+  }
+
+  .cards {
+    display: flex;
+    gap: 12px;
+    margin: 14px 0;
+  }
+  .card {
+    flex: 1;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 14px 16px;
+    background: #fff;
+  }
+  .card .k {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    color: var(--muted);
+    font-weight: 700;
+  }
+  .card .v {
+    font-size: 21px;
+    font-weight: 800;
+    margin-top: 4px;
+    color: var(--primary-dark);
+  }
+  .card .v.green { color: var(--green); }
+  .card .note { font-size: 10px; color: var(--muted); margin-top: 2px; }
+
+  .callout {
+    background: var(--green-soft);
+    border-left: 4px solid var(--green);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin: 14px 0;
+    font-size: 12px;
+  }
+  .callout b { color: var(--green); }
+  .note-box {
+    background: #fffbeb;
+    border-left: 4px solid #f59e0b;
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin: 12px 0;
+    font-size: 11px;
+    color: #78350f;
+  }
+
+  ul.clean { margin: 6px 0 12px; padding-left: 18px; }
+  ul.clean li { margin: 4px 0; }
+
+  .footer {
+    margin-top: 26px;
+    padding-top: 12px;
+    border-top: 1px solid var(--line);
+    font-size: 10px;
+    color: var(--muted);
+    text-align: center;
+  }
+  .two-col { display: flex; gap: 18px; }
+  .two-col > div { flex: 1; }
+</style>
+</head>
+<body>
+
+<!-- ===================== PAGE 1: COVER + OVERVIEW ===================== -->
+<div class="page">
+  <div class="cover">
+    <div class="brand">FlowTrack</div>
+    <h1>Infrastructure &amp; Growth Cost Plan</h1>
+    <p>A clear, staged budget for running FlowTrack on AWS — from launch (1,500 users) to scale (4,000 users) — including servers, database, storage, hosting, domain and marketing.</p>
+    <div class="meta">Prepared: July 2026 &nbsp;•&nbsp; Currency: USD &nbsp;•&nbsp; Model: Per-seat SaaS</div>
+  </div>
+
+  <h2 class="section">1. Executive Summary</h2>
+  <p class="lead">The product is already built. The only ongoing costs are hosting/infrastructure and marketing. Below is a two-phase plan.</p>
+
+  <div class="cards">
+    <div class="card">
+      <div class="k">Net ARPU / paid user</div>
+      <div class="v">$4.00<span style="font-size:11px;color:var(--muted)">/mo</span></div>
+      <div class="note">Blended across plans</div>
+    </div>
+    <div class="card">
+      <div class="k">Gross margin / user</div>
+      <div class="v green">$3.30</div>
+      <div class="note">After Stripe + infra (~82%)</div>
+    </div>
+    <div class="card">
+      <div class="k">Break-even (Phase 1)</div>
+      <div class="v">~355</div>
+      <div class="note">paying users</div>
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Item</th>
+        <th class="num">Phase 1 — 1,500 users</th>
+        <th class="num">Phase 2 — 4,000 users</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>Infrastructure / month</td><td class="num">~$175</td><td class="num">~$320</td></tr>
+      <tr><td>Marketing / month (recommended)</td><td class="num">$1,000</td><td class="num">$2,000</td></tr>
+      <tr class="total-row"><td>Total running cost / month</td><td class="num">~$1,175</td><td class="num">~$2,320</td></tr>
+      <tr><td>Revenue potential (all paying × $4)</td><td class="num">$6,000</td><td class="num">$16,000</td></tr>
+      <tr class="profit-row"><td>Profit at full capacity / month</td><td class="num">~$4,825</td><td class="num">~$13,680</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout">
+    <b>Bottom line:</b> Because the software is already developed, break-even needs only a few hundred paying users. Phase 1 turns profitable at ~355 paying users; at full 1,500 users it earns ~$4,825/month (~$57,900/year) on a single server.
+  </div>
+
+  <h3 class="sub">One-time setup cost</h3>
+  <table>
+    <thead><tr><th>Item</th><th class="num">Cost</th><th>Note</th></tr></thead>
+    <tbody>
+      <tr><td>Mac Mini (to build/sign the macOS app)</td><td class="num">~$600</td><td>$0 if already owned</td></tr>
+      <tr><td>Windows license</td><td class="num">~$150</td><td>$0 if already owned</td></tr>
+      <tr class="total-row"><td>Total one-time</td><td class="num">~$0–750</td><td>Usually already owned</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ===================== PAGE 2: PHASE 1 ===================== -->
+<div class="page page-break">
+  <span class="phase-badge">PHASE 1</span>
+  <h2 class="section">2. Launch Setup — up to 1,500 Users</h2>
+  <p class="lead">Single application server + managed database (AWS RDS) + object storage (S3). One server comfortably handles ~1,500 registered users (≈ 200–400 concurrently active).</p>
+
+  <h3 class="sub">Monthly infrastructure</h3>
+  <table>
+    <thead><tr><th>Component</th><th>What it does</th><th class="num">Cost / month</th></tr></thead>
+    <tbody>
+      <tr><td>App server (AWS EC2 t3.medium)</td><td>Runs the application</td><td class="num">$30</td></tr>
+      <tr><td>Database (AWS RDS db.t3.small)</td><td>Managed MySQL</td><td class="num">$28</td></tr>
+      <tr><td>S3 storage</td><td>Screenshots &amp; files</td><td class="num">$20</td></tr>
+      <tr><td>EBS disk (30–50 GB)</td><td>Server storage</td><td class="num">$5</td></tr>
+      <tr><td>Data transfer</td><td>Bandwidth</td><td class="num">$15</td></tr>
+      <tr><td>Frontend hosting (Vercel/Netlify)</td><td>Web app</td><td class="num">$20</td></tr>
+      <tr><td>Email service (SES/Postmark)</td><td>Transactional email</td><td class="num">$15</td></tr>
+      <tr><td>Backup + monitoring</td><td>Safety &amp; uptime</td><td class="num">$10</td></tr>
+      <tr><td>Domain</td><td>~$12 / year</td><td class="num">$1</td></tr>
+      <tr><td>Licenses (Apple $99 + Windows signing $250 / yr)</td><td>Monthly share</td><td class="num">$30</td></tr>
+      <tr class="total-row"><td colspan="2">Infrastructure total</td><td class="num">~$175</td></tr>
+    </tbody>
+  </table>
+
+  <h3 class="sub">Total monthly cost (infra + marketing)</h3>
+  <table>
+    <thead><tr><th>Scenario</th><th class="num">Infra</th><th class="num">Marketing</th><th class="num">Total / month</th><th class="num">Break-even users</th></tr></thead>
+    <tbody>
+      <tr><td>Infra only (no marketing)</td><td class="num">$175</td><td class="num">$0</td><td class="num">~$175</td><td class="num">~55</td></tr>
+      <tr><td>Infra + light marketing</td><td class="num">$175</td><td class="num">$500</td><td class="num">~$675</td><td class="num">~205</td></tr>
+      <tr class="total-row"><td>Infra + recommended marketing</td><td class="num">$175</td><td class="num">$1,000</td><td class="num">~$1,175</td><td class="num">~355</td></tr>
+      <tr><td>Infra + aggressive marketing</td><td class="num">$175</td><td class="num">$2,000</td><td class="num">~$2,175</td><td class="num">~660</td></tr>
+    </tbody>
+  </table>
+
+  <h3 class="sub">Profit when the server is full (1,500 paying users)</h3>
+  <table>
+    <tbody>
+      <tr><td>Revenue (1,500 × $4)</td><td class="num">$6,000 / mo</td></tr>
+      <tr><td>Infrastructure</td><td class="num">− $175</td></tr>
+      <tr><td>Marketing</td><td class="num">− $1,000</td></tr>
+      <tr class="profit-row"><td>Monthly profit</td><td class="num">~$4,825</td></tr>
+      <tr class="profit-row"><td>Yearly profit</td><td class="num">~$57,900</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note-box">
+    <b>Two rules that keep one server fast:</b> (1) always store screenshots in S3, not on the server disk; (2) keep the database on a separate RDS instance. These two decisions are what let a single server scale smoothly.
+  </div>
+</div>
+
+<!-- ===================== PAGE 3: PHASE 2 ===================== -->
+<div class="page page-break">
+  <span class="phase-badge p2">PHASE 2</span>
+  <h2 class="section">3. Growth Setup — up to 4,000 Users</h2>
+  <p class="lead">Scale up the app server and database, add a Redis cache. This setup comfortably handles ~4,000+ users and can be extended further with a load balancer and multiple app servers.</p>
+
+  <h3 class="sub">Monthly infrastructure</h3>
+  <table>
+    <thead><tr><th>Component</th><th>What it does</th><th class="num">Cost / month</th></tr></thead>
+    <tbody>
+      <tr><td>App server (AWS EC2 t3.large)</td><td>Runs the application</td><td class="num">$60</td></tr>
+      <tr><td>Database (AWS RDS db.t3.medium)</td><td>Managed MySQL</td><td class="num">$60</td></tr>
+      <tr><td>Redis cache (cache.t3.micro)</td><td>Speeds up requests</td><td class="num">$12</td></tr>
+      <tr><td>S3 storage</td><td>Screenshots &amp; files</td><td class="num">$45</td></tr>
+      <tr><td>EBS disk</td><td>Server storage</td><td class="num">$8</td></tr>
+      <tr><td>Data transfer</td><td>Bandwidth</td><td class="num">$35</td></tr>
+      <tr><td>Frontend hosting (Vercel/Netlify)</td><td>Web app</td><td class="num">$20</td></tr>
+      <tr><td>Email service (SES/Postmark)</td><td>Transactional email</td><td class="num">$25</td></tr>
+      <tr><td>Backup + monitoring</td><td>Safety &amp; uptime</td><td class="num">$20</td></tr>
+      <tr><td>Domain</td><td>~$12 / year</td><td class="num">$1</td></tr>
+      <tr><td>Licenses (Apple + Windows signing)</td><td>Monthly share</td><td class="num">$30</td></tr>
+      <tr class="total-row"><td colspan="2">Infrastructure total</td><td class="num">~$320</td></tr>
+    </tbody>
+  </table>
+
+  <h3 class="sub">Total monthly cost (infra + marketing)</h3>
+  <table>
+    <thead><tr><th>Scenario</th><th class="num">Infra</th><th class="num">Marketing</th><th class="num">Total / month</th><th class="num">Break-even users</th></tr></thead>
+    <tbody>
+      <tr><td>Infra only</td><td class="num">$320</td><td class="num">$0</td><td class="num">~$320</td><td class="num">~100</td></tr>
+      <tr><td>Infra + $1,000 marketing</td><td class="num">$320</td><td class="num">$1,000</td><td class="num">~$1,320</td><td class="num">~400</td></tr>
+      <tr class="total-row"><td>Infra + recommended marketing</td><td class="num">$320</td><td class="num">$2,000</td><td class="num">~$2,320</td><td class="num">~705</td></tr>
+      <tr><td>Infra + aggressive marketing</td><td class="num">$320</td><td class="num">$3,500</td><td class="num">~$3,820</td><td class="num">~1,160</td></tr>
+    </tbody>
+  </table>
+
+  <h3 class="sub">Profit when the server is full (4,000 paying users)</h3>
+  <table>
+    <tbody>
+      <tr><td>Revenue (4,000 × $4)</td><td class="num">$16,000 / mo</td></tr>
+      <tr><td>Infrastructure</td><td class="num">− $320</td></tr>
+      <tr><td>Marketing</td><td class="num">− $2,000</td></tr>
+      <tr class="profit-row"><td>Monthly profit</td><td class="num">~$13,680</td></tr>
+      <tr class="profit-row"><td>Yearly profit</td><td class="num">~$164,160</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout">
+    <b>Scaling note:</b> Beyond 4,000 users, add a load balancer + a second app server (~$120/mo extra) to reach 10,000–20,000 users. Infrastructure cost stays a small fraction of revenue at every stage.
+  </div>
+</div>
+
+<!-- ===================== PAGE 4: SUMMARY ===================== -->
+<div class="page page-break">
+  <h2 class="section">4. Side-by-Side Summary</h2>
+
+  <table>
+    <thead>
+      <tr><th>Metric</th><th class="num">Phase 1 (1,500)</th><th class="num">Phase 2 (4,000)</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Server</td><td class="num">t3.medium</td><td class="num">t3.large</td></tr>
+      <tr><td>Database</td><td class="num">RDS db.t3.small</td><td class="num">RDS db.t3.medium</td></tr>
+      <tr><td>Cache</td><td class="num">—</td><td class="num">Redis micro</td></tr>
+      <tr><td>Infrastructure / month</td><td class="num">~$175</td><td class="num">~$320</td></tr>
+      <tr><td>Marketing / month</td><td class="num">$1,000</td><td class="num">$2,000</td></tr>
+      <tr class="total-row"><td>Total cost / month</td><td class="num">~$1,175</td><td class="num">~$2,320</td></tr>
+      <tr><td>Break-even (paying users)</td><td class="num">~355</td><td class="num">~705</td></tr>
+      <tr><td>Revenue at full capacity</td><td class="num">$6,000</td><td class="num">$16,000</td></tr>
+      <tr class="profit-row"><td>Profit / month (full)</td><td class="num">~$4,825</td><td class="num">~$13,680</td></tr>
+      <tr class="profit-row"><td>Profit / year (full)</td><td class="num">~$57,900</td><td class="num">~$164,160</td></tr>
+    </tbody>
+  </table>
+
+  <h3 class="sub">Key takeaways</h3>
+  <ul class="clean">
+    <li>Running the software is cheap: <b>~$175/month</b> at launch, <b>~$320/month</b> at 4,000 users.</li>
+    <li>Only <b>~355 paying users</b> are needed to become profitable in Phase 1.</li>
+    <li>At full capacity, a single Phase 1 server earns <b>~$57,900/year</b>; Phase 2 earns <b>~$164,160/year</b>.</li>
+    <li>Infrastructure is always a tiny fraction of revenue — <b>marketing</b> is the main growth lever.</li>
+    <li>Costs drop a further <b>30–50%</b> with AWS Reserved Instances / Savings Plans.</li>
+  </ul>
+
+  <h3 class="sub">Assumptions</h3>
+  <ul class="clean">
+    <li>Blended net revenue of <b>$4.00 per paid user / month</b> (mix of Starter $2.49, Professional $3.99, Enterprise $5.99).</li>
+    <li>Variable cost per user ~$0.70 (Stripe + storage) → gross margin <b>$3.30/user</b>.</li>
+    <li>AWS on-demand prices (us-east-1), rounded; actual bills vary with usage.</li>
+    <li>Screenshots stored in S3; database on managed RDS.</li>
+  </ul>
+
+  <div class="footer">
+    FlowTrack — Infrastructure &amp; Growth Cost Plan &nbsp;•&nbsp; Confidential &nbsp;•&nbsp; July 2026
+  </div>
+</div>
+
+</body>
+</html>

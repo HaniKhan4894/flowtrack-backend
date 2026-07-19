@@ -1,42 +1,59 @@
 import { Link } from 'react-router-dom';
-import { Sparkles, ArrowRight, Users, Plug, Timer, Camera } from 'lucide-react';
+import { Sparkles, ArrowRight, Users, Plug, Timer, Camera, CreditCard } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { OnboardingChecklist } from '../dashboard/OnboardingChecklist';
 import { Card, Button } from '../../components/ui';
-import { canManageIntegrations, canManageProjects, canManageTeam } from '../../utils/access';
-
-const STEPS = [
-  {
-    icon: Users,
-    title: 'Invite your team',
-    description: 'Bring remote teammates into FlowTrack so everyone’s time lands in one place.',
-    href: '/team',
-    showIf: canManageTeam,
-  },
-  {
-    icon: Plug,
-    title: 'Connect integrations',
-    description: 'Link Slack, Jira, GitHub, or calendar for in-app workflows.',
-    href: '/integrations',
-    showIf: canManageIntegrations,
-  },
-  {
-    icon: Timer,
-    title: 'Start your first timer',
-    description: 'Hit play on a project to create your first proof-of-work entry.',
-    href: '/time',
-  },
-  {
-    icon: Camera,
-    title: 'Review activity',
-    description: 'See apps, screenshots, and daily patterns after a tracking session.',
-    href: '/activity',
-  },
-];
+import {
+  canManageIntegrations,
+  canManageProjects,
+  canManageTeam,
+  hasPlanFeature,
+  canViewOrgPackage,
+} from '../../utils/access';
 
 export default function OnboardingPage() {
   const user = useAuthStore((s) => s.user);
   const canProjects = canManageProjects(user);
+  const hasActivity = hasPlanFeature(user, 'activity_tracking');
+  const hasIntegrations = hasPlanFeature(user, 'integrations');
+
+  const steps = [
+    {
+      icon: Users,
+      title: 'Invite your team',
+      description: 'Bring remote teammates into FlowTrack so everyone’s time lands in one place.',
+      href: '/team',
+      show: canManageTeam(user),
+    },
+    {
+      icon: Plug,
+      title: 'Connect integrations',
+      description: 'Link Slack, Jira, GitHub, or calendar for in-app workflows.',
+      href: '/integrations',
+      show: hasIntegrations && canManageIntegrations(user),
+    },
+    {
+      icon: Timer,
+      title: 'Start your first timer',
+      description: 'Hit play on a project to create your first proof-of-work entry.',
+      href: '/time',
+      show: true,
+    },
+    {
+      icon: Camera,
+      title: 'Review activity',
+      description: 'See apps, screenshots, and daily patterns after a tracking session.',
+      href: '/activity',
+      show: hasActivity,
+    },
+    {
+      icon: CreditCard,
+      title: 'Unlock monitoring',
+      description: 'Upgrade to Starter to enable screenshots, activity tracking, and team monitoring.',
+      href: '/billing',
+      show: canViewOrgPackage(user) && !hasActivity,
+    },
+  ].filter((s) => s.show);
 
   return (
     <div className="max-w-3xl mx-auto space-y-8">
@@ -53,7 +70,7 @@ export default function OnboardingPage() {
       <OnboardingChecklist />
 
       <div className="grid gap-4">
-        {STEPS.filter((s) => !s.showIf || s.showIf(user)).map((step) => {
+        {steps.map((step) => {
           const Icon = step.icon;
           return (
             <Card key={step.title} hover className="flex items-center gap-4">

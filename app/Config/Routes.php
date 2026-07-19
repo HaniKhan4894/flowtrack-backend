@@ -107,9 +107,9 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\API\V1'], function ($r
     $routes->put('organizations/(:num)/members/(:num)/projects', 'OrganizationController::syncMemberProjects/$1/$2', ['filter' => 'permission:users.edit']);
     $routes->get('organizations/(:num)/members/(:num)/monitoring', 'OrganizationController::getMemberMonitoring/$1/$2', ['filter' => 'permission:users.edit']);
     $routes->put('organizations/(:num)/members/(:num)/monitoring', 'OrganizationController::updateMemberMonitoring/$1/$2', ['filter' => 'permission:users.edit']);
-    $routes->get('organizations/(:num)/members/(:num)/advanced-monitoring', 'AdvancedMonitoringController::show/$1/$2', ['filter' => 'permission:monitoring.advanced']);
-    $routes->post('organizations/(:num)/members/(:num)/advanced-monitoring', 'AdvancedMonitoringController::enable/$1/$2', ['filter' => 'permission:monitoring.advanced']);
-    $routes->post('organizations/(:num)/members/(:num)/advanced-monitoring/close', 'AdvancedMonitoringController::close/$1/$2', ['filter' => 'permission:monitoring.advanced']);
+    $routes->get('organizations/(:num)/members/(:num)/advanced-monitoring', 'AdvancedMonitoringController::show/$1/$2', ['filter' => ['permission:monitoring.advanced', 'planFeature:advanced_monitoring']]);
+    $routes->post('organizations/(:num)/members/(:num)/advanced-monitoring', 'AdvancedMonitoringController::enable/$1/$2', ['filter' => ['permission:monitoring.advanced', 'planFeature:advanced_monitoring']]);
+    $routes->post('organizations/(:num)/members/(:num)/advanced-monitoring/close', 'AdvancedMonitoringController::close/$1/$2', ['filter' => ['permission:monitoring.advanced', 'planFeature:advanced_monitoring']]);
     $routes->get('monitoring/settings', 'MonitoringController::mySettings', ['filter' => 'auth']);
     $routes->get('invitations/validate', 'OrganizationController::validateInvitation');
 
@@ -231,13 +231,15 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\API\V1'], function ($r
         $routes->delete('tax-templates/(:num)', 'PayrollTaxTemplateController::delete/$1', ['filter' => 'permission:payroll.manage']);
     });
 
-    // Client Routes
-    $routes->get('clients', 'ClientController::index', ['filter' => ['auth', 'permission:invoices.view']]);
-    $routes->post('clients', 'ClientController::create', ['filter' => ['auth', 'permission:invoices.create']]);
-    $routes->get('clients/(:num)', 'ClientController::show/$1', ['filter' => ['auth', 'permission:invoices.view']]);
-    $routes->put('clients/(:num)', 'ClientController::update/$1', ['filter' => ['auth', 'permission:invoices.edit']]);
-    $routes->delete('clients/(:num)', 'ClientController::delete/$1', ['filter' => ['auth', 'permission:invoices.edit']]);
-    $routes->post('clients/(:num)/projects', 'ClientController::linkProjects/$1', ['filter' => ['auth', 'permission:invoices.edit']]);
+    // Client Routes (same plan gate as invoicing)
+    $routes->group('clients', ['filter' => ['auth', 'planFeature:invoicing']], function ($routes) {
+        $routes->get('/', 'ClientController::index', ['filter' => 'permission:invoices.view']);
+        $routes->post('/', 'ClientController::create', ['filter' => 'permission:invoices.create']);
+        $routes->get('(:num)', 'ClientController::show/$1', ['filter' => 'permission:invoices.view']);
+        $routes->put('(:num)', 'ClientController::update/$1', ['filter' => 'permission:invoices.edit']);
+        $routes->delete('(:num)', 'ClientController::delete/$1', ['filter' => 'permission:invoices.edit']);
+        $routes->post('(:num)/projects', 'ClientController::linkProjects/$1', ['filter' => 'permission:invoices.edit']);
+    });
 
     // Leave / PTO Routes
     $routes->get('leave/types', 'LeaveController::types', ['filter' => 'auth']);
@@ -281,11 +283,11 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\API\V1'], function ($r
     $routes->get('reports/org-productivity', 'ReportController::orgProductivity', ['filter' => 'permission:reports.view_team']);
     $routes->get('reports/project-profitability', 'ReportController::projectProfitability', ['filter' => 'permission:reports.view_team']);
     $routes->get('reports/idle-breakdown', 'ReportController::idleBreakdown', ['filter' => 'permission:reports.view_team']);
-    $routes->get('reports/advanced-monitoring', 'AdvancedMonitoringController::report', ['filter' => 'permission:monitoring.advanced']);
+    $routes->get('reports/advanced-monitoring', 'AdvancedMonitoringController::report', ['filter' => ['permission:monitoring.advanced', 'planFeature:advanced_monitoring']]);
     $routes->post('reports/export', 'ReportController::export', ['filter' => 'permission:reports.export']);
 
     // AI engine
-    $routes->group('ai', ['filter' => 'auth'], function ($routes) {
+    $routes->group('ai', ['filter' => ['auth', 'planFeature:ai_insights']], function ($routes) {
         $routes->get('status', 'AiController::status');
         $routes->post('ask', 'AiController::ask');
         $routes->get('weekly-narrative', 'AiController::weeklyNarrative');
@@ -296,7 +298,7 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\API\V1'], function ($r
     });
 
     // Per-organization integrations (OpenAI, and future OAuth providers)
-    $routes->group('integrations', ['filter' => 'auth'], function ($routes) {
+    $routes->group('integrations', ['filter' => ['auth', 'planFeature:integrations']], function ($routes) {
         $routes->get('/', 'IntegrationController::index', ['filter' => 'permission:settings.view']);
         // GitHub developer activity (available to any authenticated member).
         $routes->get('github/activity', 'GithubController::activity');
@@ -334,7 +336,7 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\API\V1'], function ($r
     });
 
     // Developer platform (Phase 10): API keys, webhooks, automations.
-    $routes->group('developer', ['filter' => 'auth'], function ($routes) {
+    $routes->group('developer', ['filter' => ['auth', 'planFeature:api_access']], function ($routes) {
         $routes->get('api-keys', 'ApiKeyController::index', ['filter' => 'permission:settings.view']);
         $routes->post('api-keys', 'ApiKeyController::create', ['filter' => 'permission:settings.edit']);
         $routes->delete('api-keys/(:num)', 'ApiKeyController::delete/$1', ['filter' => 'permission:settings.edit']);
@@ -358,18 +360,18 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\API\V1'], function ($r
     });
 
     // Wellbeing / burnout suite (Phase 5)
-    $routes->group('wellbeing', ['filter' => 'auth'], function ($routes) {
+    $routes->group('wellbeing', ['filter' => ['auth', 'planFeature:wellbeing']], function ($routes) {
         $routes->get('me', 'WellbeingController::me');
         $routes->get('team', 'WellbeingController::team');
     });
 
     // Proof-of-work ledger (Phase 6)
-    $routes->group('ledger', ['filter' => 'auth'], function ($routes) {
+    $routes->group('ledger', ['filter' => ['auth', 'planFeature:proof_of_work']], function ($routes) {
         $routes->get('/', 'LedgerController::index');
         $routes->get('verify', 'LedgerController::verify');
     });
 
-    $routes->group('insights', ['filter' => ['auth', 'permission:reports.view_own']], function ($routes) {
+    $routes->group('insights', ['filter' => ['auth', 'permission:reports.view_own', 'planFeature:ai_insights']], function ($routes) {
         $routes->get('weekly-summary', 'InsightsController::weeklySummary');
         $routes->get('benchmarks', 'InsightsController::benchmarks');
         $routes->get('work-patterns', 'InsightsController::workPatterns');

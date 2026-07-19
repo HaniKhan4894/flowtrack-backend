@@ -5,6 +5,7 @@ namespace App\Controllers\API\V1;
 use CodeIgniter\RESTful\ResourceController;
 use App\Services\InvoiceService;
 use App\Services\ClientPortalService;
+use App\Helpers\HttpStatus;
 
 class InvoiceController extends ResourceController
 {
@@ -41,7 +42,7 @@ class InvoiceController extends ResourceController
             ]);
 
         } catch (\Exception $e) {
-            return $this->fail($e->getMessage(), 400);
+            return $this->fail($e->getMessage(), HttpStatus::fromException($e));
         }
     }
 
@@ -63,7 +64,7 @@ class InvoiceController extends ResourceController
             ]);
 
         } catch (\Exception $e) {
-            return $this->fail($e->getMessage(), 400);
+            return $this->fail($e->getMessage(), HttpStatus::fromException($e));
         }
     }
 
@@ -91,15 +92,17 @@ class InvoiceController extends ResourceController
             }
 
             $invoice = $this->invoiceService->createInvoice($organizationId, $createdBy, $data);
+            $invoice = $this->invoiceService->getInvoiceById((int) $invoice['id']) ?? $invoice;
 
             return $this->respondCreated([
                 'success' => true,
                 'message' => 'Invoice created successfully',
-                'data' => $invoice
+                'data' => $invoice,
+                'next_step' => $invoice['next_step'] ?? null,
             ]);
 
         } catch (\Exception $e) {
-            return $this->fail($e->getMessage(), 400);
+            return $this->fail($e->getMessage(), HttpStatus::fromException($e));
         }
     }
 
@@ -128,14 +131,16 @@ class InvoiceController extends ResourceController
             }
 
             $invoice = $this->invoiceService->generateFromTimeEntries($organizationId, $createdBy, $data);
+            $invoice = $this->invoiceService->getInvoiceById((int) $invoice['id']) ?? $invoice;
 
             return $this->respondCreated([
                 'success' => true,
                 'message' => 'Invoice generated from tracked time',
                 'data' => $invoice,
+                'next_step' => $invoice['next_step'] ?? null,
             ]);
         } catch (\Exception $e) {
-            return $this->fail($e->getMessage(), 400);
+            return $this->fail($e->getMessage(), HttpStatus::fromException($e));
         }
     }
 
@@ -167,9 +172,10 @@ class InvoiceController extends ResourceController
                 'success' => true,
                 'message' => 'Invoice populated from tracked time',
                 'data' => $invoice,
+                'next_step' => $invoice['next_step'] ?? $this->invoiceService->resolveNextStep($invoice),
             ]);
         } catch (\Exception $e) {
-            return $this->fail($e->getMessage(), 400);
+            return $this->fail($e->getMessage(), HttpStatus::fromException($e));
         }
     }
 
@@ -191,9 +197,10 @@ class InvoiceController extends ResourceController
                 'success' => true,
                 'message' => 'Invoice updated successfully',
                 'data' => $invoice,
+                'next_step' => $invoice['next_step'] ?? null,
             ]);
         } catch (\Exception $e) {
-            return $this->fail($e->getMessage(), 400);
+            return $this->fail($e->getMessage(), HttpStatus::fromException($e));
         }
     }
 
@@ -216,15 +223,17 @@ class InvoiceController extends ResourceController
             }
 
             $item = $this->invoiceService->addInvoiceItem($id, $data);
+            $invoice = $this->invoiceService->getInvoiceById((int) $id);
 
             return $this->respondCreated([
                 'success' => true,
                 'message' => 'Invoice item added successfully',
-                'data' => $item
+                'data' => $item,
+                'next_step' => $invoice['next_step'] ?? null,
             ]);
 
         } catch (\Exception $e) {
-            return $this->fail($e->getMessage(), 400);
+            return $this->fail($e->getMessage(), HttpStatus::fromException($e));
         }
     }
 
@@ -237,7 +246,7 @@ class InvoiceController extends ResourceController
             $data = $this->request->getJSON(true);
 
             if (!isset($data['status'])) {
-                return $this->fail('Status is required', 400);
+                return $this->fail('Status is required', 422);
             }
 
             $updated = $this->invoiceService->updateInvoiceStatus($id, $data['status']);
@@ -246,14 +255,17 @@ class InvoiceController extends ResourceController
                 return $this->fail('Failed to update invoice status', 400);
             }
 
+            $invoice = $this->invoiceService->getInvoiceById($id);
+
             return $this->respond([
                 'success' => true,
                 'message' => 'Invoice status updated successfully',
-                'data' => $this->invoiceService->getInvoiceById($id)
+                'data' => $invoice,
+                'next_step' => $invoice['next_step'] ?? null,
             ]);
 
         } catch (\Exception $e) {
-            return $this->fail($e->getMessage(), 400);
+            return $this->fail($e->getMessage(), HttpStatus::fromException($e));
         }
     }
 
@@ -270,14 +282,16 @@ class InvoiceController extends ResourceController
             }
 
             $invoice = $this->invoiceService->sendInvoice((int) $id, $organizationId, $sentBy);
+            $invoice = $this->invoiceService->getInvoiceById((int) $id) ?? $invoice;
 
             return $this->respond([
                 'success' => true,
                 'message' => 'Invoice sent successfully',
                 'data' => $invoice,
+                'next_step' => $invoice['next_step'] ?? null,
             ]);
         } catch (\Exception $e) {
-            return $this->fail($e->getMessage(), 400);
+            return $this->fail($e->getMessage(), HttpStatus::fromException($e));
         }
     }
 
@@ -304,7 +318,7 @@ class InvoiceController extends ResourceController
                 ->setHeader('Content-Disposition', 'attachment; filename="invoice-' . $invoice['invoice_number'] . '.pdf"')
                 ->setBody($pdf);
         } catch (\Exception $e) {
-            return $this->fail($e->getMessage(), 400);
+            return $this->fail($e->getMessage(), HttpStatus::fromException($e));
         }
     }
 
@@ -326,9 +340,10 @@ class InvoiceController extends ResourceController
                     'token' => $token,
                     'url' => $portalService->getPortalUrl($token),
                 ],
+                'next_step' => $invoice['next_step'] ?? null,
             ]);
         } catch (\Exception $e) {
-            return $this->fail($e->getMessage(), 400);
+            return $this->fail($e->getMessage(), HttpStatus::fromException($e));
         }
     }
 
@@ -347,7 +362,7 @@ class InvoiceController extends ResourceController
                 'data' => $portalService->getPaymentsForInvoice((int) $id),
             ]);
         } catch (\Exception $e) {
-            return $this->fail($e->getMessage(), 400);
+            return $this->fail($e->getMessage(), HttpStatus::fromException($e));
         }
     }
 }

@@ -37,6 +37,12 @@ export interface PlanFeatures {
     activity_tracking?: boolean;
     invoicing?: boolean;
     payroll?: boolean;
+    ai_insights?: boolean;
+    wellbeing?: boolean;
+    proof_of_work?: boolean;
+    integrations?: boolean;
+    advanced_monitoring?: boolean;
+    api_access?: boolean | string;
     max_users?: number | string;
     max_projects?: number | string;
     screenshot_interval?: number;

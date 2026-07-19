@@ -268,6 +268,26 @@ const InvoiceDetailPage = () => {
 
   const items = invoice.items ?? [];
   const total = toNumber(invoice.total ?? invoice.amount ?? invoice.subtotal);
+  const nextStep = invoice.next_step;
+
+  const runNextStepAction = () => {
+    if (!nextStep) return;
+    if (nextStep.action === 'populate_or_add_items') {
+      setShowGenerateTime(true);
+      return;
+    }
+    if (nextStep.action === 'edit_details') {
+      setShowEditMeta(true);
+      return;
+    }
+    if (nextStep.action === 'send') {
+      void handleSend();
+      return;
+    }
+    if (nextStep.action === 'portal' && portalUrl) {
+      void navigator.clipboard.writeText(portalUrl);
+    }
+  };
 
   return (
     <div className="space-y-8">
@@ -328,7 +348,25 @@ const InvoiceDetailPage = () => {
         </div>
       </div>
 
-      {error && <p className="text-rose-400 text-sm">{error}</p>}
+      {nextStep && (
+        <div className="rounded-2xl border border-primary-500/30 bg-primary-500/10 px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-primary-300">Next step</p>
+            <p className="text-sm text-white font-medium mt-0.5">{nextStep.label}</p>
+          </div>
+          {(canEdit || canSend) && (
+            <Button size="sm" className="!rounded-xl shrink-0" onClick={runNextStepAction} isLoading={actionLoading}>
+              Continue
+            </Button>
+          )}
+        </div>
+      )}
+
+      {error && (
+        <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">
+          {error}
+        </div>
+      )}
 
       {isDraft && items.length === 0 && (
         <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-amber-100">

@@ -22,6 +22,11 @@ export interface Invoice {
     amount_paid?: number;
     client_approved_at?: string | null;
     currency?: string;
+    next_step?: {
+        key: string;
+        label: string;
+        action: string;
+    } | null;
 }
 
 export const invoiceService = {

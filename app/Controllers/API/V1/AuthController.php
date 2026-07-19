@@ -27,7 +27,7 @@ class AuthController extends ResourceController
             // Validation
             $rules = [
                 'email' => 'required|valid_email',
-                'password' => 'required|min_length[6]',
+                'password' => 'required|min_length[8]',
                 'first_name' => 'required',
             ];
 
@@ -233,7 +233,7 @@ class AuthController extends ResourceController
 
             $rules = [
                 'token' => 'required',
-                'password' => 'required|min_length[6]',
+                'password' => 'required|min_length[8]',
             ];
 
             if (!$this->validate($rules)) {
@@ -315,7 +315,7 @@ class AuthController extends ResourceController
             $data = $this->request->getJSON(true);
             $rules = [
                 'current_password' => 'required',
-                'new_password' => 'required|min_length[6]',
+                'new_password' => 'required|min_length[8]',
                 'confirm_password' => 'required|matches[new_password]',
             ];
 
