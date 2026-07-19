@@ -38,7 +38,7 @@ class NotificationPreferenceController extends ResourceController
     /**
      * PUT /api/v1/notification-preferences
      */
-    public function update()
+    public function update($id = null)
     {
         try {
             $userId = (int) ($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
@@ -50,7 +50,7 @@ class NotificationPreferenceController extends ResourceController
             $preferences = $data['preferences'] ?? $data;
 
             if (!is_array($preferences)) {
-                return $this->fail('preferences array is required', 400);
+                return $this->fail('preferences array is required', 422);
             }
 
             $updated = $this->preferenceService->updatePreferences($userId, $preferences);

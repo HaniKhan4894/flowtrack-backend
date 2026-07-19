@@ -8,7 +8,7 @@ import { teamService, type TeamMember } from '../../api/teamService';
 import { useAuthStore } from '../../store/authStore';
 import { taskService } from '../../api/taskService';
 import type { Task } from '../../types';
-import { hasPermission } from '../../utils/access';
+import { hasPermission, hasPlanFeature } from '../../utils/access';
 import { getApiErrorMessage } from '../../utils/apiError';
 import { toastSuccess, toastError } from '../../store/toastStore';
 
@@ -59,11 +59,15 @@ export const ProjectsPage = () => {
   const colors = ['#6366F1', '#06B6D4', '#F43F5E', '#10B981', '#F59E0B', '#8B5CF6'];
 
   useEffect(() => {
-    clientService.getAll({ is_active: 1 }).then((r) => setClients(r.data ?? [])).catch(() => undefined);
+    if (hasPlanFeature(user, 'invoicing')) {
+      clientService.getAll({ is_active: 1 }).then((r) => setClients(r.data ?? [])).catch(() => undefined);
+    } else {
+      setClients([]);
+    }
     if (canEditProjects) {
       teamService.getAll().then((r) => setOrgMembers(r.data ?? [])).catch(() => setOrgMembers([]));
     }
-  }, [canEditProjects]);
+  }, [canEditProjects, user]);
 
   const openAssignMembers = async (project: Project) => {
     setAssignProject(project);

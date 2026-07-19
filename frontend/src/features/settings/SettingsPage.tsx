@@ -11,7 +11,7 @@ import { billingService } from '../../api/billingService';
 import { scheduledReportService, type ScheduledReport } from '../../api/scheduledReportService';
 import { taxTemplateService, type PayrollTaxTemplate } from '../../api/taxTemplateService';
 import { getApiErrorMessage } from '../../utils/apiError';
-import { hasPermission } from '../../utils/access';
+import { hasPermission, hasPlanFeature } from '../../utils/access';
 import { formatApiDate } from '../../utils/date';
 import { productivityRuleService } from '../../api/productivityRuleService';
 import { roleService } from '../../api/roleService';
@@ -104,7 +104,10 @@ const SettingsPage = () => {
   const canEditOrg = hasPermission(user, 'settings.edit');
   const canViewOrg = hasPermission(user, 'settings.view') || canEditOrg;
   const canManageBilling = hasPermission(user, 'settings.billing');
-  const canManageProductivityRules = hasPermission(user, 'productivity_rules.manage');
+  const canManageProductivityRules = hasPermission(user, 'productivity_rules.manage')
+    && hasPlanFeature(user, 'productivity_rules');
+  const canUseDeveloperApi = hasPlanFeature(user, 'api_access');
+  const canManagePayroll = hasPermission(user, 'payroll.manage') && hasPlanFeature(user, 'payroll');
 
   const [productivityRules, setProductivityRules] = useState<ProductivityRule[]>([]);
   const [rulesLoading, setRulesLoading] = useState(false);
@@ -129,7 +132,6 @@ const SettingsPage = () => {
   const [prefsLoading, setPrefsLoading] = useState(false);
   const [prefsSaving, setPrefsSaving] = useState(false);
 
-  const canManagePayroll = hasPermission(user, 'payroll.manage');
   const [twoFactorSetup, setTwoFactorSetup] = useState<{ secret: string; otpauth_url: string } | null>(null);
   const [twoFactorCode, setTwoFactorCode] = useState('');
   const [twoFactorLoading, setTwoFactorLoading] = useState(false);
@@ -151,12 +153,12 @@ const SettingsPage = () => {
       { id: 'smart-notifications', label: 'Smart Notifications', icon: Sparkles },
       { id: 'office-locations', label: 'Remote vs Office', icon: MapPin },
       { id: 'roles-permissions', label: 'Roles & Permissions', icon: Users },
-      { id: 'developer', label: 'Developer', icon: KeyRound },
+      ...(canUseDeveloperApi ? [{ id: 'developer', label: 'Developer', icon: KeyRound }] : []),
     ] : []),
     { id: 'notifications', label: 'Notifications', icon: Bell },
     { id: 'security', label: 'Security', icon: Shield },
     ...(canManageBilling ? [{ id: 'billing', label: 'Billing & Plans', icon: Cloud }] : []),
-  ], [canViewOrg, canManageProductivityRules, canEditOrg, canManageBilling]);
+  ], [canViewOrg, canManageProductivityRules, canEditOrg, canUseDeveloperApi, canManageBilling]);
 
   useEffect(() => {
     if (!tabs.some((tab) => tab.id === activeTab)) {

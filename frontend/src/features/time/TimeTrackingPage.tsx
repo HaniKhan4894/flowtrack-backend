@@ -8,7 +8,7 @@ import { taskService } from '../../api/taskService';
 import { reportService } from '../../api/reportService';
 import DevAiPanel from './DevAiPanel';
 import { useAuthStore } from '../../store/authStore';
-import { hasPermission, isOrgAdmin, canManageProjects } from '../../utils/access';
+import { hasPermission, isOrgAdmin, canManageProjects, hasPlanFeature } from '../../utils/access';
 import { getApiErrorMessage } from '../../utils/apiError';
 import { Button, Input, Modal } from '../../components/ui';
 import type { Task, TimeEntry } from '../../types';
@@ -16,6 +16,7 @@ import type { Task, TimeEntry } from '../../types';
 const TimeTrackingPage = () => {
   const { user } = useAuthStore();
   const canManualEntry = hasPermission(user, 'time.manual_entry');
+  const showSmartLogging = hasPlanFeature(user, 'ai_insights') || hasPlanFeature(user, 'integrations');
   const [entries, setEntries] = useState<TimeEntry[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -253,7 +254,7 @@ const TimeTrackingPage = () => {
         </div>
       </div>
 
-      {canManualEntry && <DevAiPanel projects={projects} onLogged={fetchEntries} />}
+      {canManualEntry && showSmartLogging && <DevAiPanel projects={projects} onLogged={fetchEntries} />}
 
       <div className="glass rounded-3xl overflow-hidden border border-white/5 shadow-ai">
         <div className="p-6 border-b border-white/5 bg-white/[0.02] space-y-4">

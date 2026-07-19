@@ -6,6 +6,8 @@ import { Link } from 'react-router-dom';
 import { aiService, type AiSuggestion } from '../../api/aiService';
 import { timeService } from '../../api/timeService';
 import { getApiErrorMessage } from '../../utils/apiError';
+import { hasPlanFeature } from '../../utils/access';
+import { useAuthStore } from '../../store/authStore';
 import type { Project } from '../../api/projectService';
 import AutopilotPanel from './AutopilotPanel';
 import CalendarPanel from './CalendarPanel';
@@ -29,6 +31,9 @@ const linkClass =
   'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all';
 
 const DevAiPanel = ({ projects, onLogged }: Props) => {
+  const user = useAuthStore((s) => s.user);
+  const hasAi = hasPlanFeature(user, 'ai_insights');
+  const hasIntegrations = hasPlanFeature(user, 'integrations');
   const today = new Date().toISOString().split('T')[0];
 
   const [aiEnabled, setAiEnabled] = useState<boolean | null>(null);
@@ -41,8 +46,12 @@ const DevAiPanel = ({ projects, onLogged }: Props) => {
   const [suggestProjects, setSuggestProjects] = useState<Record<number, string>>({});
 
   useEffect(() => {
+    if (!hasAi) {
+      setAiEnabled(false);
+      return;
+    }
     aiService.status().then((r) => setAiEnabled(!!r.data.enabled)).catch(() => setAiEnabled(false));
-  }, []);
+  }, [hasAi]);
 
   const runSuggest = async () => {
     setLoadingSuggest(true);
@@ -79,7 +88,6 @@ const DevAiPanel = ({ projects, onLogged }: Props) => {
         description: s.description,
         started_at: fmt(start),
         ended_at: fmt(end),
-        is_billable: true,
       });
       setAddedIdx((prev) => new Set(prev).add(idx));
       onLogged();
@@ -88,33 +96,36 @@ const DevAiPanel = ({ projects, onLogged }: Props) => {
     }
   };
 
-  const showAi = aiEnabled !== false;
+  const showAi = hasAi && aiEnabled !== false;
+
+  if (!hasAi && !hasIntegrations) return null;
 
   return (
     <section className="rounded-2xl border border-white/5 bg-white/[0.02] overflow-hidden">
-      {/* Toolbar */}
       <div className="px-4 py-3 border-b border-white/5 flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-sm font-bold text-white">Smart logging</p>
           <p className="text-[11px] text-slate-500">AI-assisted entries & connected tools</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Link to="/integrations/jira" className={`${linkClass} border-[#0052CC]/30 bg-[#0052CC]/10 text-[#8cb8ff] hover:bg-[#0052CC]/20`}>
-            <Trello size={13} /> Jira <ArrowRight size={12} className="opacity-60" />
-          </Link>
-          <Link to="/integrations/github" className={`${linkClass} border-white/10 bg-white/5 text-slate-200 hover:bg-white/10`}>
-            <Github size={13} /> GitHub <ArrowRight size={12} className="opacity-60" />
-          </Link>
-          <Link to="/integrations" className={`${linkClass} border-primary-500/20 bg-primary-500/10 text-primary-300 hover:bg-primary-500/15`}>
-            <Plug size={13} /> Integrations
-          </Link>
-        </div>
+        {hasIntegrations && (
+          <div className="flex flex-wrap items-center gap-2">
+            <Link to="/integrations/jira" className={`${linkClass} border-[#0052CC]/30 bg-[#0052CC]/10 text-[#8cb8ff] hover:bg-[#0052CC]/20`}>
+              <Trello size={13} /> Jira <ArrowRight size={12} className="opacity-60" />
+            </Link>
+            <Link to="/integrations/github" className={`${linkClass} border-white/10 bg-white/5 text-slate-200 hover:bg-white/10`}>
+              <Github size={13} /> GitHub <ArrowRight size={12} className="opacity-60" />
+            </Link>
+            <Link to="/integrations" className={`${linkClass} border-primary-500/20 bg-primary-500/10 text-primary-300 hover:bg-primary-500/15`}>
+              <Plug size={13} /> Integrations
+            </Link>
+          </div>
+        )}
       </div>
 
       <div className="p-4 space-y-4">
         {showAi && <AutopilotPanel projects={projects} onLogged={onLogged} />}
 
-        <div className={`grid grid-cols-1 gap-4 ${showAi ? 'lg:grid-cols-2' : ''}`}>
+        <div className={`grid grid-cols-1 gap-4 ${showAi && hasIntegrations ? 'lg:grid-cols-2' : ''}`}>
           {showAi && (
             <div className="glass rounded-2xl border border-white/5 overflow-hidden h-full flex flex-col">
               <div className="p-4 border-b border-white/5 bg-white/[0.02] flex flex-wrap items-center justify-between gap-3">
@@ -198,7 +209,7 @@ const DevAiPanel = ({ projects, onLogged }: Props) => {
             </div>
           )}
 
-          <CalendarPanel projects={projects} onLogged={onLogged} />
+          {hasIntegrations && <CalendarPanel projects={projects} onLogged={onLogged} />}
         </div>
       </div>
     </section>
