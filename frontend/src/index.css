@@ -171,8 +171,9 @@
   }
 
   .modal-overlay {
-    background: rgba(0, 0, 0, 0.88);
-    backdrop-filter: blur(6px);
+    background: rgba(10, 12, 18, 0.55);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
   }
 
   .skeleton {
