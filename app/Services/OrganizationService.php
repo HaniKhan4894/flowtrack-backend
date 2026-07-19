@@ -294,7 +294,8 @@ class OrganizationService
         ?float $hourlyRate = null,
         ?string $email = null,
         ?int $inviterUserId = null,
-        array $projectIds = []
+        array $projectIds = [],
+        bool $syncBilling = true
     ): array
     {
         $this->checkUserLimit($organizationId);
@@ -350,6 +351,15 @@ class OrganizationService
                 );
             }
 
+            if ($syncBilling) {
+                try {
+                    (new SubscriptionService())->syncBillableSeats($organizationId);
+                } catch (\Throwable $e) {
+                    $this->memberModel->delete($memberId);
+                    throw $e;
+                }
+            }
+
             $member = $this->memberModel->find($memberId);
             $member['project_ids'] = $projectMemberService->getProjectIdsForUser($organizationId, (int) $userId);
             return $member;
@@ -366,7 +376,7 @@ class OrganizationService
                 ->first();
 
             if ($existingInvite) {
-                // Update expiry
+                // Update expiry — seat count unchanged, no billing sync needed
                 $token = bin2hex(random_bytes(32));
                 $this->invitationModel->update($existingInvite['id'], [
                     'token' => $token,
@@ -396,6 +406,15 @@ class OrganizationService
                 'created_at' => date('Y-m-d H:i:s')
             ]);
 
+            if ($syncBilling) {
+                try {
+                    (new SubscriptionService())->syncBillableSeats($organizationId);
+                } catch (\Throwable $e) {
+                    $this->invitationModel->delete($invitationId);
+                    throw $e;
+                }
+            }
+
             $invitation = $this->invitationModel->find($invitationId);
             $invitation['project_ids'] = $projectIds;
             $this->notifyInvitation($organizationId, $email, $role, $token, $inviterUserId);
@@ -410,10 +429,17 @@ class OrganizationService
     {
         (new ProjectMemberService())->clearUserProjects($organizationId, $userId);
 
-        return $this->memberModel
+        $removed = $this->memberModel
             ->where('organization_id', $organizationId)
             ->where('user_id', $userId)
             ->delete();
+
+        if ($removed) {
+            // Best-effort: membership already removed; don't block on Stripe.
+            (new SubscriptionService())->syncBillableSeats($organizationId, false);
+        }
+
+        return (bool) $removed;
     }
 
     public function getMembers(int $organizationId, array $filters = []): array

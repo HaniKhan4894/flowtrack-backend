@@ -254,6 +254,8 @@ const BillingPage = () => {
               <li>Upgrading mid-trial (e.g. Starter → Professional) <strong className="text-slate-200">keeps the same trial end date</strong> — you do not get a fresh 14 days.</li>
               <li>Pricing is <strong className="text-slate-200">per user</strong> — charged for actual members + pending invites after trial, not the slider preview.</li>
               <li>Slider shows estimated cost; checkout always uses your real team size ({billableUsers ?? '…'} user{billableUsers === 1 ? '' : 's'}).</li>
+              <li>During trial, adding users updates your seat count for the <strong className="text-slate-200">first charge</strong> — no mid-trial invoice.</li>
+              <li>After you&apos;re paid, adding users <strong className="text-slate-200">charges a prorated amount right away</strong> for the rest of the billing period. Removing users applies credit on the next invoice.</li>
               <li>Cancel anytime from <strong className="text-slate-200">Manage billing</strong> before the trial ends to avoid any charge.</li>
               <li>After trial, your plan <strong className="text-slate-200">renews automatically</strong> on the date shown above.</li>
               <li>If a renewal fails, status becomes <strong className="text-slate-200">past due</strong> — update your card to avoid downgrade.</li>

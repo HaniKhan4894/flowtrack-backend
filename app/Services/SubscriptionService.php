@@ -526,62 +526,131 @@ class SubscriptionService
     }
 
     /**
-     * Adjust user count and recalculate price (for per-user plans)
+     * Sync local + Stripe seat quantity with current billable users (members + pending invites).
+     *
+     * Policy:
+     * - During trial: update Stripe quantity only (first charge uses new seat count; no mid-trial invoice).
+     * - After paid (active): seat increases invoice immediately via proration (always_invoice).
+     * - Seat decreases: prorated credit applied on the next invoice.
+     *
+     * @param bool $strict When true (seat increase), Stripe failures raise. When false (decrease), log only.
      */
-    public function adjustUserCount(int $organizationId): void
+    public function syncBillableSeats(int $organizationId, bool $strict = true): void
     {
         $subscription = $this->subscriptionModel->getActiveSubscription($organizationId);
-        
         if (!$subscription) {
             return;
         }
 
         $plan = $this->planModel->find($subscription['plan_id']);
-        
-        // Only adjust for per-user pricing
-        if ($plan['pricing_model'] !== 'per_user') {
+        if (!$plan || ($plan['pricing_model'] ?? '') !== 'per_user') {
             return;
         }
 
-        // Count active users
-        $userCount = $this->db->table('organization_members')
-            ->where('organization_id', $organizationId)
-            ->countAllResults();
+        $userCount = $this->resolveBillableUserCount($organizationId, $plan);
+        $previousCount = max(1, (int) ($subscription['user_count'] ?? 1));
+        $billingCycle = $subscription['billing_cycle'] ?? 'monthly';
+        $newAmount = $this->planRequiresPayment($plan)
+            ? $this->calculatePrice((int) $subscription['plan_id'], $userCount, $billingCycle)
+            : 0.0;
 
-        // Calculate new price
-        $newAmount = $this->calculatePrice($subscription['plan_id'], $userCount, $subscription['billing_cycle']);
+        // Free / $0 plans — keep local count accurate, skip Stripe.
+        if (!$this->planRequiresPayment($plan) || empty($subscription['stripe_subscription_id'])) {
+            $this->subscriptionModel->update($subscription['id'], [
+                'user_count' => $userCount,
+                'amount' => $newAmount,
+            ]);
+            return;
+        }
 
-        // Update subscription
+        if ($userCount === $previousCount) {
+            // Still refresh amount in case plan price changed.
+            $this->subscriptionModel->update($subscription['id'], [
+                'user_count' => $userCount,
+                'amount' => $newAmount,
+            ]);
+            return;
+        }
+
+        $status = (string) ($subscription['status'] ?? '');
+        $inTrial = $status === 'trial'
+            || (
+                !empty($subscription['trial_ends_at'])
+                && strtotime((string) $subscription['trial_ends_at']) > time()
+            );
+
+        // Trial: just set quantity for the first post-trial invoice.
+        // Active + more seats: charge prorated amount now so seats aren't free until next cycle.
+        // Active + fewer seats: credit via create_prorations on next invoice.
+        if ($inTrial) {
+            $proration = 'none';
+        } elseif ($userCount > $previousCount) {
+            $proration = 'always_invoice';
+        } else {
+            $proration = 'create_prorations';
+        }
+
+        try {
+            $this->syncStripeSeatQuantity(
+                (string) $subscription['stripe_subscription_id'],
+                $userCount,
+                $proration
+            );
+        } catch (\Throwable $e) {
+            log_message('error', 'Stripe seat quantity sync failed: ' . $e->getMessage());
+            if ($strict || $userCount > $previousCount) {
+                throw new \RuntimeException(
+                    'Could not update billing seats with Stripe. Please try again or contact support.',
+                    0,
+                    $e
+                );
+            }
+            // Seat decrease: keep local membership change; billing can be reconciled later.
+        }
+
         $this->subscriptionModel->update($subscription['id'], [
             'user_count' => $userCount,
             'amount' => $newAmount,
         ]);
-
-        if (!empty($subscription['stripe_subscription_id']) && (float) $newAmount > 0) {
-            $this->syncStripeSeatQuantity($subscription['stripe_subscription_id'], $userCount);
-        }
     }
 
-    private function syncStripeSeatQuantity(string $stripeSubscriptionId, int $userCount): void
+    /** @deprecated Use syncBillableSeats() */
+    public function adjustUserCount(int $organizationId): void
     {
-        try {
-            $stripeSub = $this->getStripeClient()->subscriptions->retrieve($stripeSubscriptionId);
-            foreach ($stripeSub->items->data as $item) {
-                $component = $item->price->metadata['plan_component'] ?? '';
-                if ($component === 'seat') {
-                    $this->getStripeClient()->subscriptions->update($stripeSubscriptionId, [
-                        'items' => [[
-                            'id' => $item->id,
-                            'quantity' => max(1, $userCount),
-                        ]],
-                        'proration_behavior' => 'create_prorations',
-                    ]);
-                    break;
-                }
+        $this->syncBillableSeats($organizationId);
+    }
+
+    private function syncStripeSeatQuantity(
+        string $stripeSubscriptionId,
+        int $userCount,
+        string $prorationBehavior = 'create_prorations'
+    ): void {
+        $stripeSub = $this->getStripeClient()->subscriptions->retrieve($stripeSubscriptionId);
+        $seatItemId = null;
+        foreach ($stripeSub->items->data as $item) {
+            $component = $item->price->metadata['plan_component'] ?? '';
+            if ($component === 'seat') {
+                $seatItemId = $item->id;
+                break;
             }
-        } catch (\Exception $e) {
-            log_message('error', 'Stripe seat quantity sync failed: ' . $e->getMessage());
         }
+
+        // Fallback: first item if metadata missing (older Stripe prices).
+        if (!$seatItemId && !empty($stripeSub->items->data[0]->id)) {
+            $seatItemId = $stripeSub->items->data[0]->id;
+        }
+
+        if (!$seatItemId) {
+            throw new \RuntimeException('No seat line item found on Stripe subscription ' . $stripeSubscriptionId);
+        }
+
+        $this->getStripeClient()->subscriptions->update($stripeSubscriptionId, [
+            'items' => [[
+                'id' => $seatItemId,
+                'quantity' => max(1, $userCount),
+            ]],
+            'proration_behavior' => $prorationBehavior,
+        ]);
     }
 
     /**

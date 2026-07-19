@@ -82,6 +82,7 @@ class AuthService
                 $data['role'] = (string) ($invite['role'] ?? 'member');
                 $user = $this->userService->createUser($data);
 
+                // Skip billing sync until invite row is deleted (invite→member is usually net-zero seats).
                 $this->organizationService->addMember(
                     (int) $invite['organization_id'],
                     (int) $user['id'],
@@ -89,9 +90,11 @@ class AuthService
                     null,
                     null,
                     null,
-                    $this->decodeInviteProjectIds($invite['project_ids'] ?? null)
+                    $this->decodeInviteProjectIds($invite['project_ids'] ?? null),
+                    false
                 );
                 $this->db->table('organization_invitations')->where('id', $invite['id'])->delete();
+                (new SubscriptionService())->syncBillableSeats((int) $invite['organization_id'], false);
             } else {
                 // Self-signup creates an organization owner/admin account
                 $data['role'] = 'owner';
@@ -283,6 +286,7 @@ class AuthService
                 $userData['email_verified_at'] = date('Y-m-d H:i:s');
                 $user = $this->userService->createUser($userData);
 
+                // Skip billing sync until invite row is deleted (invite→member is usually net-zero seats).
                 $this->organizationService->addMember(
                     (int) $invite['organization_id'],
                     (int) $user['id'],
@@ -290,9 +294,11 @@ class AuthService
                     null,
                     null,
                     null,
-                    $this->decodeInviteProjectIds($invite['project_ids'] ?? null)
+                    $this->decodeInviteProjectIds($invite['project_ids'] ?? null),
+                    false
                 );
                 $this->db->table('organization_invitations')->where('id', $invite['id'])->delete();
+                (new SubscriptionService())->syncBillableSeats((int) $invite['organization_id'], false);
             } else {
                 $userData['role'] = 'owner';
                 $user = $this->userService->createUser($userData);
