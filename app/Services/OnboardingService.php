@@ -152,7 +152,7 @@ class OnboardingService
             ->where('organization_id', $organizationId)
             ->countAllResults();
         $hasInvite = $memberCount > 1
-            || $this->db->table('invitations')
+            || $this->db->table('organization_invitations')
                 ->where('organization_id', $organizationId)
                 ->countAllResults() > 0;
 
