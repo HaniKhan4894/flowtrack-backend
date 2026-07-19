@@ -207,7 +207,7 @@ const TimeTrackingPage = () => {
           <h1 className="text-3xl font-bold text-white mb-2">Time Logs</h1>
           <p className="text-slate-400">Review and manage your tracked time entries.</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3 shrink min-w-0">
           {canManualEntry && (
             <Button onClick={() => openManualModal()} className="!rounded-xl">
               <Plus size={18} className="mr-2" />

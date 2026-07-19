@@ -236,11 +236,11 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
     || 'Dashboard';
 
   return (
-    <div className={cn('flex min-h-screen bg-background gap-4 text-white p-2 sm:p-4', isDesktopApp() ? 'pt-10' : '')}>
+    <div className={cn('flex min-h-screen w-full max-w-full overflow-x-hidden bg-background gap-4 text-white p-2 sm:p-4', isDesktopApp() ? 'pt-10' : '')}>
       {/* Desktop sidebar */}
       <motion.aside
         animate={{ width: isCollapsed ? 80 : 260 }}
-        className="glass rounded-3xl flex-col relative z-20 drag-region hidden lg:flex"
+        className="glass rounded-3xl flex-col relative z-20 drag-region hidden lg:flex shrink-0 overflow-hidden"
       >
         <div className="absolute top-6 right-3 z-10 no-drag">
           <button
@@ -285,9 +285,9 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
         )}
       </AnimatePresence>
 
-      <main className="flex-1 flex flex-col gap-3 sm:gap-4 overflow-hidden min-w-0">
-        <header className="glass h-16 sm:h-20 px-3 sm:px-6 lg:px-8 rounded-2xl sm:rounded-3xl flex items-center justify-between relative z-30 drag-region gap-2">
-          <div className="flex items-center gap-2 sm:gap-4 text-slate-400 min-w-0">
+      <main className="flex-1 flex flex-col gap-3 sm:gap-4 overflow-hidden min-w-0 max-w-full">
+        <header className="glass h-16 sm:h-20 px-3 sm:px-6 lg:px-8 rounded-2xl sm:rounded-3xl flex items-center justify-between relative z-30 drag-region gap-2 min-w-0 overflow-hidden">
+          <div className="flex items-center gap-2 sm:gap-4 text-slate-400 min-w-0 overflow-hidden">
             <button
               type="button"
               className="lg:hidden p-2 rounded-xl hover:bg-white/10 text-slate-300 no-drag"
@@ -306,7 +306,7 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
             <span className="text-sm hidden md:inline">Welcome back, {user?.first_name || 'Agent'}</span>
           </div>
 
-          <div className="flex items-center gap-2 sm:gap-4 no-drag">
+          <div className="flex items-center gap-2 sm:gap-4 no-drag shrink-0">
             <div className="hidden xl:block">
               <TimerWidget />
             </div>
@@ -366,7 +366,7 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
                       initial={{ opacity: 0, y: 10, scale: 0.95 }}
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                      className="fixed top-20 sm:top-24 right-2 sm:right-8 w-[calc(100vw-1rem)] max-w-80 dropdown-panel p-4 z-[100] overflow-hidden"
+                      className="fixed top-20 sm:top-24 right-2 sm:right-8 w-80 max-w-[calc(100%-1rem)] dropdown-panel p-4 z-[100] overflow-hidden"
                     >
                       <div className="flex items-center justify-between mb-4 px-2">
                         <h4 className="font-bold text-white">Notifications</h4>
@@ -493,7 +493,7 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
           <TimerWidget />
         </div>
 
-        <div className="flex-1 glass rounded-2xl sm:rounded-3xl p-4 sm:p-6 lg:p-8 overflow-y-auto">
+        <div className="flex-1 glass rounded-2xl sm:rounded-3xl p-4 sm:p-6 lg:p-8 overflow-y-auto overflow-x-hidden min-w-0">
           {user?.advanced_monitoring?.active && (
             <div className="mb-6 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-5 py-4 flex items-start gap-3">
               <ShieldAlert className="text-rose-400 shrink-0 mt-0.5" size={20} />
