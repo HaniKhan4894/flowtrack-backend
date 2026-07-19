@@ -1,0 +1,232 @@
+/**
+ * Light theme overrides only.
+ * Dark (`data-theme="dark"`) keeps the original design 1:1 — no rules here apply.
+ */
+
+[data-theme='light'] {
+  color-scheme: light;
+
+  --color-background: #eef1f8;
+
+  --color-surface-50: rgba(15, 23, 42, 0.03);
+  --color-surface-100: rgba(15, 23, 42, 0.05);
+  --color-surface-200: rgba(15, 23, 42, 0.07);
+  --color-surface-300: rgba(15, 23, 42, 0.1);
+  --color-surface-700: #f1f5f9;
+  --color-surface-800: #ffffff;
+  --color-surface-900: #eef1f8;
+
+  --background-image-surface-gradient: linear-gradient(
+    180deg,
+    rgba(15, 23, 42, 0.04) 0%,
+    rgba(15, 23, 42, 0) 100%
+  );
+
+  --shadow-glass: 0 8px 28px 0 rgba(15, 23, 42, 0.08);
+  --shadow-ai: 0 0 18px rgba(99, 102, 241, 0.18);
+
+  --ft-fg: #0f172a;
+  --ft-fg-secondary: #1e293b;
+  --ft-muted: #64748b;
+  --ft-faint: #94a3b8;
+  --ft-panel: #ffffff;
+  --ft-panel-soft: rgba(15, 23, 42, 0.04);
+  --ft-panel-hover: rgba(15, 23, 42, 0.06);
+  --ft-border: rgba(15, 23, 42, 0.1);
+  --ft-border-strong: rgba(15, 23, 42, 0.16);
+  --ft-solid: #ffffff;
+  --ft-solid-raised: #f8fafc;
+  --ft-overlay: rgba(15, 23, 42, 0.45);
+}
+
+[data-theme='light'] body {
+  color: #334155;
+  background-color: var(--color-background);
+}
+
+[data-theme='light'] h1,
+[data-theme='light'] h2,
+[data-theme='light'] h3,
+[data-theme='light'] h4,
+[data-theme='light'] h5,
+[data-theme='light'] h6 {
+  color: var(--ft-fg);
+}
+
+/* —— Shared component classes —— */
+[data-theme='light'] .glass {
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid var(--ft-border);
+  box-shadow: var(--shadow-glass);
+}
+
+[data-theme='light'] .glass-card {
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid var(--ft-border);
+  box-shadow: var(--shadow-glass);
+}
+
+[data-theme='light'] .glass-card:hover {
+  border-color: var(--ft-border-strong);
+  background: #ffffff;
+}
+
+[data-theme='light'] .modal-panel,
+[data-theme='light'] .dropdown-panel {
+  background: #ffffff;
+  border: 1px solid var(--ft-border-strong);
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.16);
+}
+
+[data-theme='light'] .overlay-panel {
+  background: #f8fafc;
+  border: 1px solid var(--ft-border);
+}
+
+[data-theme='light'] .form-select,
+[data-theme='light'] .form-field {
+  background-color: #ffffff;
+  border: 1px solid var(--ft-border-strong);
+  color: var(--ft-fg);
+}
+
+[data-theme='light'] .form-select option {
+  background-color: #ffffff;
+  color: var(--ft-fg);
+}
+
+[data-theme='light'] .form-select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+}
+
+[data-theme='light'] .modal-overlay {
+  background: var(--ft-overlay);
+}
+
+[data-theme='light'] .skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(15, 23, 42, 0.04) 25%,
+    rgba(15, 23, 42, 0.09) 50%,
+    rgba(15, 23, 42, 0.04) 75%
+  );
+  background-size: 200% 100%;
+}
+
+/* —— Soft remap of dark-oriented Tailwind utilities —— */
+[data-theme='light'] .text-white {
+  color: var(--ft-fg);
+}
+
+/* Keep white text on brand / status surfaces */
+[data-theme='light'] .bg-ai-gradient.text-white,
+[data-theme='light'] .ai-button,
+[data-theme='light'] .ai-button .text-white,
+[data-theme='light'] .bg-ai-gradient .text-white,
+[data-theme='light'] .bg-primary-500,
+[data-theme='light'] .bg-primary-500 .text-white,
+[data-theme='light'] .bg-primary-600,
+[data-theme='light'] .bg-accent,
+[data-theme='light'] .bg-accent .text-white,
+[data-theme='light'] [class*='bg-emerald-'] .text-white,
+[data-theme='light'] [class*='bg-rose-'] .text-white,
+[data-theme='light'] [class*='bg-red-'] .text-white,
+[data-theme='light'] [class*='bg-indigo-'] .text-white,
+[data-theme='light'] [class*='bg-violet-'] .text-white,
+[data-theme='light'] [class*='bg-orange-'] .text-white,
+[data-theme='light'] [class*='bg-amber-'] .text-white,
+[data-theme='light'] [class*='bg-sky-'] .text-white,
+[data-theme='light'] [class*='bg-cyan-'] .text-white,
+[data-theme='light'] [class*='bg-blue-'] .text-white,
+[data-theme='light'] [class*='bg-fuchsia-'] .text-white,
+[data-theme='light'] .keep-on-color,
+[data-theme='light'] .keep-on-color .text-white {
+  color: #ffffff;
+}
+
+[data-theme='light'] .bg-ai-gradient,
+[data-theme='light'] .bg-primary-500,
+[data-theme='light'] .bg-primary-600,
+[data-theme='light'] .bg-accent {
+  color: #ffffff;
+}
+
+[data-theme='light'] .text-slate-100,
+[data-theme='light'] .text-slate-200 {
+  color: var(--ft-fg-secondary);
+}
+
+[data-theme='light'] .text-slate-300 {
+  color: #475569;
+}
+
+[data-theme='light'] .text-slate-400 {
+  color: var(--ft-muted);
+}
+
+[data-theme='light'] .text-slate-500 {
+  color: var(--ft-faint);
+}
+
+[data-theme='light'] .hover\:text-white:hover {
+  color: var(--ft-fg);
+}
+
+[data-theme='light'] .bg-white\/5 {
+  background-color: var(--ft-panel-soft);
+}
+
+[data-theme='light'] .bg-white\/10 {
+  background-color: var(--ft-panel-hover);
+}
+
+[data-theme='light'] .bg-white\/\[0\.03\] {
+  background-color: rgba(15, 23, 42, 0.03);
+}
+
+[data-theme='light'] .hover\:bg-white\/5:hover,
+[data-theme='light'] .hover\:bg-white\/10:hover {
+  background-color: var(--ft-panel-hover);
+}
+
+[data-theme='light'] .border-white\/5,
+[data-theme='light'] .border-white\/10,
+[data-theme='light'] .border-white\/12,
+[data-theme='light'] .border-white\/20 {
+  border-color: var(--ft-border);
+}
+
+[data-theme='light'] .divide-white\/5 > :not([hidden]) ~ :not([hidden]),
+[data-theme='light'] .divide-white\/10 > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--ft-border);
+}
+
+[data-theme='light'] .bg-black\/40,
+[data-theme='light'] .bg-black\/50,
+[data-theme='light'] .bg-black\/60,
+[data-theme='light'] .bg-black\/70,
+[data-theme='light'] .bg-black\/80 {
+  background-color: var(--ft-overlay);
+}
+
+/* Hard-coded dark panel hexes used across the app */
+[data-theme='light'] .bg-\[\#12141C\],
+[data-theme='light'] .bg-\[\#0A0C12\],
+[data-theme='light'] .bg-\[\#161922\] {
+  background-color: var(--ft-solid) !important;
+}
+
+[data-theme='light'] .border-\[\#12141C\] {
+  border-color: #ffffff;
+}
+
+[data-theme='light'] .placeholder\:text-slate-500::placeholder,
+[data-theme='light'] .placeholder\:text-slate-600::placeholder {
+  color: #94a3b8;
+}
+
+/* Secondary / glass buttons stay readable */
+[data-theme='light'] button.bg-white\/10 {
+  color: var(--ft-fg);
+  border-color: var(--ft-border);
+}

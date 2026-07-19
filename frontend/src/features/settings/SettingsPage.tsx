@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { User, Building, Bell, Shield, Cloud, Save, Camera, Loader2, CheckCircle2, Lock, CreditCard, ExternalLink, Gauge, Users, Plus, Pencil, Trash2, Activity, FileCheck, Sparkles, MapPin, KeyRound } from 'lucide-react';
+import { User, Building, Bell, Shield, Cloud, Save, Camera, Loader2, CheckCircle2, Lock, CreditCard, ExternalLink, Gauge, Users, Plus, Pencil, Trash2, Activity, FileCheck, Sparkles, MapPin, KeyRound, Palette } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import client from '../../api/client';
@@ -19,6 +19,7 @@ import { notificationPreferenceService } from '../../api/notificationPreferenceS
 import { Link, useNavigate } from 'react-router-dom';
 import type { Country, State, City, TimezoneOption, ProductivityRule, Role, Permission, NotificationPreference } from '../../types';
 import { Modal, SearchableSelect } from '../../components/ui';
+import { ThemePreferencePicker } from '../../components/ThemeToggle';
 import { ActivityTrackingSettingsTab } from './ActivityTrackingSettingsTab';
 import { TimesheetPolicySettingsTab } from './TimesheetPolicySettingsTab';
 import { SmartNotificationsSettingsTab } from './SmartNotificationsSettingsTab';
@@ -145,6 +146,7 @@ const SettingsPage = () => {
 
   const tabs = useMemo(() => [
     { id: 'profile', label: 'Profile Settings', icon: User },
+    { id: 'appearance', label: 'Appearance', icon: Palette },
     ...(canViewOrg ? [{ id: 'organization', label: 'Organization', icon: Building }] : []),
     ...(canManageProductivityRules ? [{ id: 'productivity-rules', label: 'Productivity Rules', icon: Gauge }] : []),
     ...(canEditOrg ? [
@@ -703,6 +705,21 @@ const SettingsPage = () => {
                   {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save size={20} />}
                   {isSaving ? 'Updating...' : 'Save Changes'}
                 </button>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'appearance' && (
+            <div className="space-y-6 max-w-2xl">
+              <div>
+                <h3 className="text-xl font-bold text-white mb-1">Appearance</h3>
+                <p className="text-sm text-slate-400">
+                  Choose how FlowTrack looks. Dark is the default brand look; Light and System are optional.
+                </p>
+              </div>
+              <div className="space-y-3">
+                <label className="text-sm font-bold text-slate-400 uppercase tracking-wider ml-1">Color theme</label>
+                <ThemePreferencePicker />
               </div>
             </div>
           )}

@@ -13,6 +13,7 @@ import { AppQueryProvider } from './lib/queryClient'
 import { ToastViewport, PageSkeleton, PlanLockedState } from './components/ui'
 import { CommandPalette } from './components/CommandPalette'
 import { ShortcutsHelp } from './components/ShortcutsHelp'
+import { ThemeProvider } from './components/ThemeProvider'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 
 const LoginPage = lazy(() => import('./features/auth/LoginPage'))
@@ -202,9 +203,11 @@ initDesktopLifecycle()
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <AppQueryProvider>
-      <Router>
-        <AppChrome />
-      </Router>
+      <ThemeProvider>
+        <Router>
+          <AppChrome />
+        </Router>
+      </ThemeProvider>
     </AppQueryProvider>
   </StrictMode>,
 )

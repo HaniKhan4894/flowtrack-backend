@@ -24,6 +24,7 @@ import { getNavGroupsForUser, getNavItemsForUser, isSuperAdmin, canViewOrgPackag
 import { hardRedirectToLogin, isDesktopApp } from '../utils/electronAuth';
 import { isDesktopForeground } from '../utils/desktopLifecycle';
 import { Avatar } from '../components/ui/Avatar';
+import { ThemeToggleButton } from '../components/ThemeToggle';
 import { useUiChromeStore } from '../store/uiChromeStore';
 import { cn } from '../lib/cn';
 
@@ -84,7 +85,7 @@ function SidebarContent({
               exit={{ opacity: 0 }}
               className="flex items-center gap-2"
             >
-              <div className="w-8 h-8 rounded-lg bg-ai-gradient flex items-center justify-center shadow-ai">
+              <div className="w-8 h-8 rounded-lg bg-ai-gradient flex items-center justify-center shadow-ai keep-on-color">
                 <Sparkles className="w-5 h-5 text-white" />
               </div>
               <span className="text-xl font-bold gradient-text uppercase tracking-tighter">FlowTrack</span>
@@ -330,6 +331,8 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
               <Keyboard size={18} />
             </button>
 
+            <ThemeToggleButton />
+
             <div className="flex items-center gap-2 sm:gap-4 relative">
               <button
                 onClick={() => {
@@ -343,7 +346,7 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
               >
                 <Bell size={20} />
                 {unreadCount > 0 && (
-                  <span className="absolute top-1.5 right-1.5 min-w-[18px] h-[18px] px-1 bg-accent rounded-full border-2 border-[#12141C] text-[10px] font-bold text-white flex items-center justify-center">
+                  <span className="absolute top-1.5 right-1.5 min-w-[18px] h-[18px] px-1 bg-accent rounded-full border-2 border-[#12141C] text-[10px] font-bold text-white keep-on-color flex items-center justify-center">
                     {unreadCount > 9 ? '9+' : unreadCount}
                   </span>
                 )}
