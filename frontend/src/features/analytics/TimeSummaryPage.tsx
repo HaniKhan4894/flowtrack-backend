@@ -32,10 +32,10 @@ const TimeSummaryPage = () => {
     teamService
       .getAll()
       .then((r) => {
-        const rows = (r.data ?? []).map((m: Record<string, unknown>) => ({
+        const rows = (r.data ?? []).map((m) => ({
           user_id: Number(m.user_id ?? m.id),
-          first_name: String(m.first_name ?? ''),
-          last_name: String(m.last_name ?? ''),
+          first_name: m.first_name ?? '',
+          last_name: m.last_name ?? '',
         }));
         setTeamMembers(rows.filter((m) => m.user_id > 0));
       })
