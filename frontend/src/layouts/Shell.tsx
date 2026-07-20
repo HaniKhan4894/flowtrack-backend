@@ -229,6 +229,7 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
     || (location.pathname.startsWith('/integrations') ? 'Integrations' : null)
     || (location.pathname.startsWith('/invoices/') ? 'Invoice Detail' : null)
     || (location.pathname === '/timesheets' ? 'Timesheets' : null)
+    || (location.pathname === '/time-summary' ? 'Time Summary' : null)
     || (location.pathname === '/settings' ? 'Settings' : null)
     || (location.pathname === '/admin' ? 'Platform Admin' : null)
     || (location.pathname === '/activity-feed' ? 'Activity Feed' : null)

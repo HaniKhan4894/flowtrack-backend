@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
@@ -12,15 +12,20 @@ import { Button, Modal } from '../../components/ui';
 import { timesheetService } from '../../api/timesheetService';
 import { teamService } from '../../api/teamService';
 import { useAuthStore } from '../../store/authStore';
+import { useTimerStore } from '../../store/timerStore';
 import { hasPermission } from '../../utils/access';
 import { getApiErrorMessage } from '../../utils/apiError';
+import {
+  entryDisplaySeconds,
+  entryLocalDateKey,
+  formatDurationHm,
+  formatDurationHms,
+  isActiveTimerEntry,
+  localDateKey,
+} from '../../utils/liveTimer';
 import type { TimesheetWeekGrid } from '../../types';
 
-const formatDuration = (seconds: number) => {
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  return `${h}h ${m}m`;
-};
+const formatDuration = (seconds: number) => formatDurationHm(seconds);
 
 const dayLabel = (dateStr: string) => {
   const d = new Date(dateStr + 'T12:00:00');
@@ -30,6 +35,10 @@ const dayLabel = (dateStr: string) => {
 const TimesheetsPage = () => {
   const { user } = useAuthStore();
   const canApprove = hasPermission(user, 'timesheet.approve');
+  const activeEntry = useTimerStore((s) => s.activeEntry);
+  const elapsed = useTimerStore((s) => s.elapsed);
+  const isRunning = useTimerStore((s) => s.isRunning);
+  const wasRunningRef = useRef(isRunning);
 
   const [grid, setGrid] = useState<TimesheetWeekGrid | null>(null);
   const [loading, setLoading] = useState(true);
@@ -76,6 +85,54 @@ const TimesheetsPage = () => {
   useEffect(() => {
     loadGrid();
   }, [loadGrid]);
+
+  useEffect(() => {
+    if (wasRunningRef.current && !isRunning) {
+      loadGrid();
+    }
+    wasRunningRef.current = isRunning;
+  }, [isRunning, loadGrid]);
+
+  const liveGrid = useMemo(() => {
+    if (!grid) return null;
+    const own = !selectedUserId || Number(selectedUserId) === user?.id;
+    if (!own || !isRunning || !activeEntry || weekOffset !== 0) {
+      return grid;
+    }
+
+    const today = localDateKey();
+    const activeDay = entryLocalDateKey(activeEntry);
+    if (activeDay !== today) return grid;
+    if (today < grid.week_start || today > grid.week_end) return grid;
+
+    const days = grid.days.map((day) => {
+      if (day.date !== today) return day;
+
+      const alreadyListed = day.entries.some((e) => e.id === activeEntry.id);
+      const entries = alreadyListed
+        ? day.entries
+        : [
+            ...day.entries,
+            {
+              ...activeEntry,
+              duration_seconds: elapsed,
+              description: activeEntry.description || 'No description',
+            },
+          ];
+
+      return {
+        ...day,
+        entries,
+        total_seconds: day.total_seconds + elapsed,
+      };
+    });
+
+    return {
+      ...grid,
+      days,
+      total_seconds: grid.total_seconds + elapsed,
+    };
+  }, [grid, selectedUserId, user?.id, isRunning, activeEntry, elapsed, weekOffset]);
 
   const handleSubmit = async () => {
     if (!grid?.period?.id) return;
@@ -188,7 +245,11 @@ const TimesheetsPage = () => {
             <div>
               <p className="text-sm text-slate-400">Total this week</p>
               <p className="text-2xl font-bold text-white font-mono">
-                {grid ? formatDuration(grid.total_seconds) : '—'}
+                {liveGrid ? (
+                  isRunning && isOwnTimesheet && weekOffset === 0
+                    ? formatDurationHms(liveGrid.total_seconds)
+                    : formatDuration(liveGrid.total_seconds)
+                ) : '—'}
               </p>
             </div>
           </div>
@@ -237,7 +298,7 @@ const TimesheetsPage = () => {
           <div className="p-20 flex justify-center">
             <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
           </div>
-        ) : grid ? (
+        ) : liveGrid ? (
           <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead>
@@ -248,32 +309,52 @@ const TimesheetsPage = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
-                {grid.days.map((day) => (
+                {liveGrid.days.map((day) => {
+                  const dayHasLive = isRunning && isOwnTimesheet && day.entries.some(
+                    (e) => isActiveTimerEntry(e, activeEntry, isRunning),
+                  );
+                  return (
                   <tr key={day.date} className="hover:bg-white/[0.02]">
-                    <td className="px-6 py-4 text-sm font-medium text-white">{dayLabel(day.date)}</td>
-                    <td className="px-6 py-4 text-sm font-mono text-primary-400">
-                      {formatDuration(day.total_seconds)}
+                    <td className="px-6 py-4 text-sm font-medium text-white">
+                      {dayLabel(day.date)}
+                      {dayHasLive && (
+                        <span className="ml-2 text-[10px] font-bold uppercase tracking-widest text-emerald-400">
+                          Live
+                        </span>
+                      )}
+                    </td>
+                    <td className={`px-6 py-4 text-sm font-mono ${dayHasLive ? 'text-emerald-400' : 'text-primary-400'}`}>
+                      {dayHasLive ? formatDurationHms(day.total_seconds) : formatDuration(day.total_seconds)}
                     </td>
                     <td className="px-6 py-4">
                       {day.entries.length === 0 ? (
                         <span className="text-xs text-slate-500">No entries</span>
                       ) : (
                         <div className="space-y-1">
-                          {day.entries.map((entry) => (
+                          {day.entries.map((entry) => {
+                            const live = isActiveTimerEntry(entry, activeEntry, isRunning);
+                            const seconds = entryDisplaySeconds(entry, activeEntry, elapsed, isRunning);
+                            return (
                             <div key={entry.id} className="text-xs text-slate-300">
                               <span className="text-white font-medium">
                                 {entry.description || 'No description'}
                               </span>
-                              <span className="text-slate-500 ml-2">
-                                {(entry as any).project_name || 'General'} · {formatDuration(entry.duration_seconds || 0)}
+                              {live && (
+                                <span className="ml-1.5 text-[10px] font-bold uppercase text-emerald-400">Live</span>
+                              )}
+                              <span className={`ml-2 ${live ? 'text-emerald-400 font-mono font-semibold' : 'text-slate-500'}`}>
+                                {(entry as { project_name?: string }).project_name || 'General'} ·{' '}
+                                {live ? formatDurationHms(seconds) : formatDuration(seconds)}
                               </span>
                             </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       )}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

@@ -90,6 +90,49 @@ async function triggerDownload(url: string, filename: string) {
     document.body.removeChild(link);
 }
 
+export interface HoursCalendarDay {
+    date: string;
+    day: number;
+    in_month: boolean;
+    is_today: boolean;
+    seconds: number;
+    hours_label: string;
+    project_count: number;
+}
+
+export interface HoursCalendarWeek {
+    week_index: number;
+    start_date: string;
+    end_date: string;
+    seconds: number;
+    hours_label: string;
+    project_count: number;
+}
+
+export interface HoursCalendarProject {
+    id: number;
+    name: string;
+    seconds: number;
+    hours_label: string;
+}
+
+export interface HoursCalendar {
+    year: number;
+    month: number;
+    month_label: string;
+    start_date: string;
+    end_date: string;
+    timezone: string;
+    scope: 'user' | 'team' | 'all';
+    user_id: number | null;
+    total_seconds: number;
+    hours_label: string;
+    project_count: number;
+    days: HoursCalendarDay[];
+    weeks: HoursCalendarWeek[];
+    projects: HoursCalendarProject[];
+}
+
 export const reportService = {
     getHourlyTimeline: async (params: { date: string; user_id?: number }): Promise<{ data: import('../types').HourlyTimelineData }> => {
         const response = await client.get('/reports/hourly-timeline', { params });
@@ -97,6 +140,21 @@ export const reportService = {
     },
     getTimeSummary: async (params?: Record<string, string>): Promise<{ data: TimeSummary }> => {
         const response = await client.get('/reports/time-summary', { params });
+        return response.data;
+    },
+    getHoursCalendar: async (params: {
+        year: number;
+        month: number;
+        user_id?: number | 'all';
+    }): Promise<{ data: HoursCalendar }> => {
+        const query: Record<string, string | number> = {
+            year: params.year,
+            month: params.month,
+        };
+        if (params.user_id !== undefined) {
+            query.user_id = params.user_id;
+        }
+        const response = await client.get('/reports/hours-calendar', { params: query });
         return response.data;
     },
     getProjectBreakdown: async (params?: Record<string, string>): Promise<{ data: ProjectBreakdown[] }> => {

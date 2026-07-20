@@ -272,6 +272,7 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\API\V1'], function ($r
     $routes->get('reports/active-sessions', 'ReportController::activeSessions', ['filter' => 'auth']);
     $routes->get('reports/hourly-timeline', 'ReportController::hourlyTimeline', ['filter' => 'auth']);
     $routes->get('reports/time-summary', 'ReportController::timeSummary', ['filter' => 'permission:reports.view_own']);
+    $routes->get('reports/hours-calendar', 'ReportController::hoursCalendar', ['filter' => 'permission:reports.view_own']);
     $routes->get('reports/project-breakdown', 'ReportController::projectBreakdown', ['filter' => 'permission:reports.view_team']);
     $routes->get('reports/user-productivity/(:num)', 'ReportController::userProductivity/$1', ['filter' => 'permission:reports.view_team']);
     $routes->get('reports/team-leaderboard', 'ReportController::teamLeaderboard', ['filter' => 'permission:reports.view_team']);

@@ -48,6 +48,7 @@ const ALL_NAV_GROUPS: NavGroup[] = [
       { icon: LayoutDashboard, label: 'Dashboard', path: '/app' },
       { icon: Clock, label: 'Time Tracking', path: '/time', permission: 'time.view_own' },
       { icon: ClipboardList, label: 'Timesheets', path: '/timesheets', permission: 'timesheet.submit' },
+      { icon: CalendarDays, label: 'Time Summary', path: '/time-summary', permission: 'reports.view_own' },
       {
         icon: Briefcase,
         label: 'Projects',
@@ -159,6 +160,7 @@ const PATH_PERMISSIONS: Record<string, string | string[]> = {
   '/app': [],
   '/time': 'time.view_own',
   '/timesheets': 'timesheet.submit',
+  '/time-summary': ['reports.view_own', 'reports.view_team'],
   '/projects': ['projects.create', 'projects.edit'],
   '/clients': 'invoices.view',
   '/leave': [],

@@ -32,6 +32,7 @@ const TeamPage = lazy(() => import('./features/team/TeamPage'))
 const SettingsPage = lazy(() => import('./features/settings/SettingsPage'))
 const TimeTrackingPage = lazy(() => import('./features/time/TimeTrackingPage'))
 const AnalyticsPage = lazy(() => import('./features/analytics/AnalyticsPage'))
+const TimeSummaryPage = lazy(() => import('./features/analytics/TimeSummaryPage'))
 const ScreenshotsPage = lazy(() => import('./features/screenshots/ScreenshotsPage'))
 const ActivityPage = lazy(() => import('./features/activity/ActivityPage'))
 const InvoicesPage = lazy(() => import('./features/invoices/InvoicesPage'))
@@ -164,6 +165,7 @@ function AppChrome() {
         <Route path="/app" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
         <Route path="/time" element={<ProtectedRoute><TimeTrackingPage /></ProtectedRoute>} />
         <Route path="/timesheets" element={<RoleRoute path="/timesheets"><TimesheetsPage /></RoleRoute>} />
+        <Route path="/time-summary" element={<RoleRoute path="/time-summary"><TimeSummaryPage /></RoleRoute>} />
         <Route path="/activity" element={<ProtectedRoute><ActivityPage /></ProtectedRoute>} />
         <Route path="/activity-feed" element={<ProtectedRoute><ActivityFeedPage /></ProtectedRoute>} />
         <Route path="/onboarding" element={<ProtectedRoute><OnboardingPage /></ProtectedRoute>} />

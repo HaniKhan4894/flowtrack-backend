@@ -1112,4 +1112,185 @@ class ReportService
             'end_date' => $endDate,
         ];
     }
+
+    /**
+     * Month calendar of logged hours (org timezone) with week totals + project list.
+     *
+     * Filters: organization_id, year, month, user_id?, user_ids?
+     */
+    public function getHoursCalendar(array $filters): array
+    {
+        $organizationId = (int) ($filters['organization_id'] ?? 0);
+        $phpTz = $this->getOrgTimezone($filters);
+        $tz = new \DateTimeZone($phpTz);
+
+        $nowLocal = new \DateTime('now', $tz);
+        $year = (int) ($filters['year'] ?? $nowLocal->format('Y'));
+        $month = (int) ($filters['month'] ?? $nowLocal->format('n'));
+        if ($month < 1 || $month > 12) {
+            $month = (int) $nowLocal->format('n');
+        }
+
+        $startLocal = sprintf('%04d-%02d-01', $year, $month);
+        $monthStart = new \DateTime($startLocal, $tz);
+        $monthEnd = (clone $monthStart)->modify('last day of this month');
+        $endLocal = $monthEnd->format('Y-m-d');
+        $daysInMonth = (int) $monthEnd->format('j');
+
+        [$startUtc, $endUtc] = $this->timezoneService->dateRangeUtc($startLocal, $endLocal, $phpTz);
+
+        $builder = $this->db->table('time_entries')
+            ->select('started_at, duration_seconds, project_id, ended_at')
+            ->where('organization_id', $organizationId)
+            ->where('started_at >=', $startUtc)
+            ->where('started_at <=', $endUtc)
+            ->where('ended_at IS NOT NULL', null, false);
+
+        if (isset($filters['user_id'])) {
+            $builder->where('user_id', (int) $filters['user_id']);
+        } elseif (!empty($filters['user_ids']) && is_array($filters['user_ids'])) {
+            $builder->whereIn('user_id', array_map('intval', $filters['user_ids']));
+        }
+
+        $rows = $builder->get()->getResultArray();
+
+        $secondsByDate = [];
+        $projectsByDate = [];
+        $projectSeconds = [];
+        $allProjects = [];
+
+        foreach ($rows as $row) {
+            $seconds = (int) ($row['duration_seconds'] ?? 0);
+            if ($seconds <= 0) {
+                continue;
+            }
+
+            try {
+                $localDate = (new \DateTime((string) $row['started_at'], new \DateTimeZone('UTC')))
+                    ->setTimezone($tz)
+                    ->format('Y-m-d');
+            } catch (\Exception $e) {
+                continue;
+            }
+
+            $secondsByDate[$localDate] = ($secondsByDate[$localDate] ?? 0) + $seconds;
+
+            $projectId = isset($row['project_id']) && $row['project_id'] !== null && $row['project_id'] !== ''
+                ? (int) $row['project_id']
+                : 0;
+
+            if ($projectId > 0) {
+                $projectsByDate[$localDate][$projectId] = true;
+                $projectSeconds[$projectId] = ($projectSeconds[$projectId] ?? 0) + $seconds;
+                $allProjects[$projectId] = true;
+            }
+        }
+
+        // Calendar grid: pad to Monday-start weeks
+        $padBefore = ((int) $monthStart->format('N')) - 1; // 0=Mon … 6=Sun
+        $gridStart = (clone $monthStart)->modify("-{$padBefore} days");
+        $totalCells = (int) ceil(($padBefore + $daysInMonth) / 7) * 7;
+
+        $days = [];
+        $cursor = clone $gridStart;
+        for ($i = 0; $i < $totalCells; $i++) {
+            $dateStr = $cursor->format('Y-m-d');
+            $inMonth = $cursor->format('Y-m') === $monthStart->format('Y-m');
+            $seconds = $inMonth ? (int) ($secondsByDate[$dateStr] ?? 0) : 0;
+            $days[] = [
+                'date' => $dateStr,
+                'day' => (int) $cursor->format('j'),
+                'in_month' => $inMonth,
+                'is_today' => $dateStr === $nowLocal->format('Y-m-d'),
+                'seconds' => $seconds,
+                'hours_label' => $this->formatHoursLabel($seconds),
+                'project_count' => $inMonth ? count($projectsByDate[$dateStr] ?? []) : 0,
+            ];
+            $cursor->modify('+1 day');
+        }
+
+        $weeks = [];
+        $weekChunks = array_chunk($days, 7);
+        foreach ($weekChunks as $index => $chunk) {
+            $inMonthDays = array_values(array_filter($chunk, static fn ($d) => $d['in_month']));
+            if ($inMonthDays === []) {
+                continue;
+            }
+            $weekSeconds = array_sum(array_map(static fn ($d) => (int) $d['seconds'], $inMonthDays));
+            $weekProjects = [];
+            foreach ($inMonthDays as $d) {
+                foreach (array_keys($projectsByDate[$d['date']] ?? []) as $pid) {
+                    $weekProjects[$pid] = true;
+                }
+            }
+            $weeks[] = [
+                'week_index' => $index + 1,
+                'start_date' => $chunk[0]['date'],
+                'end_date' => $chunk[6]['date'],
+                'seconds' => $weekSeconds,
+                'hours_label' => $this->formatHoursLabel($weekSeconds),
+                'project_count' => count($weekProjects),
+            ];
+        }
+
+        $projectIds = array_keys($projectSeconds);
+        $projectNames = [];
+        if ($projectIds !== []) {
+            $nameRows = $this->db->table('projects')
+                ->select('id, name')
+                ->whereIn('id', $projectIds)
+                ->get()
+                ->getResultArray();
+            foreach ($nameRows as $nr) {
+                $projectNames[(int) $nr['id']] = (string) $nr['name'];
+            }
+        }
+
+        arsort($projectSeconds);
+        $projects = [];
+        foreach ($projectSeconds as $pid => $secs) {
+            $projects[] = [
+                'id' => (int) $pid,
+                'name' => $projectNames[$pid] ?? 'Project',
+                'seconds' => (int) $secs,
+                'hours_label' => $this->formatHoursLabel((int) $secs),
+            ];
+        }
+
+        $totalSeconds = array_sum($secondsByDate);
+
+        $scope = 'all';
+        if (isset($filters['user_id'])) {
+            $scope = 'user';
+        } elseif (!empty($filters['user_ids'])) {
+            $scope = 'team';
+        }
+
+        return [
+            'year' => $year,
+            'month' => $month,
+            'month_label' => $monthStart->format('F Y'),
+            'start_date' => $startLocal,
+            'end_date' => $endLocal,
+            'timezone' => $phpTz,
+            'scope' => $scope,
+            'user_id' => isset($filters['user_id']) ? (int) $filters['user_id'] : null,
+            'total_seconds' => $totalSeconds,
+            'hours_label' => $this->formatHoursLabel($totalSeconds),
+            'project_count' => count($allProjects),
+            'days' => $days,
+            'weeks' => $weeks,
+            'projects' => $projects,
+        ];
+    }
+
+    /** Trackabi-style "55:24" (hours:minutes). */
+    private function formatHoursLabel(int $seconds): string
+    {
+        $seconds = max(0, $seconds);
+        $h = intdiv($seconds, 3600);
+        $m = intdiv($seconds % 3600, 60);
+
+        return sprintf('%d:%02d', $h, $m);
+    }
 }

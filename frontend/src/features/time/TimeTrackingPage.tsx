@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Calendar, Filter, Download, MoreHorizontal, Clock, Tag, Briefcase, Loader2, Search, AlertCircle, Plus, Pencil, Trash2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -8,8 +8,15 @@ import { taskService } from '../../api/taskService';
 import { reportService } from '../../api/reportService';
 import DevAiPanel from './DevAiPanel';
 import { useAuthStore } from '../../store/authStore';
+import { useTimerStore } from '../../store/timerStore';
 import { hasPermission, isOrgAdmin, canManageProjects, hasPlanFeature } from '../../utils/access';
 import { getApiErrorMessage } from '../../utils/apiError';
+import {
+  entryDisplaySeconds,
+  formatDurationHm,
+  formatDurationHms,
+  isActiveTimerEntry,
+} from '../../utils/liveTimer';
 import { Button, Input, Modal } from '../../components/ui';
 import type { Task, TimeEntry } from '../../types';
 
@@ -17,6 +24,10 @@ const TimeTrackingPage = () => {
   const { user } = useAuthStore();
   const canManualEntry = hasPermission(user, 'time.manual_entry');
   const showSmartLogging = hasPlanFeature(user, 'ai_insights') || hasPlanFeature(user, 'integrations');
+  const activeEntry = useTimerStore((s) => s.activeEntry);
+  const elapsed = useTimerStore((s) => s.elapsed);
+  const isRunning = useTimerStore((s) => s.isRunning);
+  const wasRunningRef = useRef(isRunning);
   const [entries, setEntries] = useState<TimeEntry[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -48,6 +59,14 @@ const TimeTrackingPage = () => {
   useEffect(() => {
     fetchEntries();
   }, [selectedProjectId, startDate, endDate]);
+
+  // After timer stops, refresh list so final duration appears from API.
+  useEffect(() => {
+    if (wasRunningRef.current && !isRunning) {
+      fetchEntries();
+    }
+    wasRunningRef.current = isRunning;
+  }, [isRunning]);
 
   const fetchProjects = async () => {
     try {
@@ -156,11 +175,7 @@ const TimeTrackingPage = () => {
     setMenuEntryId(null);
   };
 
-  const formatDuration = (seconds: number) => {
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    return `${h}h ${m}m`;
-  };
+  const formatDuration = (seconds: number) => formatDurationHm(seconds);
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr.includes('T') ? dateStr : dateStr.replace(' ', 'T') + 'Z');
@@ -180,9 +195,21 @@ const TimeTrackingPage = () => {
     return projects.find(p => p.id === id)?.name || `Project ${id}`;
   };
 
-  const filteredEntries = entries.filter(e => 
-    e.description?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const displayEntries = useMemo(() => {
+    let list = [...entries];
+    if (isRunning && activeEntry && activeEntry.id > 0 && !list.some((e) => e.id === activeEntry.id)) {
+      const matchesProject =
+        selectedProjectId === 'all' || String(activeEntry.project_id ?? '') === selectedProjectId;
+      if (matchesProject) {
+        list = [{ ...activeEntry, duration_seconds: elapsed }, ...list];
+      }
+    }
+    return list.filter((e) =>
+      (e.description || '').toLowerCase().includes(searchTerm.toLowerCase()),
+    );
+  }, [entries, isRunning, activeEntry, elapsed, selectedProjectId, searchTerm]);
+
+  const filteredEntries = displayEntries;
 
   return (
     <div className="space-y-8">
@@ -316,7 +343,10 @@ const TimeTrackingPage = () => {
           {loading ? (
              <div className="p-20 flex justify-center"><Loader2 className="w-8 h-8 text-primary-500 animate-spin" /></div>
           ) : filteredEntries.length > 0 ? (
-            filteredEntries.map((entry) => (
+            filteredEntries.map((entry) => {
+              const live = isActiveTimerEntry(entry, activeEntry, isRunning);
+              const seconds = entryDisplaySeconds(entry, activeEntry, elapsed, isRunning);
+              return (
               <motion.div 
                 key={entry.id}
                 initial={{ opacity: 0 }}
@@ -324,12 +354,21 @@ const TimeTrackingPage = () => {
                 className="p-6 hover:bg-white/[0.02] transition-colors group flex flex-col md:flex-row md:items-center justify-between gap-6"
               >
                 <div className="flex items-start gap-4 flex-1">
-                  <div className="w-12 h-12 rounded-2xl bg-surface-200 flex items-center justify-center text-slate-500 group-hover:bg-primary-500/10 group-hover:text-primary-400 transition-colors">
-                    <Clock size={24} />
+                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-colors ${
+                    live
+                      ? 'bg-emerald-500/15 text-emerald-400'
+                      : 'bg-surface-200 text-slate-500 group-hover:bg-primary-500/10 group-hover:text-primary-400'
+                  }`}>
+                    <Clock size={24} className={live ? 'animate-pulse' : ''} />
                   </div>
                   <div className="space-y-1">
-                    <h4 className="font-bold text-white group-hover:text-primary-400 transition-colors uppercase tracking-tight">
+                    <h4 className="font-bold text-white group-hover:text-primary-400 transition-colors uppercase tracking-tight flex items-center gap-2">
                       {entry.description || 'No Description'}
+                      {live && (
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full normal-case">
+                          Live
+                        </span>
+                      )}
                     </h4>
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
                       <div className="flex items-center gap-1">
@@ -350,10 +389,12 @@ const TimeTrackingPage = () => {
 
                 <div className="flex items-center gap-8 pl-16 md:pl-0">
                   <div className="text-right">
-                    <p className="text-sm font-bold text-white font-mono">{formatDuration(entry.duration_seconds || 0)}</p>
+                    <p className={`text-sm font-bold font-mono ${live ? 'text-emerald-400' : 'text-white'}`}>
+                      {live ? formatDurationHms(seconds) : formatDuration(seconds)}
+                    </p>
                     <p className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">
                        {entry.started_at ? formatTime(displayStart(entry)) : ''} - 
-                       {entry.ended_at ? formatTime(displayEnd(entry)!) : 'Now'}
+                       {live || !entry.ended_at ? 'Now' : formatTime(displayEnd(entry)!)}
                     </p>
                   </div>
                   <button
@@ -380,7 +421,8 @@ const TimeTrackingPage = () => {
                   </button>
                 </div>
               </motion.div>
-            ))
+            );
+            })
           ) : (
             <div className="p-20 text-center">
                <div className="w-16 h-16 bg-white/5 rounded-3xl flex items-center justify-center mx-auto mb-4 text-slate-600">

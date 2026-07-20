@@ -349,6 +349,58 @@ class ReportController extends ResourceController
         );
     }
 
+    /**
+     * GET /api/v1/reports/hours-calendar?year=2026&month=7&user_id=1
+     * Omit user_id (with reports.view_team) to see all visible users.
+     */
+    public function hoursCalendar()
+    {
+        try {
+            $currentUserId = (int) ($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
+            $organizationId = (int) ($this->request->getGet('organization_id') ?? $this->request->getServer('FLOWTRACK_ORGANIZATION_ID') ?? 0);
+            if (!$currentUserId || !$organizationId) {
+                return $this->fail('Unauthorized', 401);
+            }
+
+            $permissionService = new PermissionService();
+            $canViewTeam = $permissionService->userHasPermission($currentUserId, $organizationId, 'reports.view_team');
+            $visibleUserIds = $this->teamScopeService->getVisibleUserIds($currentUserId, $organizationId);
+
+            $filters = [
+                'organization_id' => $organizationId,
+                'year' => $this->request->getGet('year'),
+                'month' => $this->request->getGet('month'),
+            ];
+
+            if (!$canViewTeam) {
+                $filters['user_id'] = $currentUserId;
+            } elseif ($requestedUserId = $this->request->getGet('user_id')) {
+                if ($requestedUserId === 'all') {
+                    if (!$this->teamScopeService->isOrgWideViewer($currentUserId, $organizationId)) {
+                        $filters['user_ids'] = $visibleUserIds;
+                    }
+                } else {
+                    $targetUserId = (int) $requestedUserId;
+                    if (!$this->teamScopeService->canViewUser($currentUserId, $organizationId, $targetUserId)) {
+                        return $this->fail('Forbidden', 403);
+                    }
+                    $filters['user_id'] = $targetUserId;
+                }
+            } elseif (!$this->teamScopeService->isOrgWideViewer($currentUserId, $organizationId)) {
+                $filters['user_ids'] = $visibleUserIds;
+            }
+
+            $filters = array_filter($filters, static fn ($value) => $value !== null && $value !== '');
+
+            return $this->respond([
+                'success' => true,
+                'data' => $this->reportService->getHoursCalendar($filters),
+            ]);
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+
     private function respondTeamReport(callable $callback)
     {
         try {
