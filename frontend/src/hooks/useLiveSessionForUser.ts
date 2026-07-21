@@ -26,7 +26,7 @@ export function useLiveSessionForUser(
   options?: { enabled?: boolean; pollMs?: number },
 ): LiveSessionView {
   const enabled = options?.enabled !== false;
-  const pollMs = options?.pollMs ?? 10_000;
+  const pollMs = options?.pollMs ?? 60_000;
   const selfId = useAuthStore((s) => s.user?.id);
   const ownActive = useTimerStore((s) => s.activeEntry);
   const ownElapsed = useTimerStore((s) => s.elapsed);

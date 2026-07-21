@@ -103,7 +103,7 @@ const DashboardPage = () => {
   const sessionsQuery = useQuery({
     queryKey: ['dashboard', 'active-sessions'],
     queryFn: () => reportService.getActiveSessions().then((r) => r.data ?? []).catch(() => []),
-    refetchInterval: 10_000,
+    refetchInterval: 60_000,
   });
 
   const stats = statsQuery.data;
@@ -193,7 +193,7 @@ const DashboardPage = () => {
             <h3 className="text-lg font-bold text-white flex items-center gap-2">
               <Radio size={18} className="text-emerald-400" /> Working Now
             </h3>
-            <span className="text-xs text-slate-500">Live · refreshes every 10s</span>
+            <span className="text-xs text-slate-500">Live · refreshes every 1 min</span>
           </div>
           <div className="space-y-3 max-h-40 overflow-y-auto">
             {activeSessions.length > 0 ? activeSessions.map((s) => (

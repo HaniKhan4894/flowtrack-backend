@@ -168,7 +168,7 @@ const TimeSummaryPage = () => {
                   if (v === 'me' || v === 'all') setUserFilter(v);
                   else setUserFilter(Number(v));
                 }}
-                className="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-slate-200 outline-none focus:border-primary-500/50"
+                className="form-select h-10 min-w-[200px] text-sm"
               >
                 <option value="me">My time</option>
                 <option value="all">All users</option>
