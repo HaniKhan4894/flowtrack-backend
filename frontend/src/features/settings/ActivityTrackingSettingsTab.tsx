@@ -177,11 +177,14 @@ export function ActivityTrackingSettingsTab({ organizationId, onSaved }: Props) 
         </Row>
         <Row label="Keep idle time">
           <select value={tracking.keep_idle_time} onChange={(e) => setTracking((p) => ({ ...p, keep_idle_time: e.target.value as OrgTrackingSettings['keep_idle_time'] }))} className="form-select text-sm">
-            <option value="prompt">Prompt</option>
-            <option value="always">Always</option>
-            <option value="never">Never</option>
+            <option value="prompt">Prompt (ask on idle pause)</option>
+            <option value="always">Always keep idle time</option>
+            <option value="never">Never keep idle time</option>
           </select>
         </Row>
+        <p className="text-xs text-slate-500 -mt-2 mb-2">
+          Desktop auto-pauses after the idle timeout, resumes on mouse/keyboard activity, and uses these settings for Idle Breakdown.
+        </p>
       </Section>
 
       <Section title="Timer" icon={Timer}>

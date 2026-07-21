@@ -28,12 +28,16 @@ export function PricingCards({
   mode = 'marketing',
   trialEligible = true,
 }: PricingCardsProps) {
+  const currentSortOrder = plans.find((p) => p.id === currentPlanId)?.sortOrder;
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
       {plans.map((plan, i) => {
         const isCurrent = currentPlanId === plan.id;
         const isBilling = mode === 'billing';
         const isLocked = plan.disabled && !isCurrent;
+        const isDowngrade =
+          currentSortOrder != null && plan.sortOrder < currentSortOrder;
 
         return (
           <motion.div
@@ -130,7 +134,9 @@ export function PricingCards({
                       ? 'Included free'
                       : trialEligible && plan.trialDays > 0
                         ? `Start ${plan.trialDays}-day trial`
-                        : 'Upgrade'}
+                        : isDowngrade
+                          ? 'Downgrade'
+                          : 'Upgrade'}
               </Button>
             ) : (
               <div className="mt-auto">

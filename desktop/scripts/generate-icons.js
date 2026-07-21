@@ -1,5 +1,6 @@
 /**
- * Normalizes build/icon.png to 512x512 and generates icon.ico for electron-builder.
+ * Normalizes build/icon.png to 512x512, builds a multi-size .ico for Windows,
+ * and stamps the local Electron binary so the taskbar shows FlowTrack in dev.
  */
 const fs = require('fs');
 const path = require('path');
@@ -12,6 +13,31 @@ const sourcePng = path.join(buildDir, 'icon.png');
 const normalizedPng = path.join(buildDir, 'icon-512.png');
 const iconIco = path.join(buildDir, 'icon.ico');
 const trayIcon = path.join(desktopRoot, 'icon.png');
+const ICO_SIZES = [16, 24, 32, 48, 64, 128, 256];
+
+async function stampElectronBinary(icoPath) {
+    if (process.platform !== 'win32') return;
+
+    let electronExe;
+    try {
+        // When required from Node (not Electron), this is the path to electron.exe.
+        electronExe = require('electron');
+    } catch {
+        return;
+    }
+
+    if (!electronExe || typeof electronExe !== 'string' || !fs.existsSync(electronExe)) {
+        return;
+    }
+
+    try {
+        const { rcedit } = require('rcedit');
+        await rcedit(electronExe, { icon: icoPath });
+        console.log(`Stamped Electron taskbar icon: ${electronExe}`);
+    } catch (err) {
+        console.warn(`Could not stamp electron.exe icon: ${err.message}`);
+    }
+}
 
 async function main() {
     if (!fs.existsSync(sourcePng)) {
@@ -27,12 +53,22 @@ async function main() {
     fs.copyFileSync(normalizedPng, sourcePng);
     fs.copyFileSync(normalizedPng, trayIcon);
 
-    const icoBuffer = await pngToIco(normalizedPng);
+    const sizedPngs = await Promise.all(
+        ICO_SIZES.map((size) =>
+            sharp(normalizedPng)
+                .resize(size, size, { fit: 'cover', position: 'centre' })
+                .png()
+                .toBuffer(),
+        ),
+    );
+    const icoBuffer = await pngToIco(sizedPngs);
     fs.writeFileSync(iconIco, icoBuffer);
+
+    await stampElectronBinary(iconIco);
 
     console.log('Generated desktop icons:');
     console.log(`  ${sourcePng} (512x512)`);
-    console.log(`  ${iconIco}`);
+    console.log(`  ${iconIco} (sizes: ${ICO_SIZES.join(', ')})`);
     console.log(`  ${trayIcon}`);
 }
 

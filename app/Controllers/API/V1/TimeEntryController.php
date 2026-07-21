@@ -183,8 +183,10 @@ class TimeEntryController extends ResourceController
                 return $authError;
             }
             $userId = (int)($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
+            $payload = $this->request->getJSON(true) ?? [];
+            $discardIdleSeconds = (int) ($payload['discard_idle_seconds'] ?? $payload['discardIdleSeconds'] ?? 0);
 
-            $entry = $this->timeEntryService->pauseTimer($userId, $id);
+            $entry = $this->timeEntryService->pauseTimer($userId, (int) $id, $discardIdleSeconds);
 
             return $this->respond([
                 'success' => true,
@@ -192,6 +194,32 @@ class TimeEntryController extends ResourceController
                 'data' => $entry
             ]);
 
+        } catch (\Exception $e) {
+            return $this->fail($e->getMessage(), 400);
+        }
+    }
+
+    /**
+     * POST /api/v1/time-entries/{id}/discard-idle
+     * Body: { seconds: number }
+     */
+    public function discardIdle($id)
+    {
+        try {
+            if ($authError = $this->requireAuthContext()) {
+                return $authError;
+            }
+            $userId = (int) ($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
+            $payload = $this->request->getJSON(true) ?? [];
+            $seconds = (int) ($payload['seconds'] ?? 0);
+
+            $entry = $this->timeEntryService->discardIdleTime($userId, (int) $id, $seconds);
+
+            return $this->respond([
+                'success' => true,
+                'message' => 'Idle time discarded',
+                'data' => $entry,
+            ]);
         } catch (\Exception $e) {
             return $this->fail($e->getMessage(), 400);
         }

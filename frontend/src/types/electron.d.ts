@@ -21,7 +21,11 @@ declare global {
       onScreenshotCaptured: (callback: (data: { activityLevel: number }) => void) => () => void;
       onSystemLockChange: (callback: (locked: boolean) => void) => () => void;
       onSystemResume: (callback: () => void) => () => void;
-      onTimerIdleChange: (callback: (state: 'paused' | 'resumed', data?: { idleMinutes?: number }) => void) => () => void;
+      onTimerIdleChange: (callback: (state: 'paused' | 'resumed', data?: {
+        idleMinutes?: number;
+        keepIdleTime?: string;
+        discardIdleSeconds?: number;
+      }) => void) => () => void;
       onAppLifecycle: (callback: (state: 'hide' | 'show' | 'shutdown') => void) => () => void;
       onTimerReminderResume: (callback: () => void) => () => void;
     };

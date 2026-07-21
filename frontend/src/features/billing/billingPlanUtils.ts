@@ -23,6 +23,7 @@ export interface ApiPlan {
   max_users?: number | null;
   trial_days?: number;
   is_popular?: boolean | number;
+  sort_order?: number;
   features?: ApiPlanFeature[];
 }
 
@@ -42,6 +43,7 @@ export interface DisplayPlan {
   isFree: boolean;
   trialDays: number;
   maxUsers: number | null;
+  sortOrder: number;
   disabled: boolean;
   disabledReason?: string;
 }
@@ -113,6 +115,8 @@ export function formatPlanForDisplay(
     options?.billableUsers,
   );
 
+  const sortOrder = Number(plan.sort_order ?? 0);
+
   if (isFree) {
     return {
       id: plan.id,
@@ -127,6 +131,7 @@ export function formatPlanForDisplay(
       isFree: true,
       trialDays: 0,
       maxUsers,
+      sortOrder,
       disabled,
       disabledReason,
     };
@@ -166,6 +171,7 @@ export function formatPlanForDisplay(
       isFree: false,
       trialDays,
       maxUsers,
+      sortOrder,
       disabled,
       disabledReason,
     };
@@ -194,6 +200,7 @@ export function formatPlanForDisplay(
     isFree: false,
     trialDays,
     maxUsers,
+    sortOrder,
     disabled,
     disabledReason,
   };

@@ -1,10 +1,15 @@
 /**
  * Foreground app polling (5s) with per-tab segments, flushed to backend every 60s.
+ *
+ * Idle/active for Analytics uses a soft OS-idle threshold (default 60s), not a 10s
+ * flicker — short typing pauses must not inflate "Idle Breakdown".
  */
 const systemInput = require('./systemInput');
 
 const POLL_MS = 5000;
 const SYNC_MS = 60 * 1000;
+/** Poll counts as idle only when OS idle time is at least this many seconds. */
+let activityIdleThresholdSec = 60;
 
 let pollTimer = null;
 let syncTimer = null;
@@ -13,6 +18,13 @@ let pendingSegments = [];
 let pollCount = 0;
 let activePollCount = 0;
 let deps = null;
+
+function setActivityIdleThreshold(seconds) {
+    const n = Number(seconds);
+    activityIdleThresholdSec = Number.isFinite(n)
+        ? Math.max(15, Math.min(300, Math.round(n)))
+        : 60;
+}
 
 function segmentKey(seg) {
     return `${seg.app_name}||${seg.window_title}||${seg.url || ''}`;
@@ -54,7 +66,8 @@ async function pollForeground() {
 
     const sample = systemInput.sampleSystemActivity();
     pollCount += 1;
-    if (sample.isActive) {
+    // Soft threshold: brief gaps between keystrokes stay "active".
+    if (sample.systemIdleSec < activityIdleThresholdSec) {
         activePollCount += 1;
     }
 
@@ -66,12 +79,13 @@ async function pollForeground() {
 
     const url = deps.extractUrlFromTitle(windowTitle, appName);
     const pollSec = Math.round(POLL_MS / 1000);
+    const pollIsActive = sample.systemIdleSec < activityIdleThresholdSec;
 
     const inputBump = {
-        mouse_movement: sample.isHighlyActive ? 3 : sample.isActive ? 1 : 0,
+        mouse_movement: sample.isHighlyActive ? 3 : pollIsActive ? 1 : 0,
         mouse_clicks: 0,
         keyboard_strokes: sample.isHighlyActive ? 2 : 0,
-        active_seconds: sample.isActive ? pollSec : 0,
+        active_seconds: pollIsActive ? pollSec : 0,
     };
 
     if (
@@ -106,15 +120,25 @@ function buildSyncPayload(timeEntryId) {
     finalizeCurrentSegment();
     const merged = mergeSegments(pendingSegments);
     pendingSegments = [];
+
+    // Capture before reset — previously counters were zeroed first so every sync
+    // reported ~60s idle / 0s active and Analytics "Idle Breakdown" inflated.
+    const pollsThisWindow = pollCount;
+    const activePollsThisWindow = activePollCount;
     pollCount = 0;
     activePollCount = 0;
 
     const counters = systemInput.getActivityCounters();
     const pollIntervalSec = Math.round(POLL_MS / 1000);
     const syncIntervalSec = Math.round(SYNC_MS / 1000);
-    const totalPolls = Math.max(1, Math.round(syncIntervalSec / pollIntervalSec));
-    const idleSeconds = Math.min(syncIntervalSec, Math.max(0, (totalPolls - activePollCount) * pollIntervalSec));
-    const activeSeconds = Math.max(0, syncIntervalSec - idleSeconds);
+    const idleSeconds = Math.min(
+        syncIntervalSec,
+        Math.max(0, (pollsThisWindow - activePollsThisWindow) * pollIntervalSec),
+    );
+    const activeSeconds = Math.min(
+        syncIntervalSec,
+        Math.max(0, activePollsThisWindow * pollIntervalSec),
+    );
 
     const logs = merged.map((seg) => ({
         app_name: seg.app_name,
@@ -166,7 +190,10 @@ function start(dependencies) {
 
     // Immediate first poll
     pollForeground().catch(() => undefined);
-    console.log(`[ActivityTracker] Polling every ${Math.round(POLL_MS / 1000)}s, syncing every ${SYNC_MS / 1000}s.`);
+    console.log(
+        `[ActivityTracker] Polling every ${Math.round(POLL_MS / 1000)}s, `
+        + `syncing every ${SYNC_MS / 1000}s, activity-idle≥${activityIdleThresholdSec}s.`,
+    );
 }
 
 function stop() {
@@ -200,6 +227,7 @@ module.exports = {
     SYNC_MS,
     start,
     stop,
+    setActivityIdleThreshold,
     buildSyncPayload,
     getScreenshotActivityLevel,
     getLastInputTimestamp,

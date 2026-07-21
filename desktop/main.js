@@ -10,6 +10,11 @@ const systemInput = require('./systemInput');
 const networkInfo = require('./networkInfo');
 const timerReminderPrompt = require('./timerReminderPrompt');
 
+// Windows taskbar grouping — must be set before app is ready.
+if (process.platform === 'win32') {
+    app.setAppUserModelId('com.flowtrack.desktop');
+}
+
 // ──────────────────────────────────────────────
 //  Config
 // ──────────────────────────────────────────────
@@ -47,7 +52,7 @@ let pausedByIdle = false;
 let tray = null;
 let shutdownDone = false;
 let windowVisible = false;
-const IDLE_RESUME_SEC = 12;
+const IDLE_RESUME_SEC = 5; // resume shortly after any mouse/keyboard activity
 const IDLE_CHECK_MS = 5 * 1000;
 const DISTRACTION_ALERT_MS = 5 * 1000;
 const DISTRACTION_CHECK_MS = 2 * 1000;
@@ -153,6 +158,70 @@ function clearDesktopSession() {
     stopMonitoringLoop();
 }
 
+async function apiJsonRequest(method, apiPath, token, bodyObj = null) {
+    const body = bodyObj == null ? null : JSON.stringify(bodyObj);
+    const urlParts = new URL(`${API_BASE_URL}${apiPath}`);
+    const isHttps = urlParts.protocol === 'https:';
+    const lib = isHttps ? https : http;
+    const headers = {
+        ...getApiHeaders({
+            ...(body ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) } : {}),
+        }),
+        Authorization: `Bearer ${token}`,
+    };
+
+    return new Promise((resolve, reject) => {
+        const req = lib.request({
+            hostname: urlParts.hostname,
+            port: urlParts.port || (isHttps ? 443 : 80),
+            path: urlParts.pathname + (urlParts.search || ''),
+            method,
+            headers,
+        }, (res) => {
+            let data = '';
+            res.on('data', (chunk) => { data += chunk; });
+            res.on('end', () => {
+                if (res.statusCode >= 200 && res.statusCode < 300) {
+                    resolve({ statusCode: res.statusCode, body: data });
+                } else {
+                    reject(Object.assign(new Error(`API ${method} ${apiPath} failed: ${res.statusCode}`), {
+                        statusCode: res.statusCode,
+                        body: data,
+                    }));
+                }
+            });
+        });
+        req.on('error', reject);
+        if (body) req.write(body);
+        req.end();
+    });
+}
+
+/** Flush activity + stop the open time entry before clearing auth (logout). */
+async function stopTrackingBeforeLogout() {
+    const entryId = currentSession.timeEntryId;
+    const token = currentSession.token;
+    const wasTracking = currentSession.isTracking;
+
+    if (wasTracking && entryId && token) {
+        try {
+            await syncActivityToBackend(false);
+        } catch (err) {
+            console.warn('[Logout] Final activity sync failed:', err.message);
+        }
+    }
+
+    if (entryId && token) {
+        try {
+            await apiJsonRequest('POST', `/time-entries/${entryId}/stop`, token);
+            console.log(`[Logout] Stopped time entry ${entryId}.`);
+        } catch (err) {
+            // Already stopped is fine
+            console.warn('[Logout] Stop time entry failed:', err.message);
+        }
+    }
+}
+
 async function readTokenFromRenderer() {
     if (!mainWindow || mainWindow.isDestroyed()) {
         return currentSession.token;
@@ -227,7 +296,7 @@ async function resolveAuthToken(forceRefresh = false) {
     return currentSession.token;
 }
 
-function resolveAppIcon() {
+function resolveAppIconPath() {
     const candidates = process.platform === 'win32'
         ? [
             path.join(__dirname, 'build', 'icon.ico'),
@@ -241,13 +310,17 @@ function resolveAppIcon() {
 
     for (const candidate of candidates) {
         if (fs.existsSync(candidate)) {
-            const image = nativeImage.createFromPath(candidate);
-            if (!image.isEmpty()) {
-                return image;
-            }
+            return candidate;
         }
     }
     return null;
+}
+
+function resolveAppIcon() {
+    const iconPath = resolveAppIconPath();
+    if (!iconPath) return null;
+    const image = nativeImage.createFromPath(iconPath);
+    return image.isEmpty() ? null : image;
 }
 
 function isFlowTrackProcess(win) {
@@ -303,7 +376,12 @@ function resolveFrontendIndexPath() {
 //  Window
 // ──────────────────────────────────────────────
 function createWindow() {
+    const iconPath = resolveAppIconPath();
     const appIcon = resolveAppIcon();
+    // Windows taskbar prefers a filesystem .ico path over a nativeImage handle.
+    const windowIcon = process.platform === 'win32' && iconPath
+        ? iconPath
+        : (appIcon || undefined);
 
     mainWindow = new BrowserWindow({
         width: 1280,
@@ -311,7 +389,7 @@ function createWindow() {
         minWidth: 900,
         minHeight: 600,
         frame: false,
-        icon: appIcon || undefined,
+        icon: windowIcon,
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             nodeIntegration: false,
@@ -321,6 +399,14 @@ function createWindow() {
         show: false,
         title: 'FlowTrack',
     });
+
+    if (iconPath) {
+        try {
+            mainWindow.setIcon(iconPath);
+        } catch (err) {
+            console.warn('[Window] Failed to set icon:', err.message);
+        }
+    }
 
     const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
     const devUrl = process.env.FLOWTRACK_FRONTEND_URL || 'http://localhost:5173';
@@ -883,39 +969,90 @@ function stopMonitoringLoop() {
     console.log('[Monitoring] Stopped.');
 }
 
+function idleTimeoutMinutes() {
+    return Math.max(1, Math.round(idleThresholdSec / 60));
+}
+
+function softActivityIdleThresholdSec() {
+    // Brief typing gaps stay "active"; longer AFK counts toward Idle Breakdown.
+    // Scales with org idle timeout (5 min → 60s soft threshold).
+    return Math.min(120, Math.max(45, Math.floor(idleThresholdSec / 5)));
+}
+
+async function discardIdleFromEntry(seconds) {
+    const entryId = currentSession.timeEntryId;
+    const token = currentSession.token;
+    if (!entryId || !token || seconds <= 0) return;
+    try {
+        await apiJsonRequest('POST', `/time-entries/${entryId}/discard-idle`, token, {
+            seconds: Math.round(seconds),
+        });
+        console.log(`[Idle] Discarded ${seconds}s idle from entry ${entryId}.`);
+    } catch (err) {
+        console.warn('[Idle] Discard idle failed:', err.message);
+    }
+}
+
+function handleIdleKeepResponse(action) {
+    if (action === 'no') {
+        void discardIdleFromEntry(idleThresholdSec);
+        showDesktopNotification('FlowTrack', 'Idle time discarded from this timer.');
+        return;
+    }
+    showDesktopNotification('FlowTrack', 'Idle time kept on this timer.');
+}
+
 function handleIdlePause() {
     if (!currentSession.isTracking || isPaused || pausedByIdle || pausedByLock) return;
 
+    const mins = idleTimeoutMinutes();
     pausedByIdle = true;
     isPaused = true;
     stopMonitoringCapture();
 
+    const discardIdleSeconds = keepIdleTimeMode === 'never' ? idleThresholdSec : 0;
+
     showDesktopNotification(
         'FlowTrack — Timer Paused',
-        'You were idle for 5 minutes. Timer will resume automatically when you return.'
+        `You were idle for ${mins} minute${mins === 1 ? '' : 's'}. Timer will resume when you return.`,
     );
 
     if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('timer-idle-paused', { idleMinutes: 5 });
+        mainWindow.webContents.send('timer-idle-paused', {
+            idleMinutes: mins,
+            keepIdleTime: keepIdleTimeMode,
+            discardIdleSeconds,
+        });
     }
 
-    console.log('[Monitoring] Auto-paused after 5 minutes of system idle.');
+    if (keepIdleTimeMode === 'prompt') {
+        setTimeout(() => {
+            if (!pausedByIdle || !currentSession.isTracking) return;
+            timerReminderPrompt.showIdleKeep(mins, handleIdleKeepResponse);
+        }, 400);
+    }
+
+    console.log(`[Monitoring] Auto-paused after ${mins} min idle (keep=${keepIdleTimeMode}).`);
 }
 
 function handleIdleResume() {
     if (!currentSession.isTracking || !pausedByIdle) return;
 
+    const mins = idleTimeoutMinutes();
     pausedByIdle = false;
     isPaused = false;
+    timerReminderPrompt.close();
     startMonitoringLoop();
 
-    showDesktopNotification(
-        'FlowTrack — Timer Resumed',
-        'Welcome back! Your previous 5 minutes were idle/unproductive.'
-    );
+    setTimeout(() => {
+        showDesktopNotification(
+            'FlowTrack — Timer Resumed',
+            `Welcome back! Your previous ${mins} minute${mins === 1 ? '' : 's'} were idle/unproductive.`,
+        );
+    }, 400);
 
     if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('timer-idle-resumed', { idleMinutes: 5 });
+        mainWindow.webContents.send('timer-idle-resumed', { idleMinutes: mins });
     }
 
     console.log('[Monitoring] Auto-resumed after user returned from idle.');
@@ -956,6 +1093,7 @@ function startMonitoringLoop() {
     scheduleNextScreenshot();
 
     if (activityTrackingEnabled) {
+        activityTracker.setActivityIdleThreshold(softActivityIdleThresholdSec());
         activityTracker.start({
             getForegroundApp,
             extractUrlFromTitle: (title, appName) => (
@@ -998,8 +1136,9 @@ function startSessionRefreshLoop() {
 ipcMain.handle('get-app-version', () => app.getVersion());
 
 // Called from renderer when user logs in / out
-ipcMain.handle('set-auth-token', (_event, token) => {
+ipcMain.handle('set-auth-token', async (_event, token) => {
     if (!token) {
+        await stopTrackingBeforeLogout();
         clearDesktopSession();
         stopSessionRefreshLoop();
         console.log('[IPC] Auth cleared — desktop session stopped.');
@@ -1013,7 +1152,8 @@ ipcMain.handle('set-auth-token', (_event, token) => {
     return { success: true };
 });
 
-ipcMain.handle('logout-session', () => {
+ipcMain.handle('logout-session', async () => {
+    await stopTrackingBeforeLogout();
     clearDesktopSession();
     stopSessionRefreshLoop();
     console.log('[IPC] Full logout — desktop session cleared.');
@@ -1035,6 +1175,7 @@ ipcMain.handle('start-tracking', (_event, { timeEntryId, token, screenshotInterv
     const idleMinutes = Number(cfg.idle_timeout_minutes ?? 5);
     idleThresholdSec = Math.max(60, idleMinutes * 60);
     keepIdleTimeMode = cfg.keep_idle_time || 'prompt';
+    activityTracker.setActivityIdleThreshold(softActivityIdleThresholdSec());
     timerReminderEnabled = cfg.timer_reminder_enabled !== false;
     isPaused = false;
     pausedByLock = false;
@@ -1064,8 +1205,9 @@ ipcMain.handle('pause-tracking', () => {
     if (!currentSession.isTracking) {
         return { success: false, error: 'No active tracking session' };
     }
-    pausedByLock = false;
-    pausedByIdle = false;
+    // Do not clear pausedByLock / pausedByIdle here — lock and idle own those flags.
+    // Clearing them broke auto-resume on unlock / return-from-idle after the renderer
+    // called pause() to sync the API timer.
     isPaused = true;
     pausedWorkReminderState.activeSince = null;
     pausedWorkReminderState.snoozeUntil = 0;
@@ -1177,7 +1319,10 @@ app.whenReady().then(() => {
         if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.webContents.send('system-unlocked');
         }
-        showDesktopNotification('FlowTrack', 'Timer resumed — welcome back!');
+        // Windows often drops notifications during the unlock moment — delay slightly.
+        setTimeout(() => {
+            showDesktopNotification('FlowTrack', 'Timer resumed — welcome back!');
+        }, 600);
         console.log('[Power] Unlock screen — tracking resumed.');
     });
 

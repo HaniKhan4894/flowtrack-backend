@@ -29,6 +29,7 @@
         "electron": "^31.0.0",
         "electron-builder": "^25.1.8",
         "png-to-ico": "^2.1.8",
+        "rcedit": "^5.0.2",
         "sharp": "^0.33.5"
     },
     "build": {
@@ -50,6 +51,8 @@
             "preload.js",
             "config.js",
             "icon.png",
+            "build/icon.ico",
+            "build/icon.png",
             "package.json",
             "node_modules/active-win/**/*",
             "node_modules/@mapbox/**/*",
@@ -84,6 +87,7 @@
             "icon": "build/icon.ico",
             "signAndEditExecutable": false
         },
+        "afterPack": "./scripts/afterPack.js",
         "mac": {
             "target": [
                 {
@@ -105,7 +109,10 @@
             "oneClick": false,
             "allowToChangeInstallationDirectory": true,
             "createDesktopShortcut": true,
-            "createStartMenuShortcut": true
+            "createStartMenuShortcut": true,
+            "installerIcon": "build/icon.ico",
+            "uninstallerIcon": "build/icon.ico",
+            "installerHeaderIcon": "build/icon.ico"
         },
         "dmg": {
             "title": "FlowTrack"

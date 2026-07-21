@@ -131,6 +131,7 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\API\V1'], function ($r
     $routes->post('time-entries/start', 'TimeEntryController::start', ['filter' => 'permission:time.edit_own']);
     $routes->post('time-entries/(:num)/stop', 'TimeEntryController::stop/$1', ['filter' => 'permission:time.edit_own']);
     $routes->post('time-entries/(:num)/pause', 'TimeEntryController::pause/$1', ['filter' => 'permission:time.edit_own']);
+    $routes->post('time-entries/(:num)/discard-idle', 'TimeEntryController::discardIdle/$1', ['filter' => 'permission:time.edit_own']);
     $routes->post('time-entries/(:num)/resume', 'TimeEntryController::resume/$1', ['filter' => 'permission:time.edit_own']);
     $routes->get('time-entries/active', 'TimeEntryController::active', ['filter' => 'permission:time.view_own']);
     $routes->post('time-entries/manual', 'TimeEntryController::manual', ['filter' => 'permission:time.manual_entry']);

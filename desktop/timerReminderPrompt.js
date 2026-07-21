@@ -13,6 +13,26 @@ let remainingSec = COUNTDOWN_SEC;
 let responseHandler = null;
 
 function buildHtml(seconds) {
+    return buildPromptHtml({
+        title: 'Working right now?',
+        subtitle: 'Want to start your timer?',
+        yesLabel: 'Yes',
+        noLabel: 'No',
+        seconds,
+    });
+}
+
+function buildIdleKeepHtml(idleMinutes, seconds) {
+    return buildPromptHtml({
+        title: 'Idle time detected',
+        subtitle: `Keep the last ${idleMinutes} min of idle time on this timer?`,
+        yesLabel: 'Keep',
+        noLabel: 'Discard',
+        seconds,
+    });
+}
+
+function buildPromptHtml({ title, subtitle, yesLabel, noLabel, seconds }) {
     return `<!DOCTYPE html>
 <html>
 <head>
@@ -61,12 +81,12 @@ function buildHtml(seconds) {
 </head>
 <body>
   <div class="wrap">
-    <div class="title"><span class="icon">⏱</span> Working right now?</div>
-    <div class="subtitle">Want to start your timer?</div>
+    <div class="title"><span class="icon">⏱</span> ${title}</div>
+    <div class="subtitle">${subtitle}</div>
     <div class="actions">
       <div class="countdown" id="cd">${seconds}</div>
-      <button class="primary" id="yes">Yes</button>
-      <button id="no">No</button>
+      <button class="primary" id="yes">${yesLabel}</button>
+      <button id="no">${noLabel}</button>
     </div>
   </div>
   <script>
@@ -99,6 +119,15 @@ function isOpen() {
 }
 
 function show(onResponse) {
+    openPrompt(buildHtml(COUNTDOWN_SEC), onResponse, 'no');
+}
+
+function showIdleKeep(idleMinutes, onResponse) {
+    const mins = Math.max(1, Math.round(Number(idleMinutes) || 5));
+    openPrompt(buildIdleKeepHtml(mins, COUNTDOWN_SEC), onResponse, 'yes');
+}
+
+function openPrompt(html, onResponse, timeoutAction = 'no') {
     if (isOpen()) {
         return;
     }
@@ -131,7 +160,7 @@ function show(onResponse) {
     });
 
     promptWindow.setMenuBarVisibility(false);
-    promptWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(buildHtml(remainingSec))}`);
+    promptWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
 
     promptWindow.once('ready-to-show', () => {
         if (promptWindow && !promptWindow.isDestroyed()) {
@@ -148,7 +177,7 @@ function show(onResponse) {
     countdownInterval = setInterval(() => {
         remainingSec -= 1;
         if (remainingSec <= 0) {
-            fireResponse('no');
+            fireResponse(timeoutAction);
             return;
         }
         if (promptWindow && !promptWindow.isDestroyed()) {
@@ -180,6 +209,7 @@ registerIpc();
 
 module.exports = {
     show,
+    showIdleKeep,
     close: closePrompt,
     isOpen,
 };

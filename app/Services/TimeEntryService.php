@@ -328,8 +328,10 @@ class TimeEntryService
 
     /**
      * Pause timer
+     *
+     * @param int $discardIdleSeconds Optional seconds to exclude from elapsed (keep_idle_time=never).
      */
-    public function pauseTimer(int $userId, int $entryId): array
+    public function pauseTimer(int $userId, int $entryId, int $discardIdleSeconds = 0): array
     {
         $entry = $this->timeEntryModel->find($entryId);
 
@@ -347,11 +349,42 @@ class TimeEntryService
             throw new \Exception('Timer is already paused');
         }
 
+        $discard = max(0, $discardIdleSeconds);
+        $pausedDuration = (int) ($entry['paused_duration_seconds'] ?? 0) + $discard;
+
         $this->timeEntryModel->update((int) $entry['id'], [
             'paused_at' => date('Y-m-d H:i:s'),
+            'paused_duration_seconds' => $pausedDuration,
         ]);
 
         return $this->formatActiveTimer($this->timeEntryModel->find((int) $entry['id']));
+    }
+
+    /**
+     * Exclude idle seconds from a paused (or open) entry by bumping paused_duration_seconds.
+     */
+    public function discardIdleTime(int $userId, int $entryId, int $seconds): array
+    {
+        $entry = $this->timeEntryModel->find($entryId);
+
+        if (!$entry || (int) $entry['user_id'] !== $userId || !empty($entry['ended_at'])) {
+            throw new \Exception('Invalid time entry');
+        }
+
+        $discard = max(0, $seconds);
+        if ($discard <= 0) {
+            return $this->formatActiveTimer($entry);
+        }
+
+        $pausedDuration = (int) ($entry['paused_duration_seconds'] ?? 0) + $discard;
+        $this->timeEntryModel->update((int) $entry['id'], [
+            'paused_duration_seconds' => $pausedDuration,
+        ]);
+
+        $fresh = $this->timeEntryModel->find((int) $entry['id']);
+        return !empty($fresh['paused_at']) || empty($fresh['ended_at'])
+            ? $this->formatActiveTimer($fresh)
+            : $fresh;
     }
 
     /**

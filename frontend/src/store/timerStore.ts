@@ -13,7 +13,9 @@ interface TimerState {
     isPaused: boolean;
     start: (projectId?: number | null, description?: string, taskId?: number) => Promise<void>;
     stop: () => Promise<void>;
-    pause: () => Promise<void>;
+    /** Stop running timer without reverting UI — used before logout/sign-out. */
+    stopForLogout: () => Promise<void>;
+    pause: (options?: { discardIdleSeconds?: number }) => Promise<void>;
     resume: () => Promise<void>;
     loadActive: () => Promise<void>;
     tick: () => void;
@@ -22,6 +24,8 @@ interface TimerState {
 
 let resyncInterval: ReturnType<typeof setInterval> | null = null;
 let pausedBySystemIdle = false;
+let pausedBySystemLock = false;
+let lockPausePromise: Promise<void> | null = null;
 
 function setTrackingSessionActive(active: boolean) {
     if (typeof window !== 'undefined') {
@@ -110,6 +114,7 @@ export const useTimerStore = create<TimerState>((set, get) => ({
         set({ activeEntry: null, isRunning: false, isPaused: false, elapsed: 0 });
         setTrackingSessionActive(false);
         pausedBySystemIdle = false;
+        pausedBySystemLock = false;
         monitoringService.stopMonitoring();
         stopResync();
 
@@ -142,20 +147,45 @@ export const useTimerStore = create<TimerState>((set, get) => ({
         }
     },
 
-    resetLocal: () => {
+    stopForLogout: async () => {
+        const { activeEntry } = get();
+        const entryId = activeEntry?.id;
+
+        // Stop on the server first while the auth token is still valid.
+        if (entryId && entryId > 0) {
+            try {
+                await timeService.stopTimer(entryId);
+            } catch (error) {
+                console.warn('[Timer] Stop on logout failed:', error);
+            }
+        }
+
         set({ activeEntry: null, isRunning: false, isPaused: false, elapsed: 0 });
         setTrackingSessionActive(false);
         pausedBySystemIdle = false;
+        pausedBySystemLock = false;
         monitoringService.stopMonitoring();
         stopResync();
     },
 
-    pause: async () => {
+    resetLocal: () => {
+        set({ activeEntry: null, isRunning: false, isPaused: false, elapsed: 0 });
+        setTrackingSessionActive(false);
+        pausedBySystemIdle = false;
+        pausedBySystemLock = false;
+        monitoringService.stopMonitoring();
+        stopResync();
+    },
+
+    pause: async (options) => {
         const { activeEntry } = get();
         if (!activeEntry) return;
 
         try {
-            const response = await timeService.pauseTimer(activeEntry.id);
+            const discard = Math.max(0, Math.round(options?.discardIdleSeconds ?? 0));
+            const response = await timeService.pauseTimer(activeEntry.id, {
+                discard_idle_seconds: discard,
+            });
             set({
                 isPaused: true,
                 activeEntry: response.data,
@@ -268,9 +298,37 @@ if (typeof window !== 'undefined') {
         window.electronAPI.onSystemLockChange((locked: boolean) => {
             const store = useTimerStore.getState();
             if (locked && store.isRunning && !store.isPaused) {
-                store.pause().catch(() => undefined);
-            } else if (!locked && store.isRunning && store.isPaused && !pausedBySystemIdle) {
-                store.resume().catch(() => undefined);
+                pausedBySystemLock = true;
+                lockPausePromise = store.pause()
+                    .catch(() => undefined)
+                    .finally(() => { lockPausePromise = null; });
+                window.dispatchEvent(new CustomEvent('flowtrack-idle-notice', {
+                    detail: {
+                        type: 'paused',
+                        message: 'Timer paused — your system was locked.',
+                    },
+                }));
+                return;
+            }
+
+            if (!locked && pausedBySystemLock) {
+                pausedBySystemLock = false;
+                const pendingPause = lockPausePromise;
+                void (async () => {
+                    if (pendingPause) {
+                        await pendingPause;
+                    }
+                    const latest = useTimerStore.getState();
+                    if (latest.activeEntry && (latest.isRunning || latest.isPaused)) {
+                        await latest.resume().catch(() => undefined);
+                    }
+                    window.dispatchEvent(new CustomEvent('flowtrack-idle-notice', {
+                        detail: {
+                            type: 'resumed',
+                            message: 'Timer resumed — welcome back!',
+                        },
+                    }));
+                })();
             }
         });
     }
@@ -283,7 +341,9 @@ if (typeof window !== 'undefined') {
             if (state === 'paused') {
                 pausedBySystemIdle = true;
                 if (store.isRunning && !store.isPaused) {
-                    store.pause().catch(() => undefined);
+                    store.pause({
+                        discardIdleSeconds: Number(data?.discardIdleSeconds ?? 0) || 0,
+                    }).catch(() => undefined);
                 }
                 window.dispatchEvent(new CustomEvent('flowtrack-idle-notice', {
                     detail: {

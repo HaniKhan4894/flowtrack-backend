@@ -26,8 +26,13 @@ export const timeService = {
         return response.data;
     },
 
-    pauseTimer: async (id: number) => {
-        const response = await client.post(`/time-entries/${id}/pause`);
+    pauseTimer: async (id: number, options?: { discard_idle_seconds?: number }) => {
+        const response = await client.post(`/time-entries/${id}/pause`, options ?? {});
+        return response.data;
+    },
+
+    discardIdle: async (id: number, seconds: number) => {
+        const response = await client.post(`/time-entries/${id}/discard-idle`, { seconds });
         return response.data;
     },
 

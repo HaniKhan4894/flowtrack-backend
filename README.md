@@ -72,7 +72,8 @@ Desktop icon:
 - Icons run automatically before `npm run build:desktop:win`
 
 Windows build notes:
-- Unsigned builds are enabled by default (`signAndEditExecutable: false`).
+- Unsigned builds use `signAndEditExecutable: false` (avoids winCodeSign / win-unpacked symlink errors).
+- App icon is embedded via `desktop/scripts/afterPack.js` (rcedit) so the installed `.exe` still gets the FlowTrack icon.
 - For full `active-win` native support in packaged builds, install Visual Studio Build Tools (C++) and remove `npmRebuild: false` from `desktop/package.json`.
 
 ## Database

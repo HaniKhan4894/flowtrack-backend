@@ -1094,11 +1094,15 @@ class ReportService
                 'user_id' => $u['user_id'],
                 'first_name' => $u['first_name'],
                 'last_name' => $u['last_name'],
+                'idle_seconds' => $u['idle_seconds'],
+                'active_seconds' => $u['active_seconds'],
                 'idle_hours' => round($u['idle_seconds'] / 3600, 2),
                 'active_hours' => round($u['active_seconds'] / 3600, 2),
                 'idle_percentage' => $total > 0 ? round(($u['idle_seconds'] / $total) * 100, 1) : 0,
             ];
         }, $byUser));
+
+        usort($users, static fn ($a, $b) => $b['idle_seconds'] <=> $a['idle_seconds']);
 
         $grandTotal = $totalIdle + $totalActive;
 

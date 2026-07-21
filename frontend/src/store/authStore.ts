@@ -15,7 +15,7 @@ interface AuthState {
     setUser: (user: User) => void;
     refreshProfile: () => Promise<void>;
     ensureValidSession: () => Promise<boolean>;
-    logout: () => void;
+    logout: () => Promise<void>;
     forceLogout: () => Promise<void>;
     initAuth: () => Promise<void>;
 }
@@ -142,8 +142,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         }
     },
 
-    logout: () => {
-        monitoringService.stopMonitoring();
+    logout: async () => {
+        // Stop server-side timer while auth token is still valid.
+        try {
+            const { useTimerStore } = await import('./timerStore');
+            await useTimerStore.getState().stopForLogout();
+        } catch {
+            monitoringService.stopMonitoring();
+        }
+
         authService.logout().catch(() => undefined);
         clearAuthTokens();
         set({
@@ -152,11 +159,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             isAuthenticated: false,
             sessionReady: true,
         });
-        void clearElectronSession();
+        await clearElectronSession();
     },
 
     forceLogout: async () => {
-        monitoringService.stopMonitoring();
+        try {
+            const { useTimerStore } = await import('./timerStore');
+            await useTimerStore.getState().stopForLogout();
+        } catch {
+            monitoringService.stopMonitoring();
+        }
+
         authService.logout().catch(() => undefined);
 
         clearAuthTokens();

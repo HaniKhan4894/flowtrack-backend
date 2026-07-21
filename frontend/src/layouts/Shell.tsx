@@ -18,8 +18,6 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { TimerWidget } from '../components/TimerWidget';
 import { notificationService } from '../api/notificationService';
-import { useTimerStore } from '../store/timerStore';
-import { timeService } from '../api/timeService';
 import { getNavGroupsForUser, getNavItemsForUser, isSuperAdmin, canViewOrgPackage } from '../utils/access';
 import { hardRedirectToLogin, isDesktopApp } from '../utils/electronAuth';
 import { isDesktopForeground } from '../utils/desktopLifecycle';
@@ -119,7 +117,6 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
   const logout = useAuthStore((s) => s.logout);
   const navigate = useNavigate();
   const location = useLocation();
-  const resetLocal = useTimerStore((s) => s.resetLocal);
   const [notifications, setNotifications] = useState<Record<string, unknown>[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -133,18 +130,11 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
     setMobileNavOpen(false);
   }, [location.pathname, setMobileNavOpen]);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     if (isLoggingOut) return;
     setIsLoggingOut(true);
 
-    const activeEntryId = useTimerStore.getState().activeEntry?.id;
-    resetLocal();
-
-    if (activeEntryId) {
-      void timeService.stopTimer(activeEntryId).catch(() => undefined);
-    }
-
-    logout();
+    await logout();
 
     if (isDesktopApp()) {
       hardRedirectToLogin();
