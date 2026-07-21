@@ -331,6 +331,13 @@ class ReportService
             return [];
         }
 
+        // Split any open timers that crossed midnight before reporting live elapsed.
+        try {
+            (new TimeEntryService())->syncOpenTimersForUsers($userIds);
+        } catch (\Throwable $e) {
+            log_message('error', 'Active session day-boundary sync failed: ' . $e->getMessage());
+        }
+
         $rows = $this->timeEntryModel->builder()
             ->select('
                 time_entries.id,

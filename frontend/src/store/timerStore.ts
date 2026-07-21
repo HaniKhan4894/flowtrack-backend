@@ -180,8 +180,19 @@ export const useTimerStore = create<TimerState>((set, get) => ({
             });
             const token = useAuthStore.getState().accessToken ?? undefined;
             monitoringService.resumeMonitoring(token);
-        } catch (error) {
+        } catch (error: unknown) {
             console.error('Failed to resume timer', error);
+            const message = (error as { response?: { data?: { message?: string } } })?.response?.data?.message ?? '';
+            // Overnight pause closes yesterday's entry — start a fresh timer for today.
+            if (/already stopped|start a new timer/i.test(message)) {
+                const projectId = activeEntry.project_id ?? null;
+                const description = activeEntry.description || undefined;
+                const taskId = activeEntry.task_id ?? undefined;
+                set({ activeEntry: null, isRunning: false, isPaused: false, elapsed: 0 });
+                await get().start(projectId, description, taskId ?? undefined);
+                return;
+            }
+            await get().loadActive();
         }
     },
 

@@ -39,6 +39,171 @@ class TimeEntryService
         return max(0, $elapsed);
     }
 
+    private function orgLocalDate(string $utcTimestamp, string $phpTz): string
+    {
+        $local = $this->timezoneService->toOrgLocal($utcTimestamp, $phpTz);
+
+        return $local ? substr($local, 0, 10) : substr($utcTimestamp, 0, 10);
+    }
+
+    private function orgLocalToday(string $phpTz): string
+    {
+        try {
+            return (new \DateTime('now', new \DateTimeZone($phpTz)))->format('Y-m-d');
+        } catch (\Exception $e) {
+            return date('Y-m-d');
+        }
+    }
+
+    private function nextLocalDate(string $localDate): string
+    {
+        try {
+            return (new \DateTime($localDate . ' 12:00:00'))->modify('+1 day')->format('Y-m-d');
+        } catch (\Exception $e) {
+            return date('Y-m-d', strtotime($localDate . ' +1 day'));
+        }
+    }
+
+    /**
+     * Close an open entry at $endedAtUtc with pause-aware duration.
+     * When $endedAtEqualsPause, treat end as the pause moment (overnight pause).
+     */
+    private function closeOpenEntryAt(array $entry, string $endedAtUtc, bool $endedAtEqualsPause = false): array
+    {
+        $started = strtotime((string) $entry['started_at']);
+        $ended = strtotime($endedAtUtc);
+        if (!$started || !$ended || $ended < $started) {
+            $ended = $started ?: time();
+            $endedAtUtc = date('Y-m-d H:i:s', $ended);
+        }
+
+        $paused = (int) ($entry['paused_duration_seconds'] ?? 0);
+        if (!$endedAtEqualsPause && !empty($entry['paused_at'])) {
+            $pausedAt = strtotime((string) $entry['paused_at']);
+            if ($pausedAt && $pausedAt < $ended) {
+                $paused += ($ended - $pausedAt);
+            }
+        }
+
+        $netDuration = max(0, $ended - $started - $paused);
+
+        $this->timeEntryModel->update((int) $entry['id'], [
+            'ended_at' => $endedAtUtc,
+            'paused_at' => null,
+            'paused_duration_seconds' => $paused,
+            'duration_seconds' => $netDuration,
+        ]);
+
+        $closed = $this->formatTimeEntry($this->timeEntryModel->find((int) $entry['id']));
+        $closed = $this->attachProjectName($closed);
+
+        try {
+            $this->notificationService->notifyTimeEntryStopped((int) $entry['user_id'], $closed);
+        } catch (\Throwable $e) {
+            log_message('error', 'Timer stopped notification failed: ' . $e->getMessage());
+        }
+
+        $this->recordToLedger((int) $closed['organization_id'], (int) $entry['user_id'], (int) $entry['id'], 'record');
+        $this->emitEntryEvent('time_entry.completed', (int) $closed['organization_id'], $closed);
+
+        return $closed;
+    }
+
+    /**
+     * Continue tracking into the next calendar day with a fresh open entry.
+     */
+    private function openContinuationEntry(array $fromEntry, string $startedAtUtc, ?string $pausedAtUtc = null): array
+    {
+        $data = [
+            'user_id' => (int) $fromEntry['user_id'],
+            'organization_id' => (int) $fromEntry['organization_id'],
+            'project_id' => $fromEntry['project_id'] ?? null,
+            'task_id' => $fromEntry['task_id'] ?? null,
+            'description' => $fromEntry['description'] ?? null,
+            'started_at' => $startedAtUtc,
+            'ended_at' => null,
+            'paused_at' => $pausedAtUtc,
+            'paused_duration_seconds' => 0,
+            'duration_seconds' => 0,
+            'is_manual' => false,
+            'is_billable' => $fromEntry['is_billable'] ?? true,
+            'hourly_rate' => $fromEntry['hourly_rate'] ?? null,
+        ];
+
+        foreach (['client_public_ip', 'client_router_mac', 'work_location'] as $field) {
+            if (array_key_exists($field, $fromEntry) && $fromEntry[$field] !== null && $fromEntry[$field] !== '') {
+                $data[$field] = $fromEntry[$field];
+            }
+        }
+
+        $id = $this->timeEntryModel->insert($data);
+        if (!$id) {
+            throw new \RuntimeException('Failed to continue timer into the next day');
+        }
+
+        return $this->timeEntryModel->find($id);
+    }
+
+    /**
+     * Split open timers that crossed midnight (org timezone).
+     *
+     * - Running overnight: close prior day(s) at 23:59:59, open continuation at 00:00:00.
+     * - Paused overnight: close at pause time (no phantom overnight hours); resume starts a new entry.
+     *
+     * @return array|null Current open entry after sync, or null if nothing left running
+     */
+    public function syncOpenTimerDayBoundary(array $entry): ?array
+    {
+        if (!empty($entry['ended_at'])) {
+            return null;
+        }
+
+        $orgId = (int) ($entry['organization_id'] ?? 0);
+        $phpTz = $this->timezoneService->getOrgTimezone($orgId);
+        $today = $this->orgLocalToday($phpTz);
+        $startDate = $this->orgLocalDate((string) $entry['started_at'], $phpTz);
+
+        if ($startDate >= $today) {
+            return $entry;
+        }
+
+        // Paused across calendar days → finalize at pause; caller/resume opens a new day entry.
+        if (!empty($entry['paused_at'])) {
+            $this->closeOpenEntryAt($entry, (string) $entry['paused_at'], true);
+
+            return null;
+        }
+
+        // Running across one or more midnights
+        $current = $entry;
+        $guard = 0;
+        while ($guard++ < 60) {
+            $startDate = $this->orgLocalDate((string) $current['started_at'], $phpTz);
+            if ($startDate >= $today) {
+                return $current;
+            }
+
+            [, $endOfDayUtc] = $this->timezoneService->dayRangeUtc($startDate, $phpTz);
+            $nowUtc = gmdate('Y-m-d H:i:s');
+            // Safety: never close in the future
+            if ($endOfDayUtc > $nowUtc) {
+                return $current;
+            }
+
+            $this->closeOpenEntryAt($current, $endOfDayUtc, false);
+
+            $nextDate = $this->nextLocalDate($startDate);
+            [$nextStartUtc] = $this->timezoneService->dayRangeUtc($nextDate, $phpTz);
+
+            // If next day is still in the past relative to "today", continue the chain;
+            // if next day is today or later, open continuation from day start (or now if somehow later).
+            $continueFrom = $nextStartUtc <= $nowUtc ? $nextStartUtc : $nowUtc;
+            $current = $this->openContinuationEntry($current, $continueFrom, null);
+        }
+
+        return $current;
+    }
+
     private function formatActiveTimer(array $entry): array
     {
         $orgId = (int) ($entry['organization_id'] ?? 0);
@@ -64,7 +229,7 @@ class TimeEntryService
      */
     public function startTimer(int $userId, int $organizationId, array $data): array
     {
-        // Check if user has active timer
+        // Check if user has active timer (also syncs midnight splits first)
         $activeTimer = $this->getActiveTimer($userId);
         if ($activeTimer) {
             throw new \Exception('You already have an active timer running');
@@ -144,38 +309,21 @@ class TimeEntryService
             throw new \Exception('Timer already stopped');
         }
 
+        // Split prior days first so stop only finalizes today's segment
+        $synced = $this->syncOpenTimerDayBoundary($entry);
+        if (!$synced) {
+            // Overnight pause already finalized the entry
+            $closed = $this->timeEntryModel->find($entryId);
+            if ($closed && !empty($closed['ended_at'])) {
+                return $this->attachProjectName($this->formatTimeEntry($closed));
+            }
+            throw new \Exception('Timer already stopped');
+        }
+
+        $entry = $synced;
         $endedAt = date('Y-m-d H:i:s');
 
-        // Calculate total duration excluding the time spent paused
-        $totalSeconds = strtotime($endedAt) - strtotime($entry['started_at']);
-
-        // If it was paused when stopped, we need to handle that
-        $pausedDuration = (int) ($entry['paused_duration_seconds'] ?? 0);
-        if ($entry['paused_at']) {
-            $pausedDuration += (strtotime($endedAt) - strtotime($entry['paused_at']));
-        }
-
-        $netDuration = $totalSeconds - $pausedDuration;
-
-        $this->timeEntryModel->update($entryId, [
-            'ended_at' => $endedAt,
-            'paused_at' => null, // Clear pause state if any
-            'paused_duration_seconds' => $pausedDuration,
-            'duration_seconds' => $netDuration > 0 ? $netDuration : 0
-        ]);
-
-        $entry = $this->formatTimeEntry($this->timeEntryModel->find($entryId));
-        $entry = $this->attachProjectName($entry);
-        try {
-            $this->notificationService->notifyTimeEntryStopped($userId, $entry);
-        } catch (\Throwable $e) {
-            log_message('error', 'Timer stopped notification failed: ' . $e->getMessage());
-        }
-
-        $this->recordToLedger((int) $entry['organization_id'], $userId, $entryId, 'record');
-        $this->emitEntryEvent('time_entry.completed', (int) $entry['organization_id'], $entry);
-
-        return $entry;
+        return $this->attachProjectName($this->closeOpenEntryAt($entry, $endedAt, false));
     }
 
     /**
@@ -189,15 +337,21 @@ class TimeEntryService
             throw new \Exception('Invalid time entry');
         }
 
+        $synced = $this->syncOpenTimerDayBoundary($entry);
+        if (!$synced) {
+            throw new \Exception('Timer already stopped');
+        }
+        $entry = $synced;
+
         if ($entry['paused_at']) {
             throw new \Exception('Timer is already paused');
         }
 
-        $this->timeEntryModel->update($entryId, [
-            'paused_at' => date('Y-m-d H:i:s')
+        $this->timeEntryModel->update((int) $entry['id'], [
+            'paused_at' => date('Y-m-d H:i:s'),
         ]);
 
-        return $this->formatActiveTimer($this->timeEntryModel->find($entryId));
+        return $this->formatActiveTimer($this->timeEntryModel->find((int) $entry['id']));
     }
 
     /**
@@ -207,24 +361,43 @@ class TimeEntryService
     {
         $entry = $this->timeEntryModel->find($entryId);
 
-        if (!$entry || $entry['user_id'] != $userId || $entry['ended_at']) {
+        if (!$entry || $entry['user_id'] != $userId) {
             throw new \Exception('Invalid time entry');
+        }
+
+        // Overnight pause: old entry was/is closed at pause → start a fresh entry today
+        if (!empty($entry['ended_at'])) {
+            throw new \Exception('Timer already stopped — start a new timer for today');
         }
 
         if (!$entry['paused_at']) {
             throw new \Exception('Timer is not paused');
         }
 
-        $now = date('Y-m-d H:i:s');
-        $pauseDuration = strtotime($now) - strtotime($entry['paused_at']);
-        $totalPaused = (int) $entry['paused_duration_seconds'] + $pauseDuration;
+        $orgId = (int) ($entry['organization_id'] ?? 0);
+        $phpTz = $this->timezoneService->getOrgTimezone($orgId);
+        $today = $this->orgLocalToday($phpTz);
+        $startDate = $this->orgLocalDate((string) $entry['started_at'], $phpTz);
+        $pauseDate = $this->orgLocalDate((string) $entry['paused_at'], $phpTz);
 
-        $this->timeEntryModel->update($entryId, [
+        if ($startDate < $today || $pauseDate < $today) {
+            // Close yesterday's work at the pause moment, then open a new running entry now
+            $this->closeOpenEntryAt($entry, (string) $entry['paused_at'], true);
+            $fresh = $this->openContinuationEntry($entry, date('Y-m-d H:i:s'), null);
+
+            return $this->formatActiveTimer($fresh);
+        }
+
+        $now = date('Y-m-d H:i:s');
+        $pauseDuration = strtotime($now) - strtotime((string) $entry['paused_at']);
+        $totalPaused = (int) $entry['paused_duration_seconds'] + max(0, $pauseDuration);
+
+        $this->timeEntryModel->update((int) $entry['id'], [
             'paused_at' => null,
-            'paused_duration_seconds' => $totalPaused
+            'paused_duration_seconds' => $totalPaused,
         ]);
 
-        return $this->formatActiveTimer($this->timeEntryModel->find($entryId));
+        return $this->formatActiveTimer($this->timeEntryModel->find((int) $entry['id']));
     }
 
     /**
@@ -237,7 +410,41 @@ class TimeEntryService
             ->where('ended_at', null)
             ->first();
 
-        return $entry ? $this->formatActiveTimer($entry) : null;
+        if (!$entry) {
+            return null;
+        }
+
+        $synced = $this->syncOpenTimerDayBoundary($entry);
+        if (!$synced) {
+            return null;
+        }
+
+        return $this->formatActiveTimer($synced);
+    }
+
+    /**
+     * Ensure all open org timers are split at midnight (for admin live views).
+     *
+     * @param int[] $userIds
+     */
+    public function syncOpenTimersForUsers(array $userIds): void
+    {
+        if ($userIds === []) {
+            return;
+        }
+
+        $rows = $this->timeEntryModel
+            ->whereIn('user_id', array_map('intval', $userIds))
+            ->where('ended_at', null)
+            ->findAll();
+
+        foreach ($rows as $row) {
+            try {
+                $this->syncOpenTimerDayBoundary($row);
+            } catch (\Throwable $e) {
+                log_message('error', 'Day-boundary timer sync failed: ' . $e->getMessage());
+            }
+        }
     }
 
     /**
