@@ -1,16 +1,40 @@
-import { useMemo } from 'react';
+import { useMemo, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
 import { Clock, TrendingUp, Users, Activity, Timer, Radio } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { dashboardService } from '../../api/dashboardService';
-import { reportService } from '../../api/reportService';
+import { reportService, type ActiveSession } from '../../api/reportService';
 import { useAuthStore } from '../../store/authStore';
 import { useTimerStore } from '../../store/timerStore';
 import { canViewMemberTracking, canViewOrgPackage, hasPlanFeature } from '../../utils/access';
+import { formatDurationHms } from '../../utils/liveTimer';
 import { OnboardingChecklist } from './OnboardingChecklist';
 import { PageSkeleton, Badge } from '../../components/ui';
 import { DashboardLayoutEditor } from './dashboardLayout';
+
+function useLiveActiveSessions(sessions: ActiveSession[], fetchedAt: number) {
+  const [now, setNow] = useState(() => Date.now());
+  const anyRunning = sessions.some((s) => !s.is_paused);
+
+  useEffect(() => {
+    if (!anyRunning) return;
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [anyRunning, sessions.length]);
+
+  return useMemo(
+    () =>
+      sessions.map((s) => {
+        const drift = s.is_paused || !fetchedAt
+          ? 0
+          : Math.max(0, Math.floor((now - fetchedAt) / 1000));
+        const seconds = (s.elapsed_seconds ?? 0) + drift;
+        return { ...s, live_elapsed: seconds, live_label: formatDurationHms(seconds) };
+      }),
+    [sessions, fetchedAt, now],
+  );
+}
 
 const StatCard = ({ icon: Icon, label, value, trend, delay }: {
   icon: typeof Clock;
@@ -79,11 +103,14 @@ const DashboardPage = () => {
   const sessionsQuery = useQuery({
     queryKey: ['dashboard', 'active-sessions'],
     queryFn: () => reportService.getActiveSessions().then((r) => r.data ?? []).catch(() => []),
-    refetchInterval: 30_000,
+    refetchInterval: 10_000,
   });
 
   const stats = statsQuery.data;
-  const activeSessions = sessionsQuery.data ?? [];
+  const activeSessions = useLiveActiveSessions(
+    sessionsQuery.data ?? [],
+    sessionsQuery.dataUpdatedAt || Date.now(),
+  );
   const loading = statsQuery.isLoading || !stats;
 
   const maxWeeklyHours = useMemo(() => {
@@ -166,7 +193,7 @@ const DashboardPage = () => {
             <h3 className="text-lg font-bold text-white flex items-center gap-2">
               <Radio size={18} className="text-emerald-400" /> Working Now
             </h3>
-            <span className="text-xs text-slate-500">Updates every 30s</span>
+            <span className="text-xs text-slate-500">Live · refreshes every 10s</span>
           </div>
           <div className="space-y-3 max-h-40 overflow-y-auto">
             {activeSessions.length > 0 ? activeSessions.map((s) => (
@@ -178,7 +205,7 @@ const DashboardPage = () => {
                     <p className="text-xs text-slate-500">{s.project_name}</p>
                   </div>
                 </div>
-                <span className="text-xs font-mono text-primary-400">{s.elapsed}</span>
+                <span className="text-xs font-mono text-emerald-400">{s.live_label}</span>
               </div>
             )) : (
               <p className="text-sm text-slate-500">No one is tracking time right now.</p>

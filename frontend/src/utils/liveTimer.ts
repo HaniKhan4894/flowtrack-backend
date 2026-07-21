@@ -13,7 +13,7 @@ export function isActiveTimerEntry(
 
 /** Seconds to show for an entry — live `elapsed` while that timer is running. */
 export function entryDisplaySeconds(
-  entry: Pick<TimeEntry, 'id' | 'ended_at' | 'duration_seconds'>,
+  entry: Pick<TimeEntry, 'id' | 'ended_at' | 'duration_seconds' | 'started_at'>,
   activeEntry: Pick<TimeEntry, 'id'> | null,
   elapsed: number,
   isRunning: boolean,
@@ -21,7 +21,31 @@ export function entryDisplaySeconds(
   if (isActiveTimerEntry(entry, activeEntry, isRunning)) {
     return Math.max(0, elapsed);
   }
-  return Math.max(0, entry.duration_seconds || 0);
+  return resolvedDurationSeconds(entry);
+}
+
+/**
+ * Prefer stored duration; if missing/zero but start+end exist and no pause accounting,
+ * derive from timestamps (legacy / bad-write rows).
+ */
+export function resolvedDurationSeconds(
+  entry: Pick<TimeEntry, 'duration_seconds' | 'started_at' | 'ended_at'> & {
+    paused_duration_seconds?: number;
+  },
+): number {
+  const stored = Math.max(0, entry.duration_seconds || 0);
+  if (stored > 0) return stored;
+  if ((entry.paused_duration_seconds ?? 0) > 0) return 0;
+  if (!entry.ended_at || !entry.started_at) return 0;
+
+  const start = Date.parse(
+    entry.started_at.includes('T') ? entry.started_at : entry.started_at.replace(' ', 'T') + 'Z',
+  );
+  const end = Date.parse(
+    entry.ended_at.includes('T') ? entry.ended_at : entry.ended_at.replace(' ', 'T') + 'Z',
+  );
+  if (Number.isNaN(start) || Number.isNaN(end) || end <= start) return 0;
+  return Math.floor((end - start) / 1000);
 }
 
 /** `1h 13m` style (stopped / summaries). */

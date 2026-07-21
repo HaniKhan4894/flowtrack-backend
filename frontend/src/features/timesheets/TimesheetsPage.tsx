@@ -12,7 +12,7 @@ import { Button, Modal } from '../../components/ui';
 import { timesheetService } from '../../api/timesheetService';
 import { teamService } from '../../api/teamService';
 import { useAuthStore } from '../../store/authStore';
-import { useTimerStore } from '../../store/timerStore';
+import { useLiveSessionForUser } from '../../hooks/useLiveSessionForUser';
 import { hasPermission } from '../../utils/access';
 import { getApiErrorMessage } from '../../utils/apiError';
 import {
@@ -35,10 +35,6 @@ const dayLabel = (dateStr: string) => {
 const TimesheetsPage = () => {
   const { user } = useAuthStore();
   const canApprove = hasPermission(user, 'timesheet.approve');
-  const activeEntry = useTimerStore((s) => s.activeEntry);
-  const elapsed = useTimerStore((s) => s.elapsed);
-  const isRunning = useTimerStore((s) => s.isRunning);
-  const wasRunningRef = useRef(isRunning);
 
   const [grid, setGrid] = useState<TimesheetWeekGrid | null>(null);
   const [loading, setLoading] = useState(true);
@@ -49,6 +45,13 @@ const TimesheetsPage = () => {
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
   const [rejectReason, setRejectReason] = useState('');
   const [showRejectModal, setShowRejectModal] = useState(false);
+
+  const viewingUserId = selectedUserId ? Number(selectedUserId) : (user?.id ?? null);
+  const live = useLiveSessionForUser(viewingUserId, { enabled: weekOffset === 0 });
+  const activeEntry = live.asEntry;
+  const elapsed = live.elapsed;
+  const isRunning = live.isRunning;
+  const wasRunningRef = useRef(isRunning);
 
   const loadGrid = useCallback(async () => {
     setLoading(true);
@@ -95,8 +98,7 @@ const TimesheetsPage = () => {
 
   const liveGrid = useMemo(() => {
     if (!grid) return null;
-    const own = !selectedUserId || Number(selectedUserId) === user?.id;
-    if (!own || !isRunning || !activeEntry || weekOffset !== 0) {
+    if (!isRunning || !activeEntry || weekOffset !== 0) {
       return grid;
     }
 
@@ -116,7 +118,8 @@ const TimesheetsPage = () => {
             {
               ...activeEntry,
               duration_seconds: elapsed,
-              description: activeEntry.description || 'No description',
+              description: activeEntry.description || live.description || 'No description',
+              ...(live.projectName ? { project_name: live.projectName } : {}),
             },
           ];
 
@@ -132,7 +135,7 @@ const TimesheetsPage = () => {
       days,
       total_seconds: grid.total_seconds + elapsed,
     };
-  }, [grid, selectedUserId, user?.id, isRunning, activeEntry, elapsed, weekOffset]);
+  }, [grid, isRunning, activeEntry, elapsed, weekOffset, live.description, live.projectName]);
 
   const handleSubmit = async () => {
     if (!grid?.period?.id) return;
@@ -246,7 +249,7 @@ const TimesheetsPage = () => {
               <p className="text-sm text-slate-400">Total this week</p>
               <p className="text-2xl font-bold text-white font-mono">
                 {liveGrid ? (
-                  isRunning && isOwnTimesheet && weekOffset === 0
+                  isRunning && weekOffset === 0
                     ? formatDurationHms(liveGrid.total_seconds)
                     : formatDuration(liveGrid.total_seconds)
                 ) : '—'}
@@ -310,7 +313,7 @@ const TimesheetsPage = () => {
               </thead>
               <tbody className="divide-y divide-white/5">
                 {liveGrid.days.map((day) => {
-                  const dayHasLive = isRunning && isOwnTimesheet && day.entries.some(
+                  const dayHasLive = isRunning && weekOffset === 0 && day.entries.some(
                     (e) => isActiveTimerEntry(e, activeEntry, isRunning),
                   );
                   return (

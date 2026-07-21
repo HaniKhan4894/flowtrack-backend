@@ -4,13 +4,57 @@ import { Calendar, ChevronLeft, ChevronRight, Clock, Loader2, Users } from 'luci
 import { reportService, type HoursCalendar } from '../../api/reportService';
 import { teamService } from '../../api/teamService';
 import { useAuthStore } from '../../store/authStore';
+import { useLiveSessionForUser } from '../../hooks/useLiveSessionForUser';
 import { hasPermission } from '../../utils/access';
 import { getApiErrorMessage } from '../../utils/apiError';
+import { formatDurationHms, localDateKey } from '../../utils/liveTimer';
 import { PageSkeleton } from '../../components/ui';
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 type UserFilter = 'me' | 'all' | number;
+
+function addLiveToCalendar(calendar: HoursCalendar, liveSeconds: number): HoursCalendar {
+  if (liveSeconds <= 0) return calendar;
+  const today = localDateKey();
+  if (today < calendar.start_date || today > calendar.end_date) return calendar;
+
+  const days = calendar.days.map((day) => {
+    if (!day.in_month || day.date !== today) return day;
+    const seconds = day.seconds + liveSeconds;
+    return {
+      ...day,
+      seconds,
+      hours_label: formatHoursLabel(seconds),
+    };
+  });
+
+  const weeks = calendar.weeks.map((week) => {
+    if (today < week.start_date || today > week.end_date) return week;
+    const seconds = week.seconds + liveSeconds;
+    return {
+      ...week,
+      seconds,
+      hours_label: formatHoursLabel(seconds),
+    };
+  });
+
+  const total = calendar.total_seconds + liveSeconds;
+  return {
+    ...calendar,
+    days,
+    weeks,
+    total_seconds: total,
+    hours_label: formatHoursLabel(total),
+  };
+}
+
+function formatHoursLabel(seconds: number): string {
+  const s = Math.max(0, Math.floor(seconds));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  return `${h}:${String(m).padStart(2, '0')}`;
+}
 
 const TimeSummaryPage = () => {
   const user = useAuthStore((s) => s.user);
@@ -26,6 +70,18 @@ const TimeSummaryPage = () => {
   const [calendar, setCalendar] = useState<HoursCalendar | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const liveTargetUserId =
+    userFilter === 'all'
+      ? null
+      : userFilter === 'me'
+        ? (user?.id ?? null)
+        : userFilter;
+
+  const isCurrentMonthView = year === now.getFullYear() && month === now.getMonth() + 1;
+  const live = useLiveSessionForUser(liveTargetUserId, {
+    enabled: isCurrentMonthView && liveTargetUserId != null,
+  });
 
   useEffect(() => {
     if (!canViewTeam) return;
@@ -65,6 +121,12 @@ const TimeSummaryPage = () => {
   useEffect(() => {
     load();
   }, [load]);
+
+  const displayCalendar = useMemo(() => {
+    if (!calendar) return null;
+    if (!live.isRunning || live.elapsed <= 0) return calendar;
+    return addLiveToCalendar(calendar, live.elapsed);
+  }, [calendar, live.isRunning, live.elapsed]);
 
   const shiftMonth = (delta: number) => {
     const d = new Date(year, month - 1 + delta, 1);
@@ -166,19 +228,25 @@ const TimeSummaryPage = () => {
         </div>
       )}
 
-      {calendar && (
+      {displayCalendar && (
         <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
           {/* Total donut-style summary */}
           <div className="xl:col-span-3 glass rounded-3xl border border-white/5 p-6 flex flex-col items-center text-center">
             <div className="relative w-40 h-40 rounded-full border-[10px] border-primary-500/30 flex flex-col items-center justify-center mb-4">
               <div className="absolute inset-0 rounded-full border-[10px] border-transparent border-t-primary-500 border-r-secondary-400 opacity-90" />
-              <p className="text-2xl font-bold text-white font-mono relative z-10">{calendar.hours_label} h</p>
+              <p className="text-2xl font-bold text-white font-mono relative z-10">
+                {live.isRunning ? formatDurationHms(displayCalendar.total_seconds) : `${displayCalendar.hours_label} h`}
+              </p>
               <p className="text-[11px] text-slate-500 relative z-10">
-                {calendar.project_count} project{calendar.project_count === 1 ? '' : 's'}
+                {displayCalendar.project_count} project{displayCalendar.project_count === 1 ? '' : 's'}
+                {live.isRunning && <span className="text-emerald-400"> · Live</span>}
               </p>
             </div>
             <p className="text-sm text-slate-400">
-              Total time: <span className="text-white font-mono font-semibold">{calendar.hours_label} h</span>
+              Total time:{' '}
+              <span className="text-white font-mono font-semibold">
+                {live.isRunning ? formatDurationHms(displayCalendar.total_seconds) : `${displayCalendar.hours_label} h`}
+              </span>
             </p>
             <Link
               to="/timesheets"
@@ -198,20 +266,27 @@ const TimeSummaryPage = () => {
               ))}
             </div>
             <div className="grid grid-cols-7 gap-1">
-              {calendar.days.map((day) => (
+              {displayCalendar.days.map((day) => {
+                const dayLive = live.isRunning && day.is_today && day.in_month;
+                return (
                 <div
                   key={day.date}
                   className={`min-h-[64px] sm:min-h-[72px] rounded-xl p-1.5 sm:p-2 border transition-colors ${
                     !day.in_month
                       ? 'border-transparent opacity-30'
-                      : day.is_today
+                      : dayLive || day.is_today
                         ? 'border-emerald-500/40 bg-emerald-500/10'
                         : day.seconds > 0
                           ? 'border-white/10 bg-white/[0.03] hover:bg-white/[0.06]'
                           : 'border-white/5 bg-transparent'
                   }`}
                 >
-                  <div className="flex justify-end">
+                  <div className="flex justify-between items-start">
+                    {dayLive ? (
+                      <span className="text-[9px] font-bold uppercase text-emerald-400">Live</span>
+                    ) : (
+                      <span />
+                    )}
                     <span
                       className={`text-[10px] font-bold ${
                         day.is_today ? 'text-emerald-400' : 'text-slate-500'
@@ -223,14 +298,15 @@ const TimeSummaryPage = () => {
                   {day.in_month && (
                     <p
                       className={`mt-1 text-xs sm:text-sm font-mono font-semibold ${
-                        day.seconds > 0 ? 'text-white' : 'text-slate-600'
+                        dayLive ? 'text-emerald-400' : day.seconds > 0 ? 'text-white' : 'text-slate-600'
                       }`}
                     >
-                      {day.hours_label}
+                      {dayLive ? formatDurationHms(day.seconds) : day.hours_label}
                     </p>
                   )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
@@ -238,7 +314,7 @@ const TimeSummaryPage = () => {
           <div className="xl:col-span-3 space-y-4">
             <div className="glass rounded-3xl border border-white/5 p-5 space-y-3">
               <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Weekly totals</p>
-              {calendar.weeks.map((week) => (
+              {displayCalendar.weeks.map((week) => (
                 <div
                   key={week.week_index}
                   className="flex items-center justify-between gap-3 py-2 border-b border-white/5 last:border-0"
@@ -257,17 +333,17 @@ const TimeSummaryPage = () => {
                   </div>
                 </div>
               ))}
-              {calendar.weeks.length === 0 && (
+              {displayCalendar.weeks.length === 0 && (
                 <p className="text-xs text-slate-500">No weeks in this month.</p>
               )}
             </div>
 
             <div className="glass rounded-3xl border border-white/5 p-5 space-y-3">
               <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Projects this month</p>
-              {calendar.projects.length === 0 ? (
+              {displayCalendar.projects.length === 0 ? (
                 <p className="text-xs text-slate-500">No logged projects.</p>
               ) : (
-                calendar.projects.slice(0, 8).map((p) => (
+                displayCalendar.projects.slice(0, 8).map((p) => (
                   <div key={p.id} className="flex items-center justify-between gap-2 text-sm">
                     <span className="text-slate-300 truncate">{p.name}</span>
                     <span className="font-mono text-white shrink-0">{p.hours_label} h</span>
