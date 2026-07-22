@@ -286,7 +286,7 @@ export const TimerWidget = () => {
         <div className="flex items-center gap-2">
           {isRunning && (
             <button
-              onClick={isPaused ? resume : pause}
+              onClick={() => { void (isPaused ? resume() : pause()); }}
               className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300 ${
                 isPaused ? 'bg-primary-500 text-white shadow-ai' : 'bg-white/10 text-white hover:bg-white/20'
               }`}
