@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Camera, Clock, Loader2, Save, Settings, Timer, X } from 'lucide-react';
+import { Camera, Clock, Download, Loader2, RefreshCw, Save, Settings, Timer, X } from 'lucide-react';
 import { ThemePreferencePicker } from '../../components/ThemeToggle';
 import { useAuthStore } from '../../store/authStore';
 import { monitoringSettingsService, type MemberMonitoringSettings } from '../../api/monitoringSettingsService';
@@ -9,6 +9,7 @@ import { toastError, toastSuccess } from '../../store/toastStore';
 import type { OrgTrackingSettings } from '../../types';
 import { DEFAULT_TRACKING } from '../settings/orgSettingsDefaults';
 import { cn } from '../../lib/cn';
+import { useAppUpdater } from '../../hooks/useAppUpdater';
 
 type SettingsTab = 'general' | 'timer' | 'screenshots';
 
@@ -57,6 +58,15 @@ export function TrackerSettingsModal({ open, onClose }: Props) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [memberSettings, setMemberSettings] = useState<MemberMonitoringSettings | null>(null);
+  const {
+    version: appVersion,
+    update: appUpdate,
+    busy: updateBusy,
+    checkForUpdates,
+    downloadUpdate,
+    installUpdate,
+    isPackagedDesktop,
+  } = useAppUpdater();
 
   useEffect(() => {
     if (!open) return;
@@ -124,14 +134,82 @@ export function TrackerSettingsModal({ open, onClose }: Props) {
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 py-3">
-          {loading ? (
-            <div className="flex justify-center py-10">
-              <Loader2 className="h-6 w-6 animate-spin text-slate-500" />
-            </div>
-          ) : (
-            <>
-              {tab === 'general' && memberSettings && (
-                <div>
+          {tab === 'general' && (
+            <div>
+              <div className="border-b border-white/5 py-3">
+                <p className="text-sm text-white">App updates</p>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  Installed version {appVersion || '…'}
+                  {!isPackagedDesktop && ' · updates apply to the installed desktop app only'}
+                </p>
+                <div className="mt-3 space-y-2">
+                  {appUpdate.status === 'available' && (
+                    <p className="rounded-lg border border-sky-500/20 bg-sky-500/10 px-3 py-2 text-xs text-sky-200">
+                      Version {String(appUpdate.data?.version ?? '')} is available.
+                    </p>
+                  )}
+                  {appUpdate.status === 'downloading' && (
+                    <p className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-slate-300">
+                      Downloading… {Math.round(appUpdate.data?.percent ?? 0)}%
+                    </p>
+                  )}
+                  {appUpdate.status === 'downloaded' && (
+                    <p className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200">
+                      Version {String(appUpdate.data?.version ?? '')} is ready to install.
+                    </p>
+                  )}
+                  {appUpdate.status === 'not-available' && appUpdate.data?.dev !== true && (
+                    <p className="text-xs text-slate-500">You&apos;re on the latest version.</p>
+                  )}
+                  {appUpdate.status === 'error' && (
+                    <p className="rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
+                      {String(appUpdate.data?.message ?? 'Could not check for updates.')}
+                    </p>
+                  )}
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <button
+                      type="button"
+                      disabled={updateBusy || appUpdate.status === 'downloading'}
+                      onClick={() => void checkForUpdates()}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-white/[0.08] disabled:opacity-50"
+                    >
+                      {updateBusy && appUpdate.status === 'checking' ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <RefreshCw className="h-3.5 w-3.5" />
+                      )}
+                      Check for updates
+                    </button>
+                    {appUpdate.status === 'available' && (
+                      <button
+                        type="button"
+                        disabled={updateBusy}
+                        onClick={() => void downloadUpdate()}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-sky-500/20 px-3 py-2 text-xs font-semibold text-sky-200 hover:bg-sky-500/30 disabled:opacity-50"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                        Download update
+                      </button>
+                    )}
+                    {appUpdate.status === 'downloaded' && (
+                      <button
+                        type="button"
+                        onClick={() => void installUpdate()}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500/20 px-3 py-2 text-xs font-semibold text-emerald-200 hover:bg-emerald-500/30"
+                      >
+                        Restart &amp; install
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {loading ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="h-5 w-5 animate-spin text-slate-500" />
+                </div>
+              ) : memberSettings ? (
+                <>
                   <div className="border-b border-white/5 py-3">
                     <p className="text-sm text-white">Color theme</p>
                     <p className="mt-0.5 text-xs text-slate-500">Applies immediately on this device.</p>
@@ -151,9 +229,19 @@ export function TrackerSettingsModal({ open, onClose }: Props) {
                   <Row label="URL tracking" hint="Set by your organization admin.">
                     <span className="text-xs text-slate-400">{orgTracking.url_tracking_enabled ? 'On' : 'Off'}</span>
                   </Row>
-                </div>
+                </>
+              ) : (
+                <p className="py-4 text-center text-xs text-slate-500">Could not load tracking settings.</p>
               )}
+            </div>
+          )}
 
+          {tab !== 'general' && loading ? (
+            <div className="flex justify-center py-10">
+              <Loader2 className="h-6 w-6 animate-spin text-slate-500" />
+            </div>
+          ) : (
+            <>
               {tab === 'timer' && (
                 <div>
                   <Row label="Idle timeout" hint="Admin default — timer pauses after inactivity.">

@@ -5,6 +5,15 @@ const desktopVariant = 'tracker';
 contextBridge.exposeInMainWorld('electronAPI', {
     // App info
     getAppVersion: () => ipcRenderer.invoke('get-app-version'),
+    checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
+    downloadAppUpdate: () => ipcRenderer.invoke('download-app-update'),
+    installAppUpdate: () => ipcRenderer.invoke('install-app-update'),
+    getUpdateStatus: () => ipcRenderer.invoke('get-update-status'),
+    onUpdateStatusChange: (callback) => {
+        const handler = (_event, payload) => callback(payload);
+        ipcRenderer.on('app-update-status', handler);
+        return () => ipcRenderer.removeListener('app-update-status', handler);
+    },
     isDesktop: () => ipcRenderer.invoke('is-desktop'),
     desktopVariant: () => desktopVariant,
     openWebApp: () => ipcRenderer.invoke('open-web-app'),

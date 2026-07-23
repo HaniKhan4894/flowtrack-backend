@@ -23,6 +23,7 @@
     "dependencies": {
         "active-win": "^8.2.1",
         "axios": "^1.6.0",
+        "electron-updater": "^6.8.9",
         "form-data": "^4.0.0"
     },
     "devDependencies": {
@@ -49,6 +50,7 @@
             "systemInput.js",
             "networkInfo.js",
             "timerReminderPrompt.js",
+            "autoUpdater.js",
             "preload.js",
             "config.js",
             "variant.js",
@@ -58,7 +60,15 @@
             "package.json",
             "node_modules/active-win/**/*",
             "node_modules/@mapbox/**/*",
-            "node_modules/node-gyp-build/**/*"
+            "node_modules/node-gyp-build/**/*",
+            "node_modules/electron-updater/**/*",
+            "node_modules/builder-util-runtime/**/*",
+            "node_modules/semver/**/*",
+            "node_modules/js-yaml/**/*",
+            "node_modules/lazy-val/**/*",
+            "node_modules/lodash.escaperegexp/**/*",
+            "node_modules/lodash.isequal/**/*",
+            "node_modules/tiny-typed-emitter/**/*"
         ],
         "asarUnpack": [
             "**/node_modules/active-win/**"
@@ -94,6 +104,12 @@
             "target": [
                 {
                     "target": "dmg",
+                    "arch": [
+                        "universal"
+                    ]
+                },
+                {
+                    "target": "zip",
                     "arch": [
                         "universal"
                     ]

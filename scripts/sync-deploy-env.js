@@ -79,7 +79,7 @@ fs.mkdirSync(publicDir, { recursive: true });
 fs.writeFileSync(path.join(publicDir, 'sitemap.xml'), sitemap);
 fs.writeFileSync(path.join(publicDir, 'robots.txt'), robots);
 
-const desktopBuildEnv = [`FLOWTRACK_API_URL=${apiBaseUrl}`];
+const desktopBuildEnv = [`FLOWTRACK_API_URL=${apiBaseUrl}`, `FLOWTRACK_PUBLIC_URL=${publicBaseUrl}`];
 if (frontendUrl) {
     desktopBuildEnv.push(`FLOWTRACK_FRONTEND_URL=${frontendUrl}`);
 }

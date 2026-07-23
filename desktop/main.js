@@ -5,12 +5,13 @@ const crypto = require('crypto');
 const https = require('https');
 const http = require('http');
 const FormData = require('form-data');
-const { API_BASE_URL, FRONTEND_URL, getApiHeaders } = require('./config');
+const { API_BASE_URL, FRONTEND_URL, getUpdateFeedUrl, getApiHeaders } = require('./config');
 const activityTracker = require('./activityTracker');
 const systemInput = require('./systemInput');
 const networkInfo = require('./networkInfo');
 const timerReminderPrompt = require('./timerReminderPrompt');
 const { variant: desktopVariant, config: desktopConfig } = require('./variant');
+const appUpdater = require('./autoUpdater');
 
 // Windows taskbar grouping — must be set before app is ready.
 if (process.platform === 'win32') {
@@ -1295,6 +1296,10 @@ function startBrowserSignInFlow() {
 //  IPC Handlers
 // ──────────────────────────────────────────────
 ipcMain.handle('get-app-version', () => app.getVersion());
+ipcMain.handle('check-for-updates', () => appUpdater.checkForUpdates(true));
+ipcMain.handle('download-app-update', () => appUpdater.downloadUpdate());
+ipcMain.handle('install-app-update', () => appUpdater.installUpdate());
+ipcMain.handle('get-update-status', () => appUpdater.getUpdateStatus());
 
 // Called from renderer when user logs in / out
 ipcMain.handle('set-auth-token', async (_event, token) => {
@@ -1469,9 +1474,16 @@ app.whenReady().then(() => {
     }
     console.log(`[Config] API base URL: ${API_BASE_URL}`);
     console.log(`[Config] Frontend URL: ${FRONTEND_URL}`);
+    console.log(`[Config] Update feed: ${getUpdateFeedUrl()}`);
     createWindow();
     setupTray();
     windowVisible = true;
+
+    appUpdater.initAutoUpdater({
+        getMainWindow: () => mainWindow,
+        getUpdateFeedUrl,
+        showNotification: showDesktopNotification,
+    });
 
     powerMonitor.on('lock-screen', () => {
         if (!currentSession.isTracking || isPaused) return;

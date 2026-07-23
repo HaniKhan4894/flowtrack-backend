@@ -55,7 +55,24 @@ From repo root:
 2. Update `config/deploy.json` with `apiBaseUrl`, `publicBaseUrl`, and `frontendUrl` (e.g. Vercel app URL).
 3. Build Windows installer: `npm run build:desktop:win`
 4. Build macOS installer (must run on macOS): `npm run build:desktop:mac`
-5. Installers are copied to `public/downloads/` and linked from the landing page.
+5. Installers and update metadata (`latest.yml`, `FlowTrack.zip` on macOS) are copied to `public/downloads/` and linked from the landing page.
+
+### Desktop auto-updates
+
+Installed apps check `{publicBaseUrl}/downloads/` for new releases (automatically every 6 hours, or manually in **Settings → General → Check for updates**).
+
+**To publish a new release:**
+
+1. Bump `version` in `desktop/package.json` (semver, e.g. `1.0.0` → `1.0.1`).
+2. Run `npm run sync:deploy`.
+3. Build installers: `npm run build:desktop:win` and/or `npm run build:desktop:mac`.
+4. Upload everything in `public/downloads/` to your server, including:
+   - `FlowTrack-Setup.exe` + `latest.yml` (Windows)
+   - `FlowTrack.zip` + `latest-mac.yml` (macOS auto-update)
+   - `FlowTrack.dmg` (macOS manual install)
+5. Users with the old app will see the update in Settings or get a desktop notification.
+
+macOS silent auto-update requires a **signed and notarized** build in production.
 
 When going live, only change `config/deploy.json`, run `npm run sync:deploy`, and rebuild installers.
 

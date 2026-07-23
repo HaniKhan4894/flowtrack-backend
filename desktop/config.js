@@ -82,8 +82,39 @@ function loadFrontendUrl() {
     return DEFAULT_FRONTEND_URL;
 }
 
+const DEFAULT_PUBLIC_BASE_URL =
+    'https://violation-blade-pretty.ngrok-free.dev/flowtrack-backend/public';
+
+function loadPublicBaseUrl() {
+    if (process.env.FLOWTRACK_PUBLIC_URL) {
+        return process.env.FLOWTRACK_PUBLIC_URL.replace(/\/$/, '');
+    }
+
+    const fromBuild = loadFromBuildEnv('FLOWTRACK_PUBLIC_URL');
+    if (fromBuild) {
+        return fromBuild.replace(/\/$/, '');
+    }
+
+    const packaged = getPackagedDeployConfig();
+    if (packaged?.publicBaseUrl) {
+        return packaged.publicBaseUrl.replace(/\/$/, '');
+    }
+
+    const deploy = readDeployConfig();
+    if (deploy?.publicBaseUrl) {
+        return deploy.publicBaseUrl.replace(/\/$/, '');
+    }
+
+    return DEFAULT_PUBLIC_BASE_URL;
+}
+
 const API_BASE_URL = loadApiBaseUrl();
 const FRONTEND_URL = loadFrontendUrl();
+const PUBLIC_BASE_URL = loadPublicBaseUrl();
+
+function getUpdateFeedUrl() {
+    return `${PUBLIC_BASE_URL.replace(/\/$/, '')}/downloads`;
+}
 
 function getApiHeaders(extra = {}) {
     const headers = { ...extra };
@@ -96,5 +127,7 @@ function getApiHeaders(extra = {}) {
 module.exports = {
     API_BASE_URL,
     FRONTEND_URL,
+    PUBLIC_BASE_URL,
+    getUpdateFeedUrl,
     getApiHeaders,
 };

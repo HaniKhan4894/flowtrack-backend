@@ -4,6 +4,11 @@ declare global {
   interface Window {
     electronAPI?: {
       getAppVersion: () => Promise<string>;
+      checkForUpdates: () => Promise<{ success: boolean; dev?: boolean; error?: string }>;
+      downloadAppUpdate: () => Promise<{ success: boolean; error?: string }>;
+      installAppUpdate: () => Promise<{ success: boolean; error?: string }>;
+      getUpdateStatus: () => Promise<{ status: string; data?: Record<string, unknown> | null }>;
+      onUpdateStatusChange: (callback: (state: { status: string; data?: Record<string, unknown> | null }) => void) => () => void;
       isDesktop: () => Promise<boolean>;
       desktopVariant: () => 'tracker';
       openWebApp: () => Promise<{ success: boolean }>;
