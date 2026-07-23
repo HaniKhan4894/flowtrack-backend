@@ -375,6 +375,13 @@ function resolveFrontendIndexPath() {
     return path.join(__dirname, '..', 'frontend', 'dist', 'index.html');
 }
 
+function loadBundledFrontend(win) {
+    const indexPath = resolveFrontendIndexPath();
+    const hashRoute = desktopConfig.entryPath.replace(/^\//, '');
+    console.log(`[Window] Loading bundled UI: ${indexPath}#/${hashRoute}`);
+    win.loadFile(indexPath, { hash: hashRoute });
+}
+
 // ──────────────────────────────────────────────
 //  Window
 // ──────────────────────────────────────────────
@@ -422,12 +429,12 @@ function createWindow() {
             console.error('[Window] Failed to load remote UI:', err.message);
             if (!isDev && fs.existsSync(resolveFrontendIndexPath())) {
                 console.log('[Window] Falling back to bundled UI.');
-                mainWindow.loadFile(resolveFrontendIndexPath());
+                loadBundledFrontend(mainWindow);
             }
         });
     } else {
         console.log('[Window] Loading bundled UI.');
-        mainWindow.loadFile(resolveFrontendIndexPath());
+        loadBundledFrontend(mainWindow);
     }
 
     mainWindow.once('ready-to-show', () => {

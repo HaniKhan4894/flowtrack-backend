@@ -1,13 +1,13 @@
 import { StrictMode, Suspense, lazy, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { BrowserRouter, HashRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import './index.css'
 
 import { Shell } from './layouts/Shell'
 import { TrackerProtectedRoute, DesktopOnlyTrackerRoute, DesktopOnlyTrackerLoginRoute } from './features/desktop-tracker/DesktopTrackerLayout'
 import { useAuthStore } from './store/authStore'
 import { canAccessPath, isSuperAdmin, isPathPlanLocked } from './utils/access'
-import { isDesktopApp, getDesktopLoginPath } from './utils/electronAuth'
+import { isDesktopApp, getDesktopLoginPath, getAppLoginPath } from './utils/electronAuth'
 import { initDesktopLifecycle } from './utils/desktopLifecycle'
 import { DesktopTitleBar } from './components/WindowControls'
 import { AppQueryProvider } from './lib/queryClient'
@@ -80,13 +80,13 @@ const ProtectedRoute = ({ children }: { children: ReactNode }) => {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
   const sessionReady = useAuthStore((s) => s.sessionReady)
   if (!sessionReady) return <AuthBootLoader />
-  return isAuthenticated ? <Shell><Lazy>{children}</Lazy></Shell> : <Navigate to="/login" />
+  return isAuthenticated ? <Shell><Lazy>{children}</Lazy></Shell> : <Navigate to={getAppLoginPath()} />
 }
 
 const SuperAdminRoute = ({ children }: { children: ReactNode }) => {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
   const user = useAuthStore((s) => s.user)
-  if (!isAuthenticated) return <Navigate to="/login" />
+  if (!isAuthenticated) return <Navigate to={getAppLoginPath()} />
   if (!isSuperAdmin(user)) return <Navigate to="/app" replace />
   return <Shell><Lazy>{children}</Lazy></Shell>
 }
@@ -94,7 +94,7 @@ const SuperAdminRoute = ({ children }: { children: ReactNode }) => {
 const MemberTrackingRoute = ({ children }: { children: ReactNode }) => {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
   const user = useAuthStore((s) => s.user)
-  if (!isAuthenticated) return <Navigate to="/login" />
+  if (!isAuthenticated) return <Navigate to={getAppLoginPath()} />
   if (!canAccessPath(user, '/team/member')) return <Navigate to="/app" replace />
   return <Shell><Lazy>{children}</Lazy></Shell>
 }
@@ -104,7 +104,7 @@ const RoleRoute = ({ path, children }: { path: string; children: ReactNode }) =>
   const user = useAuthStore((s) => s.user)
   const sessionReady = useAuthStore((s) => s.sessionReady)
   if (!sessionReady) return <AuthBootLoader />
-  if (!isAuthenticated) return <Navigate to="/login" />
+  if (!isAuthenticated) return <Navigate to={getAppLoginPath()} />
   if (!canAccessPath(user, path)) {
     if (isPathPlanLocked(user, path)) {
       return (
@@ -141,6 +141,15 @@ const RegisterRoute = () => {
   )
 }
 
+const WebLoginRoute = () => {
+  if (isDesktopApp()) return <Navigate to={getDesktopLoginPath()} replace />
+  return (
+    <Lazy>
+      <LoginPage />
+    </Lazy>
+  )
+}
+
 const FallbackRedirect = () => (
   <Navigate to={isDesktopApp() ? getDesktopLoginPath() : '/app'} replace />
 )
@@ -157,7 +166,7 @@ function AppChrome() {
       {!isTrackerRoute && <CommandPalette />}
       {!isTrackerRoute && <ShortcutsHelp />}
       <Routes>
-        <Route path="/login" element={<Lazy><LoginPage /></Lazy>} />
+        <Route path="/login" element={<WebLoginRoute />} />
         <Route
           path="/tracker/login"
           element={(
@@ -226,6 +235,13 @@ function AppChrome() {
 }
 
 initDesktopLifecycle()
+
+if (typeof navigator !== 'undefined' && /Electron/i.test(navigator.userAgent)) {
+  document.documentElement.classList.add('electron-app')
+}
+
+const isFileProtocol = typeof window !== 'undefined' && window.location.protocol === 'file:'
+const Router = isFileProtocol ? HashRouter : BrowserRouter
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

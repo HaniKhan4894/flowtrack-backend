@@ -93,9 +93,18 @@
   .glass-card {
     background: rgba(255, 255, 255, 0.03);
     backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
     border: 1px solid rgba(255, 255, 255, 0.1);
     box-shadow: var(--shadow-glass);
     @apply rounded-2xl p-6 transition-all duration-300;
+  }
+
+  /* Electron/Chromium on Windows can render backdrop-filter as a solid black panel */
+  .electron-app .glass,
+  .electron-app .glass-card {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: #12141C;
   }
   
   .glass-card:hover {

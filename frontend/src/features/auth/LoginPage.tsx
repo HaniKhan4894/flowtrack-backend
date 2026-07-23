@@ -6,7 +6,7 @@ import { LogIn, Github, Mail, Sparkles, Globe } from 'lucide-react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { authService } from '../../api/authService';
 import { useAuthStore } from '../../store/authStore';
-import { isDesktopApp } from '../../utils/electronAuth';
+import { isDesktopApp, isElectronShell } from '../../utils/electronAuth';
 import { getSavedLoginCredentials, persistAuthTokens, saveLoginCredentials } from '../../utils/authStorage';
 import { startOAuthLogin } from '../../utils/oauth';
 import {
@@ -41,6 +41,7 @@ const LoginPage = () => {
     ?? (new URLSearchParams(location.search).get('signed_out') ? 'Signed out successfully. Log in with your account.' : null);
 
   const desktop = isDesktopApp();
+  const electronShell = isElectronShell();
 
   useEffect(() => {
     useToastStore.getState().clear();
@@ -164,9 +165,9 @@ const LoginPage = () => {
       )}
 
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
+        initial={electronShell ? false : { opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
+        transition={{ duration: electronShell ? 0 : 0.5 }}
         className={`relative z-10 w-full ${desktop ? 'max-w-sm' : 'max-w-md'}`}
       >
         <div className={`text-center ${desktop ? 'mb-5' : 'mb-8'}`}>
@@ -192,7 +193,7 @@ const LoginPage = () => {
           </p>
         </div>
 
-        <div className={desktop ? 'rounded-2xl border border-white/10 bg-white/[0.03] p-5' : 'glass-card'}>
+        <div className={electronShell ? 'rounded-2xl border border-white/10 bg-[#12141C] p-5' : 'glass-card'}>
           <form onSubmit={handleSubmit} className="space-y-4">
             {successMessage && !error && (
               <div className="rounded-xl border border-green-500/20 bg-green-500/10 p-3 text-center text-sm text-green-400">

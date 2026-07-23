@@ -2,6 +2,10 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 const desktopVariant = 'tracker';
 
+window.addEventListener('DOMContentLoaded', () => {
+    document.documentElement.classList.add('electron-app');
+});
+
 contextBridge.exposeInMainWorld('electronAPI', {
     // App info
     getAppVersion: () => ipcRenderer.invoke('get-app-version'),

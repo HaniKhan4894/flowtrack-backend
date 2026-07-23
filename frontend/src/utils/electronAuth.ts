@@ -19,8 +19,14 @@ export async function clearElectronSession(): Promise<void> {
     }
 }
 
+export function isElectronShell(): boolean {
+    if (typeof window === 'undefined') return false;
+    if ('electronAPI' in window && window.electronAPI) return true;
+    return typeof navigator !== 'undefined' && /Electron/i.test(navigator.userAgent);
+}
+
 export function isDesktopApp(): boolean {
-    return typeof window !== 'undefined' && 'electronAPI' in window;
+    return isElectronShell();
 }
 
 export function getAppHomePath(): string {
