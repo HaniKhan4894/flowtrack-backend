@@ -12,5 +12,6 @@ Disallow: /settings
 Disallow: /analytics
 Disallow: /invoices
 Disallow: /login
+Disallow: /tracker
 
 Sitemap: https://flowtrackhani.vercel.app/sitemap.xml
