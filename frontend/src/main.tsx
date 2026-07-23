@@ -4,7 +4,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'r
 import './index.css'
 
 import { Shell } from './layouts/Shell'
-import { TrackerProtectedRoute } from './features/desktop-tracker/DesktopTrackerLayout'
+import { TrackerProtectedRoute, DesktopOnlyTrackerRoute, DesktopOnlyTrackerLoginRoute } from './features/desktop-tracker/DesktopTrackerLayout'
 import { useAuthStore } from './store/authStore'
 import { canAccessPath, isSuperAdmin, isPathPlanLocked } from './utils/access'
 import { isDesktopApp, getDesktopLoginPath } from './utils/electronAuth'
@@ -158,13 +158,22 @@ function AppChrome() {
       {!isTrackerRoute && <ShortcutsHelp />}
       <Routes>
         <Route path="/login" element={<Lazy><LoginPage /></Lazy>} />
-        <Route path="/tracker/login" element={<Lazy><LoginPage /></Lazy>} />
+        <Route
+          path="/tracker/login"
+          element={(
+            <DesktopOnlyTrackerLoginRoute>
+              <Lazy><LoginPage /></Lazy>
+            </DesktopOnlyTrackerLoginRoute>
+          )}
+        />
         <Route
           path="/tracker"
           element={(
-            <TrackerProtectedRoute>
-              <Lazy><DesktopTrackerPage /></Lazy>
-            </TrackerProtectedRoute>
+            <DesktopOnlyTrackerRoute>
+              <TrackerProtectedRoute>
+                <Lazy><DesktopTrackerPage /></Lazy>
+              </TrackerProtectedRoute>
+            </DesktopOnlyTrackerRoute>
           )}
         />
         <Route path="/register" element={<RegisterRoute />} />

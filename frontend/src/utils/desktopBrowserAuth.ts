@@ -1,7 +1,7 @@
 import { authService } from '../api/authService';
 import { useAuthStore } from '../store/authStore';
 import { persistAuthTokens } from './authStorage';
-import { getDesktopHomePath, isDesktopApp, syncElectronAuthToken } from './electronAuth';
+import { getAppHomePath, isDesktopApp, syncElectronAuthToken } from './electronAuth';
 import { getApiErrorMessage } from './apiError';
 
 export interface BrowserSignInTokens {
@@ -58,12 +58,15 @@ export function getPostLoginRedirect(search: string): string | null {
   if (redirect.startsWith('//')) {
     return null;
   }
+  if (!isDesktopApp() && redirect.startsWith('/tracker')) {
+    return '/app';
+  }
   return redirect;
 }
 
 export function navigateAfterLogin(search: string, navigate: (path: string, opts?: { replace?: boolean }) => void): void {
   const redirect = getPostLoginRedirect(search);
-  navigate(redirect ?? getDesktopHomePath(), { replace: true });
+  navigate(redirect ?? getAppHomePath(), { replace: true });
 }
 
 export function browserSignInErrorMessage(error?: string): string {

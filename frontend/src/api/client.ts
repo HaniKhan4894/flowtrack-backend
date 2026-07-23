@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { authService } from './authService';
-import { syncElectronAuthToken, getDesktopLoginPath } from '../utils/electronAuth';
+import { syncElectronAuthToken, getAppLoginPath } from '../utils/electronAuth';
 import { persistAuthTokens, clearAuthTokens } from '../utils/authStorage';
 import { isLoginPath } from '../utils/authSessionRefresh';
 
@@ -92,7 +92,7 @@ client.interceptors.response.use(
                         clearAuthTokens();
                         syncElectronAuthToken('');
                         if (typeof window !== 'undefined' && !isLoginPath(window.location.pathname)) {
-                            window.location.href = getDesktopLoginPath();
+                            window.location.href = getAppLoginPath();
                         }
                     }
                     return Promise.reject(refreshError);

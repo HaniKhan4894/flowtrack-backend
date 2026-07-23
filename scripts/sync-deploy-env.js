@@ -69,6 +69,7 @@ Disallow: /settings
 Disallow: /analytics
 Disallow: /invoices
 Disallow: /login
+Disallow: /tracker
 
 Sitemap: ${siteUrl}/sitemap.xml
 `;
