@@ -21,7 +21,11 @@ const DISPLAY_NAME_MAP: { match: RegExp; name: string }[] = [
 
 const APP_ICON_MAP: AppIconEntry[] = [
   { match: /flowtrack|electron/i, sources: [{ kind: 'url', url: '/favicon.png' }] },
-  { match: /chrome/i, sources: [{ kind: 'simple', slug: 'googlechrome', color: '4285F4' }] },
+  { match: /chrome/i, sources: [
+    { kind: 'url', url: 'https://www.google.com/chrome/static/images/favicon-196x196.png' },
+    { kind: 'favicon', domain: 'google.com' },
+    { kind: 'simple', slug: 'googlechrome', color: '4285F4' },
+  ] },
   { match: /firefox/i, sources: [{ kind: 'simple', slug: 'firefox', color: 'FF7139' }] },
   { match: /edge|msedge/i, sources: [{ kind: 'simple', slug: 'microsoftedge', color: '0078D4' }] },
   { match: /brave/i, sources: [{ kind: 'simple', slug: 'brave', color: 'FB542B' }] },

@@ -519,13 +519,12 @@ async function captureAllScreens() {
             return [];
         }
 
-        const maxWidth = Math.max(...displays.map(d => d.size.width));
-        const maxHeight = Math.max(...displays.map(d => d.size.height));
+        const maxWidth = Math.max(...displays.map((d) => Math.round(d.size.width * (d.scaleFactor || 1))));
+        const maxHeight = Math.max(...displays.map((d) => Math.round(d.size.height * (d.scaleFactor || 1))));
 
-        // Get all screen sources once using max display resolution.
         const sources = await desktopCapturer.getSources({
             types: ['screen'],
-            thumbnailSize: { width: maxWidth, height: maxHeight }
+            thumbnailSize: { width: maxWidth, height: maxHeight },
         });
 
         if (sources.length === 0) {
@@ -533,19 +532,56 @@ async function captureAllScreens() {
             return [];
         }
 
+        const resolveSourceForDisplay = (display) => {
+            const displayId = String(display.id);
+            const matched = sources.find((source) => {
+                if (source.display_id && String(source.display_id) === displayId) return true;
+                if (source.id === `screen:${displayId}:0`) return true;
+                if (source.id.startsWith(`screen:${displayId}:`)) return true;
+                return false;
+            });
+            if (matched) return matched;
+
+            const byName = sources.find((source) => {
+                const label = `${source.name || ''}`.toLowerCase();
+                return label.includes(displayId) || label.includes(`display ${displayId}`);
+            });
+            if (byName) return byName;
+
+            if (sources.length === displays.length) {
+                const index = displays.findIndex((d) => d.id === display.id);
+                if (index >= 0 && sources[index]) return sources[index];
+            }
+
+            return null;
+        };
+
         const shots = [];
+        const usedSourceIds = new Set();
+
         for (let index = 0; index < displays.length; index++) {
             const display = displays[index];
-            const source = sources[index] ?? sources[0];
+            let source = resolveSourceForDisplay(display);
+
+            if (source) {
+                usedSourceIds.add(source.id);
+            } else {
+                source = sources.find((candidate) => !usedSourceIds.has(candidate.id)) ?? null;
+                if (source) usedSourceIds.add(source.id);
+            }
+
             if (!source || source.thumbnail.isEmpty()) {
+                console.warn(`[Screenshot] No capture source for display ${display.id} (${display.label || index + 1}).`);
                 continue;
             }
 
-            const resized = source.thumbnail.resize({ width: 1280, quality: 'good' });
+            const scale = display.scaleFactor || 1;
+            const targetWidth = Math.min(1280, Math.max(640, Math.round(display.size.width * scale)));
+            const resized = source.thumbnail.resize({ width: targetWidth, quality: 'good' });
             const jpeg = resized.toJPEG(85);
             shots.push({
                 buffer: jpeg,
-                name: source.name || `Display ${index + 1}`,
+                name: source.name || display.label || `Display ${index + 1}`,
                 index,
                 displayId: display.id,
             });

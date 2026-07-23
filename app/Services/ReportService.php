@@ -578,6 +578,7 @@ class ReportService
         $dayTotal = 0;
         $dayProductive = 0;
         $dayUnproductive = 0;
+        $dayNeutral = 0;
 
         foreach ($buckets as $bucket) {
             $apps = array_values($bucket['apps']);
@@ -597,6 +598,7 @@ class ReportService
             $dayTotal += $bucket['total_seconds'];
             $dayProductive += $bucket['productive_seconds'];
             $dayUnproductive += $bucket['unproductive_seconds'];
+            $dayNeutral += $bucket['neutral_seconds'];
         }
 
         return [
@@ -608,6 +610,7 @@ class ReportService
                 'total_seconds' => $dayTotal,
                 'productive_seconds' => $dayProductive,
                 'unproductive_seconds' => $dayUnproductive,
+                'neutral_seconds' => $dayNeutral,
                 'focus_score' => $dayTotal > 0 ? (int) round(($dayProductive / $dayTotal) * 100) : 0,
             ],
         ];

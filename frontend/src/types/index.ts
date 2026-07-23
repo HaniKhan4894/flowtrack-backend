@@ -319,6 +319,7 @@ export interface HourlyTimelineData {
         total_seconds: number;
         productive_seconds: number;
         unproductive_seconds: number;
+        neutral_seconds: number;
         focus_score: number;
     };
 }

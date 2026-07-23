@@ -214,7 +214,12 @@ function stop() {
 }
 
 function getScreenshotActivityLevel() {
-    return systemInput.calculateActivityLevel();
+    const counters = systemInput.getActivityCounters();
+    const base = systemInput.calculateActivityLevel(counters);
+    const polls = Math.max(pollCount, 1);
+    const sessionRatio = activePollCount / polls;
+    const sessionScore = Math.round(sessionRatio * 100);
+    return Math.min(100, Math.round(base * 0.55 + sessionScore * 0.45));
 }
 
 function getLastInputTimestamp() {

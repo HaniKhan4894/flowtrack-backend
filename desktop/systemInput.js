@@ -26,6 +26,9 @@ function sampleSystemActivity() {
         }
     } else if (isActive) {
         activityCounters.mouseMovements += 2;
+    } else if (systemIdle < 30) {
+        // Reading / reference work on extended monitors — still counts as light activity.
+        activityCounters.mouseMovements += 1;
     }
 
     lastSystemIdleSec = systemIdle;
@@ -59,12 +62,13 @@ function calculateActivityLevel(counters = activityCounters) {
         Math.round((counters.mouseMovements + counters.clicks * 5 + counters.keystrokes * 3) / 8),
     );
     const systemScore =
-        systemIdle < 3 ? 90 :
-        systemIdle < 15 ? 65 :
-        systemIdle < 60 ? 35 :
-        systemIdle < 180 ? 15 : 5;
+        systemIdle < 5 ? 85 :
+        systemIdle < 20 ? 72 :
+        systemIdle < 45 ? 55 :
+        systemIdle < 90 ? 38 :
+        systemIdle < 180 ? 22 : 8;
 
-    return Math.min(100, Math.round(inputScore * 0.55 + systemScore * 0.45));
+    return Math.min(100, Math.round(inputScore * 0.5 + systemScore * 0.5));
 }
 
 function init() {

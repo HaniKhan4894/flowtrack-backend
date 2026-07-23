@@ -37,6 +37,113 @@ interface TopApp {
   app_name: string;
   duration_seconds?: number;
   percentage?: number;
+  category?: string;
+}
+
+type AppCategoryGroup = 'productive' | 'unproductive' | 'neutral';
+
+function normalizeAppCategory(category?: string): AppCategoryGroup {
+  if (category === 'productive') return 'productive';
+  if (category === 'unproductive') return 'unproductive';
+  return 'neutral';
+}
+
+function categoryBarColor(category?: string): string {
+  const group = normalizeAppCategory(category);
+  if (group === 'productive') return '#22d3ee';
+  if (group === 'unproductive') return '#fbbf24';
+  return '#64748b';
+}
+
+function aggregateAppsByCategory(
+  data: HourlyTimelineData | null,
+  topApps: TopApp[],
+): Record<AppCategoryGroup, TopApp[]> {
+  const map = new Map<string, TopApp>();
+
+  const ingest = (appName: string, seconds: number, category?: string) => {
+    if (!appName || seconds <= 0) return;
+    const key = `${appName}::${normalizeAppCategory(category)}`;
+    const existing = map.get(key);
+    if (existing) {
+      existing.duration_seconds = (existing.duration_seconds ?? 0) + seconds;
+      return;
+    }
+    map.set(key, {
+      app_name: appName,
+      duration_seconds: seconds,
+      category: normalizeAppCategory(category),
+    });
+  };
+
+  data?.hours.forEach((hour) => {
+    hour.apps.forEach((app) => ingest(app.app_name, app.seconds, app.category));
+  });
+
+  topApps.forEach((app) => {
+    ingest(app.app_name, app.duration_seconds ?? 0, app.category);
+  });
+
+  const grouped: Record<AppCategoryGroup, TopApp[]> = {
+    productive: [],
+    unproductive: [],
+    neutral: [],
+  };
+
+  for (const app of map.values()) {
+    const group = normalizeAppCategory(app.category);
+    grouped[group].push(app);
+  }
+
+  for (const group of Object.keys(grouped) as AppCategoryGroup[]) {
+    const total = grouped[group].reduce((sum, app) => sum + (app.duration_seconds ?? 0), 0) || 1;
+    grouped[group] = grouped[group]
+      .sort((a, b) => (b.duration_seconds ?? 0) - (a.duration_seconds ?? 0))
+      .slice(0, 4)
+      .map((app) => ({
+        ...app,
+        percentage: Math.round(((app.duration_seconds ?? 0) / total) * 100),
+      }));
+  }
+
+  return grouped;
+}
+
+function CategoryAppsColumn({
+  title,
+  toneClass,
+  dotClass,
+  apps,
+}: {
+  title: string;
+  toneClass: string;
+  dotClass: string;
+  apps: TopApp[];
+}) {
+  return (
+    <div className="min-w-0 flex-1">
+      <div className="mb-1.5 flex items-center gap-1.5">
+        <span className={cn('h-1.5 w-1.5 rounded-full', dotClass)} />
+        <p className={cn('text-[9px] font-semibold uppercase tracking-wide', toneClass)}>{title}</p>
+      </div>
+      {apps.length > 0 ? (
+        <div className="space-y-1.5">
+          {apps.map((app) => (
+            <div key={`${title}-${app.app_name}`} className="flex items-center gap-1.5 rounded-lg bg-white/[0.03] px-1.5 py-1">
+              <AppIcon appName={app.app_name} size={28} className="!rounded-lg !p-0.5" />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[9px] text-slate-300">{getAppDisplayName(app.app_name)}</p>
+                <p className="text-[9px] tabular-nums text-slate-500">{formatHm(app.duration_seconds ?? 0)}</p>
+              </div>
+              <span className="text-[9px] font-bold tabular-nums text-slate-400">{app.percentage ?? 0}%</span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="py-3 text-center text-[9px] text-slate-600">—</p>
+      )}
+    </div>
+  );
 }
 
 interface HourlyTimelineProps {
@@ -157,7 +264,6 @@ const HourAxis = ({ hours }: { hours: HourBucket[] }) => (
 
 export const HourlyTimeline = ({ data, isLoading, selectedDate, topApps = [], variant = 'default', loggedSeconds, activityTrendDelta = null }: HourlyTimelineProps) => {
   const [hover, setHover] = useState<HoverState | null>(null);
-  const [hoveredApp, setHoveredApp] = useState<string | null>(null);
 
   const setHoverFromEvent = useCallback((hour: number, row: RowType, e: React.MouseEvent<HTMLElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -190,6 +296,11 @@ export const HourlyTimeline = ({ data, isLoading, selectedDate, topApps = [], va
       }));
   }, [data, topApps]);
 
+  const appsByCategory = useMemo(
+    () => aggregateAppsByCategory(data, topApps),
+    [data, topApps],
+  );
+
   const hoveredHour = hover !== null ? data?.hours.find((h) => h.hour === hover.hour) : null;
 
   if (isLoading) {
@@ -216,7 +327,6 @@ export const HourlyTimeline = ({ data, isLoading, selectedDate, topApps = [], va
   const activityPct = timeLoggedSeconds > 0
     ? Math.round((activitySeconds / timeLoggedSeconds) * 100)
     : 0;
-  const activityBarTotal = activitySeconds || 1;
 
   const peakHour = data.hours.reduce(
     (best, h) => (h.total_seconds > best.total_seconds ? h : best),
@@ -229,7 +339,10 @@ export const HourlyTimeline = ({ data, isLoading, selectedDate, topApps = [], va
   const productiveShare = activitySeconds > 0
     ? Math.round((data.summary.productive_seconds / activitySeconds) * 100)
     : 0;
-  const trackerTopApps = dayTopApps.slice(0, 3);
+  const allTrackedSeconds = data.summary.productive_seconds
+    + data.summary.unproductive_seconds
+    + (data.summary.neutral_seconds ?? 0);
+  const trackedBarTotal = allTrackedSeconds || 1;
 
   const isActive = (hour: number, row: RowType) => hover?.hour === hour && hover?.row === row;
   const isTracker = variant === 'tracker';
@@ -288,81 +401,70 @@ export const HourlyTimeline = ({ data, isLoading, selectedDate, topApps = [], va
                 </div>
                 <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/[0.06]">
                   <div className="flex h-full">
-                    <div className="h-full bg-sky-500" style={{ width: `${(data.summary.productive_seconds / activityBarTotal) * 100}%` }} />
-                    <div className="h-full bg-amber-400/70" style={{ width: `${(data.summary.unproductive_seconds / activityBarTotal) * 100}%` }} />
+                    <div className="h-full bg-cyan-500" style={{ width: `${(data.summary.productive_seconds / trackedBarTotal) * 100}%` }} />
+                    <div className="h-full bg-amber-400/80" style={{ width: `${(data.summary.unproductive_seconds / trackedBarTotal) * 100}%` }} />
+                    <div className="h-full bg-slate-500/70" style={{ width: `${((data.summary.neutral_seconds ?? 0) / trackedBarTotal) * 100}%` }} />
                   </div>
                 </div>
                 <div className="mt-1 flex justify-between text-[9px] text-slate-500">
                   <span>{formatHm(data.summary.productive_seconds)} productive</span>
                   <span>{formatHm(data.summary.unproductive_seconds)} off-track</span>
+                  <span>{formatHm(data.summary.neutral_seconds ?? 0)} neutral</span>
                 </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 divide-x divide-white/[0.06] border-b border-white/[0.06]">
-              <div className="flex min-h-[118px] flex-col px-2.5 py-2.5">
-                <p className="mb-1 text-[10px] font-medium text-slate-500">Where time went</p>
-                {trackerTopApps.length > 0 ? (
-                  <div className="flex flex-1 items-center justify-center">
-                    <div className="flex w-full items-center justify-between gap-1">
-                      {trackerTopApps.map((app) => {
-                        const isHot = hoveredApp === app.app_name;
-                        const label = getAppDisplayName(app.app_name);
-                        return (
-                          <button
-                            key={app.app_name}
-                            type="button"
-                            onMouseEnter={() => setHoveredApp(app.app_name)}
-                            onMouseLeave={() => setHoveredApp(null)}
-                            className={cn(
-                              'flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-lg py-1 transition-colors',
-                              isHot ? 'bg-white/[0.05]' : 'hover:bg-white/[0.03]',
-                            )}
-                            title={`${label} · ${app.percentage ?? 0}%`}
-                          >
-                            <AppIcon appName={app.app_name} size={56} />
-                            <span className="max-w-[64px] truncate text-[9px] text-slate-500">{label.split(' ')[0]}</span>
-                            <span className="text-[10px] font-bold tabular-nums text-slate-400">{app.percentage ?? 0}%</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex flex-1 items-center justify-center">
-                    <p className="text-[10px] text-slate-600">No app data yet</p>
-                  </div>
-                )}
+            <div className="border-b border-white/[0.06] px-2.5 py-2.5">
+              <p className="mb-2 text-[10px] font-medium text-slate-500">Apps by focus</p>
+              <div className="grid grid-cols-3 gap-2">
+                <CategoryAppsColumn
+                  title="Productive"
+                  toneClass="text-cyan-300"
+                  dotClass="bg-cyan-400"
+                  apps={appsByCategory.productive}
+                />
+                <CategoryAppsColumn
+                  title="Off-track"
+                  toneClass="text-amber-300"
+                  dotClass="bg-amber-400"
+                  apps={appsByCategory.unproductive}
+                />
+                <CategoryAppsColumn
+                  title="Neutral"
+                  toneClass="text-slate-400"
+                  dotClass="bg-slate-500"
+                  apps={appsByCategory.neutral}
+                />
               </div>
+            </div>
 
-              <div className="flex min-h-[118px] flex-col justify-center px-2.5 py-2.5">
-                <p className="mb-2 text-[10px] font-medium text-slate-500">Day insights</p>
-                <div className="grid grid-cols-2 gap-x-2 gap-y-2">
-                  <div className="rounded-lg bg-white/[0.03] px-2 py-1.5">
-                    <p className="text-[9px] text-slate-500">Peak hour</p>
-                    <p className="text-[11px] font-semibold tabular-nums text-white">
-                      {peakHour.total_seconds > 0 ? peakHour.label : '—'}
-                    </p>
-                  </div>
-                  <div className="rounded-lg bg-white/[0.03] px-2 py-1.5">
-                    <p className="text-[9px] text-slate-500">Active hours</p>
-                    <p className="text-[11px] font-semibold tabular-nums text-sky-300">{activeHourCount}</p>
-                  </div>
-                  <div className="rounded-lg bg-white/[0.03] px-2 py-1.5">
-                    <p className="text-[9px] text-slate-500">Apps used</p>
-                    <p className="text-[11px] font-semibold tabular-nums text-white">{uniqueAppCount}</p>
-                  </div>
-                  <div className="rounded-lg bg-white/[0.03] px-2 py-1.5">
-                    <p className="text-[9px] text-slate-500">Productive</p>
-                    <p className="text-[11px] font-semibold tabular-nums text-emerald-400">{productiveShare}%</p>
-                  </div>
-                </div>
-                {data.summary.focus_score > 0 && (
-                  <p className="mt-2 text-center text-[9px] text-slate-500">
-                    Focus score <span className="font-semibold text-violet-300">{Math.round(data.summary.focus_score)}</span>
+            <div className="border-b border-white/[0.06] px-2.5 py-2.5">
+              <p className="mb-2 text-[10px] font-medium text-slate-500">Day insights</p>
+              <div className="grid grid-cols-2 gap-x-2 gap-y-2 sm:grid-cols-4">
+                <div className="rounded-lg bg-white/[0.03] px-2 py-1.5">
+                  <p className="text-[9px] text-slate-500">Peak hour</p>
+                  <p className="text-[11px] font-semibold tabular-nums text-white">
+                    {peakHour.total_seconds > 0 ? peakHour.label : '—'}
                   </p>
-                )}
+                </div>
+                <div className="rounded-lg bg-white/[0.03] px-2 py-1.5">
+                  <p className="text-[9px] text-slate-500">Active hours</p>
+                  <p className="text-[11px] font-semibold tabular-nums text-sky-300">{activeHourCount}</p>
+                </div>
+                <div className="rounded-lg bg-white/[0.03] px-2 py-1.5">
+                  <p className="text-[9px] text-slate-500">Apps used</p>
+                  <p className="text-[11px] font-semibold tabular-nums text-white">{uniqueAppCount}</p>
+                </div>
+                <div className="rounded-lg bg-white/[0.03] px-2 py-1.5">
+                  <p className="text-[9px] text-slate-500">Productive</p>
+                  <p className="text-[11px] font-semibold tabular-nums text-emerald-400">{productiveShare}%</p>
+                </div>
               </div>
+              {data.summary.focus_score > 0 && (
+                <p className="mt-2 text-center text-[9px] text-slate-500">
+                  Focus score <span className="font-semibold text-violet-300">{Math.round(data.summary.focus_score)}</span>
+                </p>
+              )}
             </div>
 
             {/* ── Unified timeline ── */}
@@ -370,9 +472,9 @@ export const HourlyTimeline = ({ data, isLoading, selectedDate, topApps = [], va
               <div className="mb-2 flex items-center justify-between">
                 <span className="text-xs font-medium text-slate-300">Hourly breakdown</span>
                 <div className="flex items-center gap-3 text-[9px] text-slate-500">
-                  <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-sky-500" /> Hours</span>
-                  <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-cyan-400" /> Focus</span>
+                  <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-cyan-400" /> Productive</span>
                   <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-amber-400" /> Off-track</span>
+                  <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-slate-500" /> Neutral</span>
                 </div>
               </div>
 
@@ -460,10 +562,10 @@ export const HourlyTimeline = ({ data, isLoading, selectedDate, topApps = [], va
                         >
                           {h.apps.length > 0 ? (
                             <div className="flex h-full flex-col">
-                              {h.apps.slice(0, 6).map((app, idx) => (
+                              {h.apps.slice(0, 6).map((app) => (
                                 <div
                                   key={app.app_name}
-                                  style={{ flex: app.seconds, backgroundColor: APP_COLORS[idx % APP_COLORS.length] }}
+                                  style={{ flex: app.seconds, backgroundColor: categoryBarColor(app.category) }}
                                   className="min-h-[1px]"
                                 />
                               ))}
@@ -493,8 +595,8 @@ export const HourlyTimeline = ({ data, isLoading, selectedDate, topApps = [], va
               </div>
               <p className="text-xl font-bold text-white mb-2">{formatClock(activitySeconds)}</p>
               <div className="h-2.5 rounded-full overflow-hidden flex bg-white/5">
-                <div className="h-full bg-emerald-500" style={{ width: `${(data.summary.productive_seconds / activityBarTotal) * 100}%` }} />
-                <div className="h-full bg-amber-400" style={{ width: `${(data.summary.unproductive_seconds / activityBarTotal) * 100}%` }} />
+                <div className="h-full bg-emerald-500" style={{ width: `${(data.summary.productive_seconds / trackedBarTotal) * 100}%` }} />
+                <div className="h-full bg-amber-400" style={{ width: `${(data.summary.unproductive_seconds / trackedBarTotal) * 100}%` }} />
               </div>
               <div className="flex justify-between text-[10px] text-slate-500 mt-1 font-mono">
                 <span className="text-emerald-400/80">{formatHm(data.summary.productive_seconds)}</span>
