@@ -17,7 +17,7 @@
 6. Start services:
    - backend: `php spark serve`
    - frontend: `cd frontend && npm run dev`
-   - desktop: `cd desktop && npm run dev`
+   - desktop: `npm run dev:desktop` (from repo root) or `cd desktop && npm run dev`
 
 ## Quality Commands
 - Backend tests: `composer test`

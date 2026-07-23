@@ -23,8 +23,22 @@ export function isDesktopApp(): boolean {
     return typeof window !== 'undefined' && 'electronAPI' in window;
 }
 
+export function getDesktopHomePath(): string {
+    return '/tracker';
+}
+
+export function getDesktopLoginPath(): string {
+    return '/tracker/login';
+}
+
+export async function openWebAppInBrowser(): Promise<void> {
+    if (isDesktopApp() && window.electronAPI?.openWebApp) {
+        await window.electronAPI.openWebApp();
+    }
+}
+
 export function hardRedirectToLogin(): void {
-    const target = '/login?signed_out=1';
+    const target = `${getDesktopLoginPath()}?signed_out=1`;
     if (isDesktopApp()) {
         window.location.replace(target);
         return;

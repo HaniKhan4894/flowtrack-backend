@@ -1,7 +1,8 @@
 import axios from 'axios';
 import { authService } from './authService';
-import { syncElectronAuthToken } from '../utils/electronAuth';
+import { syncElectronAuthToken, getDesktopLoginPath } from '../utils/electronAuth';
 import { persistAuthTokens, clearAuthTokens } from '../utils/authStorage';
+import { isLoginPath } from '../utils/authSessionRefresh';
 
 const apiBaseUrl =
     import.meta.env.VITE_API_URL ||
@@ -72,6 +73,12 @@ client.interceptors.response.use(
                     });
                     const newAccessToken = refreshed.data.access_token;
                     syncElectronAuthToken(newAccessToken);
+                    void import('../store/authStore').then(({ useAuthStore }) => {
+                        useAuthStore.setState({
+                            accessToken: newAccessToken,
+                            isAuthenticated: true,
+                        });
+                    });
                     flushPendingRequests(newAccessToken);
                     originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
                     return client(originalRequest);
@@ -84,8 +91,8 @@ client.interceptors.response.use(
                     if (!trackingActive) {
                         clearAuthTokens();
                         syncElectronAuthToken('');
-                        if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
-                            window.location.href = '/login';
+                        if (typeof window !== 'undefined' && !isLoginPath(window.location.pathname)) {
+                            window.location.href = getDesktopLoginPath();
                         }
                     }
                     return Promise.reject(refreshError);

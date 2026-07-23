@@ -1,8 +1,9 @@
 import { useState, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { Clock, Timer, BarChart3, AppWindow } from 'lucide-react';
+import { Clock, Timer, BarChart3, AppWindow, TrendingDown, TrendingUp } from 'lucide-react';
 import { AppIcon } from '../../components/AppIcon';
 import { getAppDisplayName } from '../../utils/appIcons';
+import { cn } from '../../lib/cn';
 import type { HourBucket, HourlyTimelineData } from '../../types';
 
 type RowType = 'time' | 'productivity' | 'apps';
@@ -43,6 +44,11 @@ interface HourlyTimelineProps {
   isLoading: boolean;
   selectedDate?: string;
   topApps?: TopApp[];
+  variant?: 'default' | 'tracker';
+  /** Timer / time-entry total for the day (distinct from activity-tracked seconds). */
+  loggedSeconds?: number;
+  /** Change in activity % vs yesterday (positive = up). */
+  activityTrendDelta?: number | null;
 }
 
 const TooltipCard = ({ children }: { children: React.ReactNode }) => (
@@ -149,8 +155,9 @@ const HourAxis = ({ hours }: { hours: HourBucket[] }) => (
   </div>
 );
 
-export const HourlyTimeline = ({ data, isLoading, selectedDate, topApps = [] }: HourlyTimelineProps) => {
+export const HourlyTimeline = ({ data, isLoading, selectedDate, topApps = [], variant = 'default', loggedSeconds, activityTrendDelta = null }: HourlyTimelineProps) => {
   const [hover, setHover] = useState<HoverState | null>(null);
+  const [hoveredApp, setHoveredApp] = useState<string | null>(null);
 
   const setHoverFromEvent = useCallback((hour: number, row: RowType, e: React.MouseEvent<HTMLElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -204,12 +211,28 @@ export const HourlyTimeline = ({ data, isLoading, selectedDate, topApps = [] }: 
   }
 
   const maxSeconds = Math.max(...data.hours.map((h) => h.total_seconds), 1);
-  const activityPct = data.summary.total_seconds > 0
-    ? Math.round((data.summary.productive_seconds / data.summary.total_seconds) * 100)
+  const activitySeconds = data.summary.productive_seconds + data.summary.unproductive_seconds;
+  const timeLoggedSeconds = loggedSeconds ?? data.summary.total_seconds;
+  const activityPct = timeLoggedSeconds > 0
+    ? Math.round((activitySeconds / timeLoggedSeconds) * 100)
     : 0;
-  const neutralSeconds = Math.max(0, data.summary.total_seconds - data.summary.productive_seconds - data.summary.unproductive_seconds);
+  const activityBarTotal = activitySeconds || 1;
+
+  const peakHour = data.hours.reduce(
+    (best, h) => (h.total_seconds > best.total_seconds ? h : best),
+    data.hours[0],
+  );
+  const activeHourCount = data.hours.filter((h) => h.total_seconds > 0).length;
+  const uniqueAppCount = new Set(
+    data.hours.flatMap((h) => h.apps.map((a) => a.app_name)),
+  ).size;
+  const productiveShare = activitySeconds > 0
+    ? Math.round((data.summary.productive_seconds / activitySeconds) * 100)
+    : 0;
+  const trackerTopApps = dayTopApps.slice(0, 3);
 
   const isActive = (hour: number, row: RowType) => hover?.hour === hour && hover?.row === row;
+  const isTracker = variant === 'tracker';
 
   return (
     <>
@@ -219,34 +242,259 @@ export const HourlyTimeline = ({ data, isLoading, selectedDate, topApps = [] }: 
         )
       )}
 
-      <div className="overlay-panel rounded-2xl">
+      <div className={cn('overlay-panel rounded-2xl', isTracker && 'rounded-xl border-0 bg-transparent shadow-none')}>
+        {!isTracker && (
         <div className="px-6 py-4 border-b border-white/8 flex items-center justify-between bg-white/[0.02]">
           <div className="flex items-center gap-3">
             <span className="text-sm font-semibold text-white">{formattedDate}</span>
             {formattedDate && <span className="text-slate-600">|</span>}
-            <span className="text-sm font-bold text-sky-400">{formatClock(data.summary.total_seconds)}</span>
+            <span className="text-sm font-bold text-sky-400">{formatClock(timeLoggedSeconds)}</span>
           </div>
           <span className="text-xs font-bold px-3 py-1.5 rounded-lg bg-primary-500/15 text-primary-400 border border-primary-500/25">
             Timesheet
           </span>
         </div>
+        )}
 
+        {isTracker ? (
+          <div className="overflow-hidden rounded-2xl border border-white/[0.07] bg-[#0b0f17]/90">
+            {/* ── Stats + apps ── */}
+            <div className="grid grid-cols-5 border-b border-white/[0.06]">
+              <div className="col-span-2 flex flex-col items-center justify-center border-r border-white/[0.06] px-3 py-3">
+                <p className="text-[10px] font-medium text-slate-500">Hours tracked</p>
+                <p className="mt-0.5 text-2xl font-bold tabular-nums text-white">{formatClock(timeLoggedSeconds)}</p>
+              </div>
+
+              <div className="col-span-3 px-3 py-2.5">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="text-[10px] font-medium text-slate-500">Active work</p>
+                    <p className="text-xl font-bold tabular-nums text-sky-300">{formatClock(activitySeconds)}</p>
+                  </div>
+                  <div className="flex flex-col items-end gap-1">
+                    <span className="rounded-md bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-sky-300">
+                      {activityPct}% active
+                    </span>
+                    {activityTrendDelta != null && activityTrendDelta !== 0 && (
+                      <span className={cn(
+                        'inline-flex items-center gap-0.5 text-[9px] font-medium',
+                        activityTrendDelta > 0 ? 'text-emerald-400' : 'text-rose-400',
+                      )}>
+                        {activityTrendDelta > 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                        {Math.abs(activityTrendDelta)}% vs yesterday
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/[0.06]">
+                  <div className="flex h-full">
+                    <div className="h-full bg-sky-500" style={{ width: `${(data.summary.productive_seconds / activityBarTotal) * 100}%` }} />
+                    <div className="h-full bg-amber-400/70" style={{ width: `${(data.summary.unproductive_seconds / activityBarTotal) * 100}%` }} />
+                  </div>
+                </div>
+                <div className="mt-1 flex justify-between text-[9px] text-slate-500">
+                  <span>{formatHm(data.summary.productive_seconds)} productive</span>
+                  <span>{formatHm(data.summary.unproductive_seconds)} off-track</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 divide-x divide-white/[0.06] border-b border-white/[0.06]">
+              <div className="flex min-h-[118px] flex-col px-2.5 py-2.5">
+                <p className="mb-1 text-[10px] font-medium text-slate-500">Where time went</p>
+                {trackerTopApps.length > 0 ? (
+                  <div className="flex flex-1 items-center justify-center">
+                    <div className="flex w-full items-center justify-between gap-1">
+                      {trackerTopApps.map((app) => {
+                        const isHot = hoveredApp === app.app_name;
+                        const label = getAppDisplayName(app.app_name);
+                        return (
+                          <button
+                            key={app.app_name}
+                            type="button"
+                            onMouseEnter={() => setHoveredApp(app.app_name)}
+                            onMouseLeave={() => setHoveredApp(null)}
+                            className={cn(
+                              'flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-lg py-1 transition-colors',
+                              isHot ? 'bg-white/[0.05]' : 'hover:bg-white/[0.03]',
+                            )}
+                            title={`${label} · ${app.percentage ?? 0}%`}
+                          >
+                            <AppIcon appName={app.app_name} size={56} />
+                            <span className="max-w-[64px] truncate text-[9px] text-slate-500">{label.split(' ')[0]}</span>
+                            <span className="text-[10px] font-bold tabular-nums text-slate-400">{app.percentage ?? 0}%</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-1 items-center justify-center">
+                    <p className="text-[10px] text-slate-600">No app data yet</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex min-h-[118px] flex-col justify-center px-2.5 py-2.5">
+                <p className="mb-2 text-[10px] font-medium text-slate-500">Day insights</p>
+                <div className="grid grid-cols-2 gap-x-2 gap-y-2">
+                  <div className="rounded-lg bg-white/[0.03] px-2 py-1.5">
+                    <p className="text-[9px] text-slate-500">Peak hour</p>
+                    <p className="text-[11px] font-semibold tabular-nums text-white">
+                      {peakHour.total_seconds > 0 ? peakHour.label : '—'}
+                    </p>
+                  </div>
+                  <div className="rounded-lg bg-white/[0.03] px-2 py-1.5">
+                    <p className="text-[9px] text-slate-500">Active hours</p>
+                    <p className="text-[11px] font-semibold tabular-nums text-sky-300">{activeHourCount}</p>
+                  </div>
+                  <div className="rounded-lg bg-white/[0.03] px-2 py-1.5">
+                    <p className="text-[9px] text-slate-500">Apps used</p>
+                    <p className="text-[11px] font-semibold tabular-nums text-white">{uniqueAppCount}</p>
+                  </div>
+                  <div className="rounded-lg bg-white/[0.03] px-2 py-1.5">
+                    <p className="text-[9px] text-slate-500">Productive</p>
+                    <p className="text-[11px] font-semibold tabular-nums text-emerald-400">{productiveShare}%</p>
+                  </div>
+                </div>
+                {data.summary.focus_score > 0 && (
+                  <p className="mt-2 text-center text-[9px] text-slate-500">
+                    Focus score <span className="font-semibold text-violet-300">{Math.round(data.summary.focus_score)}</span>
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* ── Unified timeline ── */}
+            <div className="px-3 py-3">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-xs font-medium text-slate-300">Hourly breakdown</span>
+                <div className="flex items-center gap-3 text-[9px] text-slate-500">
+                  <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-sky-500" /> Hours</span>
+                  <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-cyan-400" /> Focus</span>
+                  <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-amber-400" /> Off-track</span>
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <div className="flex w-9 shrink-0 flex-col justify-end gap-[14px] pb-[1px] text-[9px] font-medium text-slate-500">
+                  <span className="leading-none">Hours</span>
+                  <span className="leading-none">Focus</span>
+                  <span className="leading-none">Apps</span>
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <HourAxis hours={data.hours} />
+
+                  {/* Hours row */}
+                  <div className="mb-2 flex h-12 items-end gap-px">
+                    {data.hours.map((h) => {
+                      const heightPct = h.total_seconds > 0 ? Math.max(10, (h.total_seconds / maxSeconds) * 100) : 0;
+                      const active = isActive(h.hour, 'time');
+                      return (
+                        <div
+                          key={`t-${h.hour}`}
+                          className="flex h-full flex-1 items-end cursor-pointer"
+                          onMouseEnter={(e) => h.total_seconds > 0 && setHoverFromEvent(h.hour, 'time', e)}
+                          onMouseLeave={clearHover}
+                        >
+                          <div
+                            className={cn(
+                              'w-full rounded-sm transition-all',
+                              h.total_seconds > 0
+                                ? active ? 'bg-sky-300' : 'bg-sky-500/70 hover:bg-sky-400/90'
+                                : 'bg-transparent',
+                            )}
+                            style={{ height: h.total_seconds > 0 ? `${heightPct}%` : 0 }}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Focus row */}
+                  <div className="mb-2 flex h-5 gap-px">
+                    {data.hours.map((h) => {
+                      const total = h.total_seconds || 1;
+                      const prodPct = (h.productive_seconds / total) * 100;
+                      const unprodPct = (h.unproductive_seconds / total) * 100;
+                      const neutralPct = 100 - prodPct - unprodPct;
+                      const active = isActive(h.hour, 'productivity');
+                      return (
+                        <div
+                          key={`p-${h.hour}`}
+                          className={cn(
+                            'h-full flex-1 cursor-pointer overflow-hidden rounded-sm',
+                            active && 'ring-1 ring-sky-400/70',
+                          )}
+                          onMouseEnter={(e) => h.total_seconds > 0 && setHoverFromEvent(h.hour, 'productivity', e)}
+                          onMouseLeave={clearHover}
+                        >
+                          {h.total_seconds > 0 ? (
+                            <div className="flex h-full flex-col">
+                              {prodPct > 0 && <div className="min-h-[1px] bg-cyan-500" style={{ flex: prodPct }} />}
+                              {unprodPct > 0 && <div className="min-h-[1px] bg-amber-400/80" style={{ flex: unprodPct }} />}
+                              {neutralPct > 0 && <div className="min-h-[1px] bg-slate-600/60" style={{ flex: neutralPct }} />}
+                            </div>
+                          ) : (
+                            <div className="h-full bg-white/[0.03]" />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Apps row */}
+                  <div className="flex h-6 gap-px">
+                    {data.hours.map((h) => {
+                      const active = isActive(h.hour, 'apps');
+                      return (
+                        <div
+                          key={`a-${h.hour}`}
+                          className={cn(
+                            'h-full flex-1 cursor-pointer overflow-hidden rounded-sm',
+                            active && 'ring-1 ring-violet-400/60',
+                          )}
+                          onMouseEnter={(e) => h.apps.length > 0 && setHoverFromEvent(h.hour, 'apps', e)}
+                          onMouseLeave={clearHover}
+                        >
+                          {h.apps.length > 0 ? (
+                            <div className="flex h-full flex-col">
+                              {h.apps.slice(0, 6).map((app, idx) => (
+                                <div
+                                  key={app.app_name}
+                                  style={{ flex: app.seconds, backgroundColor: APP_COLORS[idx % APP_COLORS.length] }}
+                                  className="min-h-[1px]"
+                                />
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="h-full bg-white/[0.03]" />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
         <div className="flex flex-col lg:flex-row">
           <div className="lg:w-52 flex-shrink-0 border-b lg:border-b-0 lg:border-r border-white/8 p-5 space-y-5 bg-white/[0.01]">
             <div>
               <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Time logged (h)</p>
-              <p className="text-3xl font-bold text-white">{formatClock(data.summary.total_seconds)}</p>
+              <p className="text-3xl font-bold text-white">{formatClock(timeLoggedSeconds)}</p>
             </div>
             <div>
               <div className="flex items-baseline justify-between mb-1">
                 <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Activity time (h)</p>
                 <span className="text-xs font-bold text-emerald-400">{activityPct}%</span>
               </div>
-              <p className="text-xl font-bold text-white mb-2">{formatClock(data.summary.total_seconds)}</p>
+              <p className="text-xl font-bold text-white mb-2">{formatClock(activitySeconds)}</p>
               <div className="h-2.5 rounded-full overflow-hidden flex bg-white/5">
-                <div className="h-full bg-emerald-500" style={{ width: `${(data.summary.productive_seconds / (data.summary.total_seconds || 1)) * 100}%` }} />
-                <div className="h-full bg-amber-400" style={{ width: `${(data.summary.unproductive_seconds / (data.summary.total_seconds || 1)) * 100}%` }} />
-                <div className="h-full bg-slate-600" style={{ width: `${(neutralSeconds / (data.summary.total_seconds || 1)) * 100}%` }} />
+                <div className="h-full bg-emerald-500" style={{ width: `${(data.summary.productive_seconds / activityBarTotal) * 100}%` }} />
+                <div className="h-full bg-amber-400" style={{ width: `${(data.summary.unproductive_seconds / activityBarTotal) * 100}%` }} />
               </div>
               <div className="flex justify-between text-[10px] text-slate-500 mt-1 font-mono">
                 <span className="text-emerald-400/80">{formatHm(data.summary.productive_seconds)}</span>
@@ -268,17 +516,16 @@ export const HourlyTimeline = ({ data, isLoading, selectedDate, topApps = [] }: 
             )}
           </div>
 
-          <div className="flex-1 p-5 overflow-x-auto">
-            <div className="min-w-[860px] space-y-5">
+          <div className="flex-1 min-w-0 w-full p-5 overflow-x-auto">
+            <div className="space-y-5 min-w-[860px]">
               <HourAxis hours={data.hours} />
 
-              {/* Section 1: Time logged by hour */}
               <div>
                 <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                   <Clock size={12} className="text-slate-400" />
                   Time logged by hour
                 </p>
-                <div className="flex gap-[4px] h-[72px] items-end rounded-lg bg-[#0d0f14]/80 border border-white/5 px-2 py-2">
+                <div className="flex gap-[2px] items-end rounded-lg bg-[#0d0f14]/80 border border-white/5 px-2 py-2 h-[72px] gap-[4px]">
                   {data.hours.map((h) => {
                     const heightPct = h.total_seconds > 0 ? Math.max(15, (h.total_seconds / maxSeconds) * 100) : 0;
                     const active = isActive(h.hour, 'time');
@@ -290,7 +537,7 @@ export const HourlyTimeline = ({ data, isLoading, selectedDate, topApps = [] }: 
                         onMouseLeave={clearHover}
                       >
                         <div
-                          className={`w-full max-w-[24px] rounded-t transition-all duration-150 ${
+                          className={`w-full rounded-t transition-all duration-150 max-w-[24px] ${
                             h.total_seconds > 0
                               ? active ? 'bg-slate-200 shadow-md' : 'bg-slate-500/80 hover:bg-slate-400'
                               : ''
@@ -303,13 +550,12 @@ export const HourlyTimeline = ({ data, isLoading, selectedDate, topApps = [] }: 
                 </div>
               </div>
 
-              {/* Section 2: Productivity */}
               <div>
                 <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                   <BarChart3 size={12} className="text-emerald-500" />
                   Productivity by hour
                 </p>
-                <div className="flex gap-[4px] h-10 rounded-lg bg-[#0d0f14]/80 border border-white/5 px-2 py-1.5">
+                <div className="flex gap-[2px] rounded-lg bg-[#0d0f14]/80 border border-white/5 px-2 py-1.5 h-10 gap-[4px]">
                   {data.hours.map((h) => {
                     const total = h.total_seconds || 1;
                     const prodPct = (h.productive_seconds / total) * 100;
@@ -340,13 +586,12 @@ export const HourlyTimeline = ({ data, isLoading, selectedDate, topApps = [] }: 
                 </div>
               </div>
 
-              {/* Section 3: Active apps */}
               <div>
                 <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                   <AppWindow size={12} className="text-violet-400" />
                   Active apps
                 </p>
-                <div className="flex gap-[4px] h-11 rounded-lg bg-[#0d0f14]/80 border border-white/5 px-2 py-1.5">
+                <div className="flex gap-[2px] rounded-lg bg-[#0d0f14]/80 border border-white/5 px-2 py-1.5 h-11 gap-[4px]">
                   {data.hours.map((h) => {
                     const active = isActive(h.hour, 'apps');
                     return (
@@ -385,6 +630,7 @@ export const HourlyTimeline = ({ data, isLoading, selectedDate, topApps = [] }: 
             </div>
           </div>
         </div>
+        )}
       </div>
     </>
   );

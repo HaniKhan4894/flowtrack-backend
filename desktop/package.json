@@ -9,13 +9,13 @@
         "icons": "node scripts/generate-icons.js",
         "prestart": "node scripts/generate-icons.js",
         "predev": "node scripts/generate-icons.js",
-        "start": "electron . --disable-gpu-sandbox",
-        "dev": "electron . --disable-gpu-sandbox",
+        "start": "cross-env FLOWTRACK_DESKTOP_VARIANT=tracker electron . --disable-gpu-sandbox",
+        "dev": "cross-env FLOWTRACK_DESKTOP_VARIANT=tracker electron . --disable-gpu-sandbox",
         "sync-env": "node ../scripts/sync-deploy-env.js",
         "build:frontend": "npm run sync-env && cd ../frontend && npm run build",
-        "pack:win": "node scripts/prepack-clean.js && npm run icons && npm run build:frontend && electron-builder --win && node ../scripts/publish-installers.js",
-        "pack:mac": "npm run icons && npm run build:frontend && electron-builder --mac && node ../scripts/publish-installers.js",
-        "pack": "npm run icons && npm run build:frontend && electron-builder --win --mac && node ../scripts/publish-installers.js",
+        "pack:win": "node scripts/prepack-clean.js && npm run icons && npm run build:frontend && cross-env FLOWTRACK_DESKTOP_VARIANT=tracker electron-builder --win && node ../scripts/publish-installers.js",
+        "pack:mac": "npm run icons && npm run build:frontend && cross-env FLOWTRACK_DESKTOP_VARIANT=tracker electron-builder --mac && node ../scripts/publish-installers.js",
+        "pack": "npm run icons && npm run build:frontend && cross-env FLOWTRACK_DESKTOP_VARIANT=tracker electron-builder --win --mac && node ../scripts/publish-installers.js",
         "dist:win": "npm run pack:win",
         "dist:mac": "npm run pack:mac",
         "dist": "npm run pack"
@@ -26,6 +26,7 @@
         "form-data": "^4.0.0"
     },
     "devDependencies": {
+        "cross-env": "^7.0.3",
         "electron": "^31.0.0",
         "electron-builder": "^25.1.8",
         "png-to-ico": "^2.1.8",
@@ -35,8 +36,8 @@
     "build": {
         "npmRebuild": false,
         "buildDependenciesFromSource": false,
-        "appId": "com.flowtrack.desktop",
-        "productName": "FlowTrack",
+        "appId": "com.flowtrack.tracker",
+        "productName": "FlowTrack Tracker",
         "icon": "build/icon.png",
         "directories": {
             "output": "dist-build",
@@ -50,6 +51,7 @@
             "timerReminderPrompt.js",
             "preload.js",
             "config.js",
+            "variant.js",
             "icon.png",
             "build/icon.ico",
             "build/icon.png",
@@ -115,7 +117,7 @@
             "installerHeaderIcon": "build/icon.ico"
         },
         "dmg": {
-            "title": "FlowTrack"
+            "title": "FlowTrack Tracker"
         }
     }
 }

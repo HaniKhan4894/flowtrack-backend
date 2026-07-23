@@ -5,6 +5,9 @@ declare global {
     electronAPI?: {
       getAppVersion: () => Promise<string>;
       isDesktop: () => Promise<boolean>;
+      desktopVariant: () => 'tracker';
+      openWebApp: () => Promise<{ success: boolean }>;
+      startBrowserSignIn: () => Promise<{ success: boolean; error?: string }>;
       setAuthToken: (token: string) => Promise<{ success: boolean }>;
       logoutSession: () => Promise<{ success: boolean }>;
       windowMinimize: () => Promise<{ success: boolean }>;
@@ -28,6 +31,12 @@ declare global {
       }) => void) => () => void;
       onAppLifecycle: (callback: (state: 'hide' | 'show' | 'shutdown') => void) => () => void;
       onTimerReminderResume: (callback: () => void) => () => void;
+      onBrowserSignInComplete: (callback: (tokens: {
+        access_token: string;
+        refresh_token?: string | null;
+        organization_id?: number | null;
+      }) => void) => () => void;
+      onBrowserSignInError: (callback: (payload: { error?: string }) => void) => () => void;
     };
   }
 }

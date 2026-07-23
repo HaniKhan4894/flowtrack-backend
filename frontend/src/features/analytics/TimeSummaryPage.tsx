@@ -56,7 +56,12 @@ function formatHoursLabel(seconds: number): string {
   return `${h}:${String(m).padStart(2, '0')}`;
 }
 
-const TimeSummaryPage = () => {
+interface TimeSummaryViewProps {
+  /** Compact layout for desktop tracker — hides page chrome. */
+  embedded?: boolean;
+}
+
+export function TimeSummaryView({ embedded = false }: TimeSummaryViewProps) {
   const user = useAuthStore((s) => s.user);
   const canViewTeam = hasPermission(user, 'reports.view_team');
 
@@ -143,11 +148,18 @@ const TimeSummaryPage = () => {
   const isCurrentMonth = year === now.getFullYear() && month === now.getMonth() + 1;
 
   if (loading && !calendar) {
-    return <PageSkeleton />;
+    return embedded ? (
+      <div className="flex justify-center py-12">
+        <Loader2 className="h-6 w-6 animate-spin text-slate-500" />
+      </div>
+    ) : (
+      <PageSkeleton />
+    );
   }
 
   return (
-    <div className="space-y-6">
+    <div className={embedded ? 'space-y-4' : 'space-y-6'}>
+      {!embedded && (
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-white mb-1">Time Summary</h1>
@@ -219,6 +231,34 @@ const TimeSummaryPage = () => {
           )}
         </div>
       </div>
+      )}
+
+      {embedded && (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">Time summary</p>
+          <div className="flex items-center gap-1 rounded-xl border border-white/10 bg-white/[0.03] px-1 py-0.5">
+            <button
+              type="button"
+              onClick={() => shiftMonth(-1)}
+              className="rounded-lg p-1.5 text-slate-400 hover:bg-white/10 hover:text-white"
+              aria-label="Previous month"
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <span className="min-w-[110px] text-center text-xs font-semibold text-white">
+              {calendar?.month_label ?? `${year}-${month}`}
+            </span>
+            <button
+              type="button"
+              onClick={() => shiftMonth(1)}
+              className="rounded-lg p-1.5 text-slate-400 hover:bg-white/10 hover:text-white"
+              aria-label="Next month"
+            >
+              <ChevronRight size={16} />
+            </button>
+          </div>
+        </div>
+      )}
 
       {error && <p className="text-rose-400 text-sm">{error}</p>}
 
@@ -229,12 +269,12 @@ const TimeSummaryPage = () => {
       )}
 
       {displayCalendar && (
-        <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
+        <div className={embedded ? 'space-y-4' : 'grid grid-cols-1 xl:grid-cols-12 gap-6'}>
           {/* Total donut-style summary */}
-          <div className="xl:col-span-3 glass rounded-3xl border border-white/5 p-6 flex flex-col items-center text-center">
-            <div className="relative w-40 h-40 rounded-full border-[10px] border-primary-500/30 flex flex-col items-center justify-center mb-4">
-              <div className="absolute inset-0 rounded-full border-[10px] border-transparent border-t-primary-500 border-r-secondary-400 opacity-90" />
-              <p className="text-2xl font-bold text-white font-mono relative z-10">
+          <div className={`${embedded ? '' : 'xl:col-span-3 '}glass rounded-3xl border border-white/5 p-4 sm:p-6 flex flex-col items-center text-center`}>
+            <div className={`relative ${embedded ? 'w-28 h-28 border-[8px]' : 'w-40 h-40 border-[10px]'} rounded-full border-primary-500/30 flex flex-col items-center justify-center mb-3 sm:mb-4`}>
+              <div className={`absolute inset-0 rounded-full ${embedded ? 'border-[8px]' : 'border-[10px]'} border-transparent border-t-primary-500 border-r-secondary-400 opacity-90`} />
+              <p className={`${embedded ? 'text-lg' : 'text-2xl'} font-bold text-white font-mono relative z-10`}>
                 {live.isRunning ? formatDurationHms(displayCalendar.total_seconds) : `${displayCalendar.hours_label} h`}
               </p>
               <p className="text-[11px] text-slate-500 relative z-10">
@@ -248,16 +288,18 @@ const TimeSummaryPage = () => {
                 {live.isRunning ? formatDurationHms(displayCalendar.total_seconds) : `${displayCalendar.hours_label} h`}
               </span>
             </p>
+            {!embedded && (
             <Link
               to="/timesheets"
               className="mt-4 text-sm font-semibold text-primary-400 hover:underline"
             >
               Full timesheet →
             </Link>
+            )}
           </div>
 
           {/* Month calendar */}
-          <div className="xl:col-span-6 glass rounded-3xl border border-white/5 p-4 sm:p-6">
+          <div className={`${embedded ? '' : 'xl:col-span-6 '}glass rounded-3xl border border-white/5 p-3 sm:p-6`}>
             <div className="grid grid-cols-7 gap-1 mb-2">
               {WEEKDAYS.map((d) => (
                 <div key={d} className="text-center text-[10px] font-bold uppercase tracking-wider text-slate-500 py-1">
@@ -311,8 +353,8 @@ const TimeSummaryPage = () => {
           </div>
 
           {/* Week totals + projects */}
-          <div className="xl:col-span-3 space-y-4">
-            <div className="glass rounded-3xl border border-white/5 p-5 space-y-3">
+          <div className={`${embedded ? 'grid grid-cols-1 sm:grid-cols-2 gap-3' : 'xl:col-span-3 space-y-4'}`}>
+            <div className="glass rounded-3xl border border-white/5 p-4 sm:p-5 space-y-3">
               <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Weekly totals</p>
               {displayCalendar.weeks.map((week) => (
                 <div
@@ -338,7 +380,7 @@ const TimeSummaryPage = () => {
               )}
             </div>
 
-            <div className="glass rounded-3xl border border-white/5 p-5 space-y-3">
+            <div className="glass rounded-3xl border border-white/5 p-4 sm:p-5 space-y-3">
               <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Projects this month</p>
               {displayCalendar.projects.length === 0 ? (
                 <p className="text-xs text-slate-500">No logged projects.</p>
@@ -357,5 +399,7 @@ const TimeSummaryPage = () => {
     </div>
   );
 };
+
+const TimeSummaryPage = () => <TimeSummaryView />;
 
 export default TimeSummaryPage;

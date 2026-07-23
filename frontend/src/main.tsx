@@ -1,12 +1,13 @@
 import { StrictMode, Suspense, lazy, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import './index.css'
 
 import { Shell } from './layouts/Shell'
+import { TrackerProtectedRoute } from './features/desktop-tracker/DesktopTrackerLayout'
 import { useAuthStore } from './store/authStore'
 import { canAccessPath, isSuperAdmin, isPathPlanLocked } from './utils/access'
-import { isDesktopApp } from './utils/electronAuth'
+import { isDesktopApp, getDesktopLoginPath } from './utils/electronAuth'
 import { initDesktopLifecycle } from './utils/desktopLifecycle'
 import { DesktopTitleBar } from './components/WindowControls'
 import { AppQueryProvider } from './lib/queryClient'
@@ -22,6 +23,7 @@ const ForgotPasswordPage = lazy(() => import('./features/auth/ForgotPasswordPage
 const ResetPasswordPage = lazy(() => import('./features/auth/ResetPasswordPage'))
 const VerifyEmailPage = lazy(() => import('./features/auth/VerifyEmailPage'))
 const OAuthCallbackPage = lazy(() => import('./features/auth/OAuthCallbackPage'))
+const DesktopAuthBridgePage = lazy(() => import('./features/auth/DesktopAuthBridgePage'))
 const LandingPage = lazy(() => import('./features/marketing/LandingPage'))
 const PrivacyPolicyPage = lazy(() => import('./features/marketing/PrivacyPolicyPage'))
 const TermsOfServicePage = lazy(() => import('./features/marketing/TermsOfServicePage'))
@@ -56,6 +58,7 @@ const MemberTrackingPage = lazy(() => import('./features/team/MemberTrackingPage
 const AdvancedMonitoringReportPage = lazy(() => import('./features/team/AdvancedMonitoringReportPage'))
 const ActivityFeedPage = lazy(() => import('./features/activity/ActivityFeedPage'))
 const OnboardingPage = lazy(() => import('./features/onboarding/OnboardingPage'))
+const DesktopTrackerPage = lazy(() => import('./features/desktop-tracker/DesktopTrackerPage'))
 
 const RouteFallback = () => (
   <div className="min-h-[50vh] p-6">
@@ -120,7 +123,7 @@ const RootPage = () => {
     const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
     const sessionReady = useAuthStore((s) => s.sessionReady)
     if (!sessionReady) return <AuthBootLoader />
-    return <Navigate to={isAuthenticated ? '/app' : '/login'} replace />
+    return <Navigate to={isAuthenticated ? '/tracker' : '/tracker/login'} replace />
   }
   return (
     <Lazy>
@@ -130,7 +133,7 @@ const RootPage = () => {
 }
 
 const RegisterRoute = () => {
-  if (isDesktopApp()) return <Navigate to="/login" replace />
+  if (isDesktopApp()) return <Navigate to={getDesktopLoginPath()} replace />
   return (
     <Lazy>
       <RegisterPage />
@@ -139,24 +142,37 @@ const RegisterRoute = () => {
 }
 
 const FallbackRedirect = () => (
-  <Navigate to={isDesktopApp() ? '/login' : '/app'} replace />
+  <Navigate to={isDesktopApp() ? getDesktopLoginPath() : '/app'} replace />
 )
 
 function AppChrome() {
   useKeyboardShortcuts()
+  const location = useLocation()
+  const isTrackerRoute = location.pathname.startsWith('/tracker')
+
   return (
     <>
       <DesktopTitleBar />
       <ToastViewport />
-      <CommandPalette />
-      <ShortcutsHelp />
+      {!isTrackerRoute && <CommandPalette />}
+      {!isTrackerRoute && <ShortcutsHelp />}
       <Routes>
         <Route path="/login" element={<Lazy><LoginPage /></Lazy>} />
+        <Route path="/tracker/login" element={<Lazy><LoginPage /></Lazy>} />
+        <Route
+          path="/tracker"
+          element={(
+            <TrackerProtectedRoute>
+              <Lazy><DesktopTrackerPage /></Lazy>
+            </TrackerProtectedRoute>
+          )}
+        />
         <Route path="/register" element={<RegisterRoute />} />
         <Route path="/forgot-password" element={<Lazy><ForgotPasswordPage /></Lazy>} />
         <Route path="/reset-password" element={<Lazy><ResetPasswordPage /></Lazy>} />
         <Route path="/verify-email" element={<Lazy><VerifyEmailPage /></Lazy>} />
         <Route path="/auth/callback" element={<Lazy><OAuthCallbackPage /></Lazy>} />
+        <Route path="/auth/desktop-bridge" element={<Lazy><DesktopAuthBridgePage /></Lazy>} />
         <Route path="/" element={<RootPage />} />
         <Route path="/privacy" element={<Lazy><PrivacyPolicyPage /></Lazy>} />
         <Route path="/terms" element={<Lazy><TermsOfServicePage /></Lazy>} />

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Minus, Square, X, Copy } from 'lucide-react';
+import { Minus, Sparkles, Square, X, Copy } from 'lucide-react';
 import { isDesktopApp } from '../utils/electronAuth';
 
 export function WindowControls({ className = '' }: { className?: string }) {
@@ -59,9 +59,17 @@ export function WindowControls({ className = '' }: { className?: string }) {
 export function DesktopTitleBar() {
   if (!isDesktopApp()) return null;
 
+  const title = 'FlowTrack Tracker';
+
   return (
-    <div className="fixed inset-x-0 top-0 z-[9999] flex h-8 items-stretch justify-end border-b border-white/5 bg-[#0A0C12]/90 backdrop-blur-md">
+    <div className="fixed inset-x-0 top-0 z-[9999] flex h-8 items-stretch justify-between border-b border-white/5 bg-[#0A0C12]/90 backdrop-blur-md">
       <div className="absolute inset-0 drag-region" />
+      <div className="relative z-10 flex items-center gap-1.5 px-2.5 no-drag pointer-events-none">
+        <div className="flex h-5 w-5 items-center justify-center rounded-md bg-ai-gradient shadow-ai keep-on-color">
+          <Sparkles className="h-3 w-3 text-white" />
+        </div>
+        <span className="text-[11px] font-bold gradient-text tracking-tight">{title}</span>
+      </div>
       <div className="relative z-10 flex items-stretch">
         <WindowControls />
       </div>

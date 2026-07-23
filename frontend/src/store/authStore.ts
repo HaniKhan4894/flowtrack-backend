@@ -5,6 +5,12 @@ import { monitoringService } from '../api/monitoringService';
 import { authService } from '../api/authService';
 import { syncElectronAuthToken, clearElectronSession, isDesktopApp } from '../utils/electronAuth';
 import { clearAuthTokens, persistAuthTokens } from '../utils/authStorage';
+import {
+    startSilentSessionRefreshLoop,
+    stopSilentSessionRefreshLoop,
+    silentRefreshSession,
+    isLoginPath,
+} from '../utils/authSessionRefresh';
 
 interface AuthState {
     user: User | null;
@@ -59,6 +65,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         });
 
         syncElectronAuthToken(token);
+        startSilentSessionRefreshLoop();
     },
 
     setUser: (user) => {
@@ -122,11 +129,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
                 sessionReady: true,
             });
             monitoringService.syncAuthToken(refreshed.data.access_token);
+            startSilentSessionRefreshLoop();
             return true;
         } catch (error) {
             if (isNetworkError(error)) {
                 set({ sessionReady: true });
                 return Boolean(get().isAuthenticated);
+            }
+
+            // Try one more silent refresh path before clearing session
+            const recovered = await silentRefreshSession();
+            if (recovered) {
+                set({ isAuthenticated: true, sessionReady: true });
+                return true;
             }
 
             clearAuthTokens();
@@ -160,6 +175,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             sessionReady: true,
         });
         await clearElectronSession();
+        stopSilentSessionRefreshLoop();
     },
 
     forceLogout: async () => {
@@ -181,6 +197,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         });
 
         await clearElectronSession();
+        stopSilentSessionRefreshLoop();
     },
 
     initAuth: async () => {
@@ -213,6 +230,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         }
 
         await get().ensureValidSession();
+
+        if (get().isAuthenticated) {
+            startSilentSessionRefreshLoop();
+        }
     },
 }));
 
@@ -220,13 +241,13 @@ if (typeof window !== 'undefined') {
     void useAuthStore.getState().initAuth();
 
     document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible' && useAuthStore.getState().isAuthenticated) {
+        if (document.visibilityState === 'visible' && useAuthStore.getState().isAuthenticated && !isLoginPath(window.location.pathname)) {
             void useAuthStore.getState().ensureValidSession();
         }
     });
 
     window.addEventListener('focus', () => {
-        if (useAuthStore.getState().isAuthenticated) {
+        if (useAuthStore.getState().isAuthenticated && !isLoginPath(window.location.pathname)) {
             void useAuthStore.getState().ensureValidSession();
         }
     });

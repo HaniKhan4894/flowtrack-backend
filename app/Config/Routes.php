@@ -107,6 +107,7 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\API\V1'], function ($r
     $routes->post('organizations/(:num)/members/(:num)/advanced-monitoring', 'AdvancedMonitoringController::enable/$1/$2', ['filter' => ['permission:monitoring.advanced', 'planFeature:advanced_monitoring']]);
     $routes->post('organizations/(:num)/members/(:num)/advanced-monitoring/close', 'AdvancedMonitoringController::close/$1/$2', ['filter' => ['permission:monitoring.advanced', 'planFeature:advanced_monitoring']]);
     $routes->get('monitoring/settings', 'MonitoringController::mySettings', ['filter' => 'auth']);
+    $routes->put('monitoring/settings', 'MonitoringController::updateMySettings', ['filter' => 'auth']);
     $routes->get('invitations/validate', 'OrganizationController::validateInvitation');
 
     // Project Routes

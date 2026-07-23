@@ -3,7 +3,7 @@
 FlowTrack is a multi-tenant time-tracking platform with:
 - CodeIgniter 4 backend API (`app/`, `public/`)
 - React frontend (`frontend/`)
-- Electron desktop tracker (`desktop/`)
+- Electron desktop tracker (`desktop/`) — compact **FlowTrack Tracker** app at `/tracker`
 
 ## Requirements
 
@@ -46,7 +46,7 @@ Desktop:
 From repo root:
 - Backend: `php spark serve`
 - Frontend: `cd frontend && npm run dev`
-- Desktop: `cd desktop && npm run dev`
+- Desktop: `npm run dev:desktop` (starts FlowTrack Tracker)
 - All (concurrently): `npm run dev:all`
 
 ## Desktop Installers

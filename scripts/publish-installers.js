@@ -19,7 +19,9 @@ if (!fs.existsSync(distDir)) {
 
 const mappings = [
     { pattern: /^FlowTrack-Setup\.exe$/i, target: 'FlowTrack-Setup.exe' },
+    { pattern: /^FlowTrack-Tracker-Setup\.exe$/i, target: 'FlowTrack-Setup.exe' },
     { pattern: /^FlowTrack\.dmg$/i, target: 'FlowTrack.dmg' },
+    { pattern: /^FlowTrack-Tracker\.dmg$/i, target: 'FlowTrack.dmg' },
 ];
 
 const files = fs.readdirSync(distDir);

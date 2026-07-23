@@ -1,9 +1,14 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+const desktopVariant = 'tracker';
+
 contextBridge.exposeInMainWorld('electronAPI', {
     // App info
     getAppVersion: () => ipcRenderer.invoke('get-app-version'),
     isDesktop: () => ipcRenderer.invoke('is-desktop'),
+    desktopVariant: () => desktopVariant,
+    openWebApp: () => ipcRenderer.invoke('open-web-app'),
+    startBrowserSignIn: () => ipcRenderer.invoke('start-browser-sign-in'),
 
     // Auth
     setAuthToken: (token) => ipcRenderer.invoke('set-auth-token', token),
@@ -89,5 +94,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
         const handler = () => callback();
         ipcRenderer.on('timer-reminder-resume', handler);
         return () => ipcRenderer.removeListener('timer-reminder-resume', handler);
+    },
+
+    onBrowserSignInComplete: (callback) => {
+        const handler = (_event, tokens) => callback(tokens);
+        ipcRenderer.on('browser-sign-in-complete', handler);
+        return () => ipcRenderer.removeListener('browser-sign-in-complete', handler);
+    },
+
+    onBrowserSignInError: (callback) => {
+        const handler = (_event, payload) => callback(payload);
+        ipcRenderer.on('browser-sign-in-error', handler);
+        return () => ipcRenderer.removeListener('browser-sign-in-error', handler);
     },
 });

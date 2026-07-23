@@ -1,6 +1,7 @@
-const { app, BrowserWindow, ipcMain, desktopCapturer, nativeImage, screen, Tray, Menu, powerMonitor, Notification } = require('electron');
+const { app, BrowserWindow, ipcMain, desktopCapturer, nativeImage, screen, Tray, Menu, powerMonitor, Notification, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 const https = require('https');
 const http = require('http');
 const FormData = require('form-data');
@@ -9,10 +10,11 @@ const activityTracker = require('./activityTracker');
 const systemInput = require('./systemInput');
 const networkInfo = require('./networkInfo');
 const timerReminderPrompt = require('./timerReminderPrompt');
+const { variant: desktopVariant, config: desktopConfig } = require('./variant');
 
 // Windows taskbar grouping — must be set before app is ready.
 if (process.platform === 'win32') {
-    app.setAppUserModelId('com.flowtrack.desktop');
+    app.setAppUserModelId(desktopConfig.appUserModelId);
 }
 
 // ──────────────────────────────────────────────
@@ -384,10 +386,10 @@ function createWindow() {
         : (appIcon || undefined);
 
     mainWindow = new BrowserWindow({
-        width: 1280,
-        height: 860,
-        minWidth: 900,
-        minHeight: 600,
+        width: desktopConfig.width,
+        height: desktopConfig.height,
+        minWidth: desktopConfig.minWidth,
+        minHeight: desktopConfig.minHeight,
         frame: false,
         icon: windowIcon,
         webPreferences: {
@@ -397,7 +399,7 @@ function createWindow() {
         },
         backgroundColor: '#0A0C12',
         show: false,
-        title: 'FlowTrack',
+        title: desktopConfig.productName,
     });
 
     if (iconPath) {
@@ -413,7 +415,7 @@ function createWindow() {
     const loadTarget = isDev ? devUrl : (FRONTEND_URL || null);
 
     if (loadTarget) {
-        const entryUrl = `${loadTarget.replace(/\/$/, '')}/login`;
+        const entryUrl = `${loadTarget.replace(/\/$/, '')}${desktopConfig.entryPath}`;
         console.log(`[Window] Loading URL: ${entryUrl}`);
         mainWindow.loadURL(entryUrl).catch((err) => {
             console.error('[Window] Failed to load remote UI:', err.message);
@@ -488,12 +490,19 @@ function setupTray() {
     }
     const icon = appIcon.resize({ width: 16, height: 16 });
     tray = new Tray(icon);
-    tray.setToolTip('FlowTrack — running in background');
-    tray.setContextMenu(Menu.buildFromTemplate([
-        { label: 'Show FlowTrack', click: () => showMainWindow() },
-        { type: 'separator' },
-        { label: 'Exit FlowTrack', click: () => requestQuit() },
-    ]));
+    tray.setToolTip(desktopConfig.trayTooltip);
+    const trayMenu = [
+        { label: desktopConfig.trayShowLabel, click: () => showMainWindow() },
+    ];
+    if (desktopVariant === 'tracker' && FRONTEND_URL) {
+        trayMenu.push({
+            label: 'Open Web App',
+            click: () => shell.openExternal(FRONTEND_URL),
+        });
+    }
+    trayMenu.push({ type: 'separator' });
+    trayMenu.push({ label: desktopConfig.trayExitLabel, click: () => requestQuit() });
+    tray.setContextMenu(Menu.buildFromTemplate(trayMenu));
     tray.on('double-click', () => showMainWindow());
     tray.on('click', () => showMainWindow());
 }
@@ -915,7 +924,6 @@ function stopSessionRefreshLoop() {
 }
 
 function pauseBackgroundActivity() {
-    stopSessionRefreshLoop();
     notifyRendererLifecycle('hide');
 }
 
@@ -1121,13 +1129,166 @@ function startTokenRefreshLoop() {
 }
 
 function startSessionRefreshLoop() {
-    if (sessionRefreshTimer || !currentSession.token || !windowVisible || appIsQuitting) return;
+    if (sessionRefreshTimer || !currentSession.token || appIsQuitting) return;
     sessionRefreshTimer = setInterval(async () => {
-        if (!windowVisible || appIsQuitting || !currentSession.token) return;
+        if (appIsQuitting || !currentSession.token) return;
         if (mainWindow && !mainWindow.isDestroyed()) {
             await refreshTokenViaRenderer();
         }
     }, 10 * 60 * 1000);
+}
+
+function resolveBrowserAuthFrontendUrl() {
+    const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+    if (isDev) {
+        return (process.env.FLOWTRACK_FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
+    }
+    return (FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
+}
+
+let browserSignInServer = null;
+let browserSignInState = null;
+let browserSignInTimeout = null;
+
+function browserSignInSuccessHtml(productName) {
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Signed in</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #0A0C12; color: #fff; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
+    .card { text-align: center; max-width: 420px; padding: 2rem; border: 1px solid rgba(255,255,255,.1); border-radius: 16px; background: rgba(255,255,255,.03); }
+    h1 { font-size: 1.25rem; margin: 0 0 .75rem; }
+    p { color: #94a3b8; margin: 0; line-height: 1.5; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Signed in to ${productName}</h1>
+    <p>You can close this tab and return to the desktop app.</p>
+  </div>
+</body>
+</html>`;
+}
+
+function stopBrowserSignInServer() {
+    if (browserSignInServer) {
+        try {
+            browserSignInServer.close();
+        } catch {
+            // ignore
+        }
+        browserSignInServer = null;
+    }
+    if (browserSignInTimeout) {
+        clearTimeout(browserSignInTimeout);
+        browserSignInTimeout = null;
+    }
+    browserSignInState = null;
+}
+
+function startBrowserSignInFlow() {
+    stopBrowserSignInServer();
+
+    const state = crypto.randomBytes(16).toString('hex');
+    browserSignInState = state;
+
+    return new Promise((resolveOpen) => {
+        browserSignInServer = http.createServer((req, res) => {
+            const remote = req.socket.remoteAddress || '';
+            if (!remote.endsWith('127.0.0.1') && remote !== '::1' && remote !== '::ffff:127.0.0.1') {
+                res.writeHead(403, { 'Content-Type': 'text/plain' });
+                res.end('Forbidden');
+                return;
+            }
+
+            let pathname = '/';
+            try {
+                pathname = new URL(req.url || '/', 'http://127.0.0.1').pathname;
+            } catch {
+                res.writeHead(400, { 'Content-Type': 'text/plain' });
+                res.end('Bad request');
+                return;
+            }
+
+            if (pathname !== '/callback') {
+                res.writeHead(404, { 'Content-Type': 'text/plain' });
+                res.end('Not found');
+                return;
+            }
+
+            let url;
+            try {
+                url = new URL(req.url || '/', 'http://127.0.0.1');
+            } catch {
+                res.writeHead(400, { 'Content-Type': 'text/plain' });
+                res.end('Bad request');
+                return;
+            }
+
+            const reqState = url.searchParams.get('state');
+            if (!reqState || reqState !== browserSignInState) {
+                res.writeHead(400, { 'Content-Type': 'text/plain' });
+                res.end('Invalid state');
+                return;
+            }
+
+            const accessToken = url.searchParams.get('access_token');
+            if (!accessToken) {
+                res.writeHead(400, { 'Content-Type': 'text/plain' });
+                res.end('Missing access token');
+                return;
+            }
+
+            const refreshToken = url.searchParams.get('refresh_token');
+            const organizationId = url.searchParams.get('organization_id');
+
+            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+            res.end(browserSignInSuccessHtml(desktopConfig.productName));
+
+            const payload = {
+                access_token: accessToken,
+                refresh_token: refreshToken || null,
+                organization_id: organizationId ? Number(organizationId) : null,
+            };
+
+            stopBrowserSignInServer();
+
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send('browser-sign-in-complete', payload);
+                if (!mainWindow.isVisible()) {
+                    mainWindow.show();
+                }
+            }
+        });
+
+        browserSignInServer.on('error', (err) => {
+            console.warn('[Auth] Browser sign-in server error:', err.message);
+            stopBrowserSignInServer();
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send('browser-sign-in-error', { error: err.message });
+            }
+            resolveOpen({ success: false, error: err.message });
+        });
+
+        browserSignInServer.listen(0, '127.0.0.1', () => {
+            const port = browserSignInServer.address().port;
+            const baseUrl = resolveBrowserAuthFrontendUrl();
+            const bridgeUrl = `${baseUrl}/auth/desktop-bridge?port=${port}&state=${state}&variant=${desktopVariant}`;
+            console.log(`[Auth] Opening browser sign-in: ${bridgeUrl}`);
+            shell.openExternal(bridgeUrl);
+            resolveOpen({ success: true });
+
+            browserSignInTimeout = setTimeout(() => {
+                console.warn('[Auth] Browser sign-in timed out.');
+                stopBrowserSignInServer();
+                if (mainWindow && !mainWindow.isDestroyed()) {
+                    mainWindow.webContents.send('browser-sign-in-error', { error: 'timeout' });
+                }
+            }, 5 * 60 * 1000);
+        });
+    });
 }
 
 // ──────────────────────────────────────────────
@@ -1145,9 +1306,7 @@ ipcMain.handle('set-auth-token', async (_event, token) => {
         return { success: true };
     }
     currentSession.token = token;
-    if (windowVisible) {
-        startSessionRefreshLoop();
-    }
+    startSessionRefreshLoop();
     console.log('[IPC] Auth token updated.');
     return { success: true };
 });
@@ -1249,6 +1408,23 @@ ipcMain.handle('capture-screenshot-now', async () => {
 // Check if running in Electron
 ipcMain.handle('is-desktop', () => true);
 
+ipcMain.handle('open-web-app', () => {
+    if (FRONTEND_URL) {
+        shell.openExternal(FRONTEND_URL);
+    }
+    return { success: !!FRONTEND_URL };
+});
+
+ipcMain.handle('start-browser-sign-in', async () => {
+    try {
+        const result = await startBrowserSignInFlow();
+        return result.success ? { success: true } : { success: false, error: result.error || 'failed' };
+    } catch (err) {
+        stopBrowserSignInServer();
+        return { success: false, error: err.message };
+    }
+});
+
 ipcMain.handle('window-minimize', () => {
     if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.minimize();
@@ -1284,9 +1460,9 @@ ipcMain.handle('window-close', () => {
 // ──────────────────────────────────────────────
 app.whenReady().then(() => {
     if (process.platform === 'win32') {
-        app.setAppUserModelId('com.flowtrack.desktop');
+        app.setAppUserModelId(desktopConfig.appUserModelId);
     }
-    app.setName('FlowTrack');
+    app.setName(desktopConfig.productName);
     const appIcon = resolveAppIcon();
     if (appIcon && !appIcon.isEmpty()) {
         app.dock?.setIcon?.(appIcon);

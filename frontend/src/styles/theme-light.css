@@ -214,6 +214,8 @@
 /* Hard-coded dark panel hexes used across the app */
 [data-theme='light'] .bg-\[\#12141C\],
 [data-theme='light'] .bg-\[\#0A0C12\],
+[data-theme='light'] .bg-\[\#080B14\],
+[data-theme='light'] .bg-\[\#0b0f17\]\/90,
 [data-theme='light'] .bg-\[\#161922\] {
   background-color: var(--ft-solid) !important;
 }
