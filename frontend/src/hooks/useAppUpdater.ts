@@ -26,14 +26,24 @@ export function useAppUpdater() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (!isDesktopApp() || !window.electronAPI) return undefined;
+    const api = window.electronAPI;
+    if (!isDesktopApp() || !api) return undefined;
 
-    void window.electronAPI.getAppVersion().then(setVersion);
-    void window.electronAPI.getUpdateStatus().then((state) => {
-      if (state?.status) setUpdate(state as AppUpdateState);
-    });
+    if (typeof api.getAppVersion === 'function') {
+      void api.getAppVersion().then(setVersion).catch(() => {});
+    }
 
-    return window.electronAPI.onUpdateStatusChange?.((state) => {
+    if (typeof api.getUpdateStatus === 'function') {
+      void api.getUpdateStatus().then((state) => {
+        if (state?.status) setUpdate(state as AppUpdateState);
+      }).catch(() => {});
+    }
+
+    if (typeof api.onUpdateStatusChange !== 'function') {
+      return undefined;
+    }
+
+    return api.onUpdateStatusChange((state) => {
       setUpdate(state as AppUpdateState);
       if (state.status === 'downloading' || state.status === 'checking') {
         setBusy(true);
@@ -75,6 +85,6 @@ export function useAppUpdater() {
     checkForUpdates,
     downloadUpdate,
     installUpdate,
-    isPackagedDesktop: isDesktopApp(),
+    isPackagedDesktop: isDesktopApp() && typeof window.electronAPI?.getUpdateStatus === 'function',
   };
 }

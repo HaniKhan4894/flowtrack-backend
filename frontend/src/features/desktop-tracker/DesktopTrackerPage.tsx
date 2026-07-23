@@ -558,7 +558,9 @@ export function DesktopTrackerPage() {
           void loadActive();
         }}
       />
-      <TrackerSettingsModal open={showSettings} onClose={() => setShowSettings(false)} />
+      {showSettings && (
+        <TrackerSettingsModal open={showSettings} onClose={() => setShowSettings(false)} />
+      )}
     </div>
   );
 }
