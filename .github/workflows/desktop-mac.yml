@@ -2,10 +2,25 @@ name: Build Mac Desktop App
 
 on:
   workflow_dispatch:
+  push:
+    tags:
+      - 'desktop-v*'
+
+concurrency:
+  group: desktop-mac-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  build-mac-dmg:
+  build-mac:
     runs-on: macos-latest
+    env:
+      FLOWTRACK_DESKTOP_VARIANT: tracker
+      CSC_LINK: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
+      CSC_KEY_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -30,14 +45,41 @@ jobs:
         working-directory: desktop
         run: npm ci
 
-      - name: Build FlowTrack Tracker.dmg
+      - name: Prepare App Store Connect API key
+        if: ${{ secrets.APPLE_API_KEY_BASE64 != '' }}
+        run: |
+          KEY_PATH="$RUNNER_TEMP/AuthKey.p8"
+          echo "${{ secrets.APPLE_API_KEY_BASE64 }}" | base64 --decode > "$KEY_PATH"
+          echo "APPLE_API_KEY=$KEY_PATH" >> "$GITHUB_ENV"
+          echo "APPLE_API_KEY_ID=${{ secrets.APPLE_API_KEY_ID }}" >> "$GITHUB_ENV"
+          echo "APPLE_API_ISSUER=${{ secrets.APPLE_API_ISSUER }}" >> "$GITHUB_ENV"
+
+      - name: Build FlowTrack Tracker (macOS)
         working-directory: desktop
         run: npm run pack:mac
 
-      - name: Upload DMG artifact
+      - name: Verify signing status
+        run: |
+          APP_PATH=$(find desktop/dist-build/mac-universal -name '*.app' -maxdepth 2 | head -n 1)
+          if [ -z "$APP_PATH" ]; then
+            echo "No .app bundle found — listing dist-build:"
+            ls -la desktop/dist-build || true
+            exit 0
+          fi
+          echo "Checking: $APP_PATH"
+          codesign -dv --verbose=2 "$APP_PATH" 2>&1 || echo "App is unsigned (expected when signing secrets are not configured)."
+
+      - name: Upload macOS release artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: FlowTrack-tracker-mac-dmg
+          name: flowtrack-mac-desktop
+          if-no-files-found: warn
           path: |
             desktop/dist-build/FlowTrack.dmg
+            desktop/dist-build/FlowTrack.zip
+            desktop/dist-build/latest-mac.yml
+            desktop/dist-build/FlowTrack.zip.blockmap
             public/downloads/FlowTrack.dmg
+            public/downloads/FlowTrack.zip
+            public/downloads/latest-mac.yml
+            public/downloads/FlowTrack.zip.blockmap

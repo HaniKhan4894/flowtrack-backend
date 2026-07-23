@@ -72,7 +72,7 @@ Installed apps check `{publicBaseUrl}/downloads/` for new releases (automaticall
    - `FlowTrack.dmg` (macOS manual install)
 5. Users with the old app will see the update in Settings or get a desktop notification.
 
-macOS silent auto-update requires a **signed and notarized** build in production.
+macOS silent auto-update requires a **signed and notarized** build in production. See [docs/desktop-mac-signing.md](docs/desktop-mac-signing.md) for GitHub Actions secrets and CI setup.
 
 When going live, only change `config/deploy.json`, run `npm run sync:deploy`, and rebuild installers.
 
