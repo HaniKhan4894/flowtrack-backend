@@ -9,7 +9,7 @@ use CodeIgniter\HTTP\ResponseInterface;
 class CorsFilter implements FilterInterface
 {
     private const ALLOW_METHODS = 'GET, POST, PUT, PATCH, DELETE, OPTIONS';
-    private const ALLOW_HEADERS = 'Content-Type, Authorization, X-Requested-With, Accept, Origin';
+    private const ALLOW_HEADERS = 'Content-Type, Authorization, X-Requested-With, Accept, Origin, ngrok-skip-browser-warning';
 
     private function allowedOrigins(): array
     {

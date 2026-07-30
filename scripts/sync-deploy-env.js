@@ -28,6 +28,8 @@ const frontendEnv = [
 ].join('\n');
 
 fs.writeFileSync(path.join(root, 'frontend', '.env.production'), frontendEnv);
+// Keep local Vite in sync too — otherwise `npm run dev` keeps calling a dead ngrok URL.
+fs.writeFileSync(path.join(root, 'frontend', '.env'), frontendEnv);
 
 const siteUrl = frontendUrl || 'https://flowtrackhani.vercel.app';
 const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
