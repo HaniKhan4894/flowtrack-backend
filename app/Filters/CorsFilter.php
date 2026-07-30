@@ -9,7 +9,7 @@ use CodeIgniter\HTTP\ResponseInterface;
 class CorsFilter implements FilterInterface
 {
     private const ALLOW_METHODS = 'GET, POST, PUT, PATCH, DELETE, OPTIONS';
-    private const ALLOW_HEADERS = 'Content-Type, Authorization, X-Requested-With, Accept, Origin, ngrok-skip-browser-warning';
+    private const ALLOW_HEADERS = 'Content-Type, Authorization, X-Requested-With, Accept, Origin';
 
     private function allowedOrigins(): array
     {
@@ -18,6 +18,7 @@ class CorsFilter implements FilterInterface
             'http://localhost:3000',
             'http://127.0.0.1:5173',
             'https://flowtrackhani.vercel.app',
+            'https://548a-124-109-46-74.ngrok-free.app',
         ];
 
         $frontendUrl = env('app.frontendURL');
