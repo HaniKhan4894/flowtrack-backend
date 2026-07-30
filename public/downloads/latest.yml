@@ -1,8 +1,8 @@
-version: 1.0.1
+version: 1.0.3
 files:
   - url: FlowTrack-Setup.exe
-    sha512: x0FNGXsStAac6hpyNqcG9bMrg2w9iPZK29+7YnnMGjLuSu0NCI15QBO5EbdYNCo2yyHXIMmy/TuBqdwKtYDlkw==
-    size: 82334626
+    sha512: iqQOezWEgGpYFQa7nYbkm+SXDKdbP/VQ+KqWQpq97djyppgmtzuEoxSfiNbMV9Ac4TP4QA2fsBiyso/2VXFIWQ==
+    size: 82335052
 path: FlowTrack-Setup.exe
-sha512: x0FNGXsStAac6hpyNqcG9bMrg2w9iPZK29+7YnnMGjLuSu0NCI15QBO5EbdYNCo2yyHXIMmy/TuBqdwKtYDlkw==
-releaseDate: '2026-07-30T06:49:36.275Z'
+sha512: iqQOezWEgGpYFQa7nYbkm+SXDKdbP/VQ+KqWQpq97djyppgmtzuEoxSfiNbMV9Ac4TP4QA2fsBiyso/2VXFIWQ==
+releaseDate: '2026-07-30T07:21:05.945Z'

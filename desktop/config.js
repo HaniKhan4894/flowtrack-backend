@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 
 const DEFAULT_API_BASE_URL =
-    'https://violation-blade-pretty.ngrok-free.dev/flowtrack-backend/public/api/v1';
+    'https://548a-124-109-46-74.ngrok-free.app/flowtrack-backend/public/api/v1';
 const DEFAULT_FRONTEND_URL = 'https://flowtrackhani.vercel.app';
 
 function readDeployConfigFromPath(deployPath) {
@@ -83,7 +83,7 @@ function loadFrontendUrl() {
 }
 
 const DEFAULT_PUBLIC_BASE_URL =
-    'https://violation-blade-pretty.ngrok-free.dev/flowtrack-backend/public';
+    'https://548a-124-109-46-74.ngrok-free.app/flowtrack-backend/public';
 
 function loadPublicBaseUrl() {
     if (process.env.FLOWTRACK_PUBLIC_URL) {

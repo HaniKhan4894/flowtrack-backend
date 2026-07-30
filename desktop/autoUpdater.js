@@ -1,3 +1,5 @@
+const fs = require('fs');
+const path = require('path');
 const { autoUpdater } = require('electron-updater');
 const { app } = require('electron');
 
@@ -5,6 +7,8 @@ const { app } = require('electron');
 let getMainWindow = null;
 /** @type {((title: string, body: string) => void) | null} */
 let showNotification = null;
+/** @type {(() => string) | null} */
+let resolveFeedUrl = null;
 
 /** @type {{ status: string; data?: Record<string, unknown> | null }} */
 let lastStatus = { status: 'idle', data: null };
@@ -17,9 +21,39 @@ function broadcast(status, data = null) {
     }
 }
 
+/**
+ * Older installs were packed without a publish config, so resources/app-update.yml
+ * is missing and downloadUpdate() throws ENOENT. Create it from the live feed URL.
+ */
+function ensureAppUpdateYml(feedUrl) {
+    try {
+        const ymlPath = path.join(process.resourcesPath, 'app-update.yml');
+        const body = [
+            'provider: generic',
+            `url: ${feedUrl.replace(/\/$/, '')}`,
+            'updaterCacheDirName: flowtrack-desktop-updater',
+            '',
+        ].join('\n');
+
+        if (fs.existsSync(ymlPath)) {
+            const existing = fs.readFileSync(ymlPath, 'utf8');
+            if (existing.includes(feedUrl.replace(/\/$/, ''))) {
+                return;
+            }
+        }
+
+        fs.writeFileSync(ymlPath, body, 'utf8');
+        console.log(`[Updater] Wrote ${ymlPath}`);
+    } catch (err) {
+        // Program Files is often read-only without elevation — setFeedURL still helps check.
+        console.warn('[Updater] Could not write app-update.yml:', err.message);
+    }
+}
+
 function initAutoUpdater({ getMainWindow: windowGetter, getUpdateFeedUrl, showNotification: notify }) {
     getMainWindow = windowGetter;
     showNotification = notify;
+    resolveFeedUrl = getUpdateFeedUrl;
 
     if (!app.isPackaged) {
         console.log('[Updater] Skipped — development build.');
@@ -32,6 +66,7 @@ function initAutoUpdater({ getMainWindow: windowGetter, getUpdateFeedUrl, showNo
 
     const feedUrl = `${getUpdateFeedUrl().replace(/\/$/, '')}/`;
     console.log(`[Updater] Feed URL: ${feedUrl}`);
+    ensureAppUpdateYml(feedUrl);
     autoUpdater.setFeedURL({ provider: 'generic', url: feedUrl });
 
     autoUpdater.on('checking-for-update', () => broadcast('checking'));
@@ -97,12 +132,19 @@ async function downloadUpdate() {
     }
 
     try {
+        if (resolveFeedUrl) {
+            ensureAppUpdateYml(`${resolveFeedUrl().replace(/\/$/, '')}/`);
+        }
         broadcast('downloading', { percent: 0 });
         await autoUpdater.downloadUpdate();
         return { success: true };
     } catch (err) {
-        broadcast('error', { message: err?.message || 'Download failed.' });
-        return { success: false, error: err?.message || 'Download failed.' };
+        let message = err?.message || 'Download failed.';
+        if (/app-update\.yml|ENOENT/i.test(message)) {
+            message = 'This install is missing update metadata. Close the app and run FlowTrack-Setup.exe from the downloads page once, then updates will work.';
+        }
+        broadcast('error', { message });
+        return { success: false, error: message };
     }
 }
 

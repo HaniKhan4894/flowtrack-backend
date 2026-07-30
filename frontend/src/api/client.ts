@@ -6,7 +6,7 @@ import { isLoginPath } from '../utils/authSessionRefresh';
 
 const apiBaseUrl =
     import.meta.env.VITE_API_URL ||
-    'https://violation-blade-pretty.ngrok-free.dev/flowtrack-backend/public/api/v1';
+    'https://548a-124-109-46-74.ngrok-free.app/flowtrack-backend/public/api/v1';
 
 const usesNgrok = apiBaseUrl.includes('ngrok');
 
