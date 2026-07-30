@@ -55,8 +55,15 @@ let pausedByIdle = false;
 let tray = null;
 let shutdownDone = false;
 let windowVisible = false;
+let lastIdleGuardTickAt = 0;
+let suspendedAt = 0;
 const IDLE_RESUME_SEC = 5; // resume shortly after any mouse/keyboard activity
 const IDLE_CHECK_MS = 5 * 1000;
+/**
+ * Timers freeze while the machine sleeps (lid closed, hibernate), so a missed tick larger
+ * than this means wall-clock time passed that nobody worked through.
+ */
+const FROZEN_GAP_SEC = 60;
 const DISTRACTION_ALERT_MS = 5 * 1000;
 const DISTRACTION_CHECK_MS = 2 * 1000;
 
@@ -919,7 +926,7 @@ async function syncActivityToBackend(retried = false) {
             }
         };
 
-        await new Promise((resolve, reject) => {
+        const responseBody = await new Promise((resolve, reject) => {
             const req = lib.request(options, (res) => {
                 let data = '';
                 res.on('data', chunk => data += chunk);
@@ -936,6 +943,16 @@ async function syncActivityToBackend(retried = false) {
             req.end();
         });
         console.log(`[Activity] Synced ${payload.logs.length} segment(s) to backend.`);
+
+        // The timer can end without this process hearing about it (stopped in the web app,
+        // auto-closed by the server, renderer crash). Stop rather than keep filling a dead entry.
+        if (isEntryFinishedResponse(responseBody)) {
+            console.warn('[Activity] Time entry is no longer running — stopping local tracking.');
+            currentSession.isTracking = false;
+            currentSession.timeEntryId = null;
+            stopMonitoringLoop();
+            requestTimerResync();
+        }
     } catch (err) {
         if (err.statusCode === 401 && !retried) {
             console.log('[Activity] Token expired — refreshing and retrying sync...');
@@ -944,7 +961,24 @@ async function syncActivityToBackend(retried = false) {
                 return syncActivityToBackend(true);
             }
         }
+        if (err.statusCode === 404 || err.statusCode === 409) {
+            console.warn('[Activity] Backend rejected the time entry — stopping local tracking.');
+            currentSession.isTracking = false;
+            currentSession.timeEntryId = null;
+            stopMonitoringLoop();
+            requestTimerResync();
+            return;
+        }
         console.error('[Activity] Sync error:', err.message, err.body ? `- ${err.body}` : '');
+    }
+}
+
+function isEntryFinishedResponse(responseBody) {
+    try {
+        const parsed = JSON.parse(responseBody || '{}');
+        return parsed.entry_closed === true;
+    } catch (err) {
+        return false;
     }
 }
 
@@ -1054,6 +1088,41 @@ function handleIdleKeepResponse(action) {
     showDesktopNotification('FlowTrack', 'Idle time kept on this timer.');
 }
 
+function requestTimerResync() {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('timer-sync-required');
+    }
+}
+
+/**
+ * Drop wall-clock time the machine spent asleep/frozen from the running timer.
+ *
+ * Sleep freezes every interval in this process, so the idle guard can never notice the
+ * user left — that is how a folded laptop used to log a full night of "work".
+ */
+async function discardFrozenGap(gapSeconds, reason) {
+    const seconds = Math.round(gapSeconds);
+    if (!currentSession.isTracking || !currentSession.timeEntryId || seconds < FROZEN_GAP_SEC) {
+        return;
+    }
+
+    // A paused timer already stopped counting at pause time — discarding again would
+    // subtract the same minutes twice.
+    if (isPaused) {
+        return;
+    }
+
+    await discardIdleFromEntry(seconds);
+    requestTimerResync();
+
+    const minutes = Math.max(1, Math.round(seconds / 60));
+    showDesktopNotification(
+        'FlowTrack',
+        `${minutes} minute${minutes === 1 ? '' : 's'} removed from your timer — your computer was ${reason}.`,
+    );
+    console.log(`[Power] Discarded ${seconds}s of ${reason} time from entry ${currentSession.timeEntryId}.`);
+}
+
 function handleIdlePause() {
     if (!currentSession.isTracking || isPaused || pausedByIdle || pausedByLock) return;
 
@@ -1113,8 +1182,19 @@ function handleIdleResume() {
 function startIdleGuard() {
     if (idleGuardTimer) return;
 
+    lastIdleGuardTickAt = Date.now();
     idleGuardTimer = setInterval(() => {
+        const now = Date.now();
+        const gapSec = (now - lastIdleGuardTickAt) / 1000;
+        lastIdleGuardTickAt = now;
+
         if (!currentSession.isTracking) return;
+
+        // A tick this late means the process was frozen (sleep/hibernate) — that time is not work.
+        if (gapSec >= FROZEN_GAP_SEC && !isPaused) {
+            void discardFrozenGap(gapSec - IDLE_CHECK_MS / 1000, 'asleep');
+            return;
+        }
 
         const systemIdleSec = powerMonitor.getSystemIdleTime();
 
@@ -1557,12 +1637,41 @@ app.whenReady().then(() => {
         console.log('[Power] Unlock screen — tracking resumed.');
     });
 
-    powerMonitor.on('resume', () => {
-        if (mainWindow && !mainWindow.isDestroyed() && windowVisible) {
-            mainWindow.webContents.send('system-resume');
-            void refreshTokenViaRenderer();
+    powerMonitor.on('suspend', () => {
+        suspendedAt = Date.now();
+        if (currentSession.isTracking && !isPaused) {
+            // Capture loops would resume mid-sleep with stale state; the slept seconds are
+            // discarded on wake by the resume handler.
+            stopMonitoringCapture();
         }
-        console.log('[Power] System resumed — refreshing auth session.');
+        console.log('[Power] System suspending — capture paused.');
+    });
+
+    powerMonitor.on('resume', () => {
+        const sleptSec = suspendedAt ? (Date.now() - suspendedAt) / 1000 : 0;
+        suspendedAt = 0;
+
+        void (async () => {
+            if (sleptSec >= FROZEN_GAP_SEC) {
+                await discardFrozenGap(sleptSec, 'asleep');
+            }
+            if (currentSession.isTracking && !isPaused) {
+                startMonitoringLoop();
+            }
+            if (mainWindow && !mainWindow.isDestroyed() && windowVisible) {
+                mainWindow.webContents.send('system-resume');
+                void refreshTokenViaRenderer();
+            }
+        })();
+
+        console.log(`[Power] System resumed after ${Math.round(sleptSec)}s — refreshing auth session.`);
+    });
+
+    powerMonitor.on('shutdown', () => {
+        if (currentSession.isTracking) {
+            stopMonitoringLoop();
+        }
+        console.log('[Power] System shutting down — tracking stopped.');
     });
 
     app.on('activate', () => {

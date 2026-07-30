@@ -22,6 +22,32 @@ class SubscriptionController extends ResourceController
     }
 
     /**
+     * POST /api/v1/subscriptions/validate-promo
+     * Check a promo code before starting checkout so the discount can be shown inline.
+     */
+    public function validatePromo()
+    {
+        try {
+            $data = $this->request->getJSON(true) ?? [];
+            $code = trim((string) ($data['promo_code'] ?? ''));
+            $planId = (int) ($data['plan_id'] ?? 0);
+
+            if ($code === '' || $planId <= 0) {
+                return $this->fail('Promo code and plan are required', 400);
+            }
+
+            $coupon = (new \App\Services\Admin\AdminCouponService())->previewForCheckout($code, $planId);
+
+            return $this->respond([
+                'success' => true,
+                'data' => $coupon,
+            ]);
+        } catch (\Throwable $e) {
+            return $this->fail($e->getMessage(), 422);
+        }
+    }
+
+    /**
      * GET /api/v1/plans
      * Get all available plans
      */
@@ -143,7 +169,8 @@ class SubscriptionController extends ResourceController
                 (int)$data['organization_id'],
                 (int)$data['plan_id'],
                 (string)$data['billing_cycle'],
-                (int)($data['user_count'] ?? 1)
+                (int)($data['user_count'] ?? 1),
+                isset($data['promo_code']) ? (string)$data['promo_code'] : null
             );
 
             return $this->respond([

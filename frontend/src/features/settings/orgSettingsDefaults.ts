@@ -13,6 +13,7 @@ export const DEFAULT_TRACKING: OrgTrackingSettings = {
   url_tracking_enabled: true,
   idle_timeout_minutes: 5,
   keep_idle_time: 'prompt',
+  max_session_hours: 12,
   timer_tolerance_minutes: 2,
   timer_reminder_enabled: true,
   automated_tracking: true,

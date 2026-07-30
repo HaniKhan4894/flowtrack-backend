@@ -145,6 +145,131 @@ class TimeEntryService
     }
 
     /**
+     * Grace before a silent client is treated as gone, on top of the org idle timeout.
+     * Covers a short network drop or a sync that failed once.
+     */
+    private const CLIENT_SILENCE_BUFFER_SEC = 600;
+
+    /**
+     * Close timers that are still open but no longer backed by a live client.
+     *
+     * Time is only credited while something reports in — activity segments or screenshots.
+     * A machine that goes to sleep, an app that is killed, or a browser tab that is closed
+     * would otherwise keep billing wall-clock hours (that is how a folded laptop logged a
+     * whole night). Two rules apply:
+     *
+     *  1. Client silence: no activity or screenshot for idle timeout + buffer → close the
+     *     entry at the last proof of work plus the idle grace, exactly where the idle
+     *     auto-pause would have cut it.
+     *  2. Max session length: a session longer than the org limit is closed regardless.
+     *
+     * @return array|null The entry when it is still valid, or null once auto-closed
+     */
+    private function enforceSessionIntegrity(array $entry): ?array
+    {
+        $orgId = (int) ($entry['organization_id'] ?? 0);
+        $started = strtotime((string) $entry['started_at']);
+        if (!$orgId || !$started) {
+            return $entry;
+        }
+
+        // A paused timer has already stopped counting, so silence is expected.
+        if (!empty($entry['paused_at'])) {
+            return $entry;
+        }
+
+        try {
+            $tracking = (new OrganizationSettingsService())->getEffectiveTrackingConfig($orgId);
+        } catch (\Throwable $e) {
+            return $entry;
+        }
+
+        $idleGrace = max(300, (int) ($tracking['idle_timeout_minutes'] ?? 5) * 60);
+        $maxSeconds = max(0, (int) ($tracking['max_session_hours'] ?? 12)) * 3600;
+        $elapsed = $this->computeElapsedSeconds($entry);
+        $now = time();
+
+        $cut = null;
+        $reason = '';
+
+        // Proof of a live client is only expected when the client actually reports activity.
+        $evidenceExpected = !empty($tracking['activity_tracking_enabled'])
+            || !empty($tracking['screenshot_enabled']);
+
+        if ($evidenceExpected) {
+            $lastEvidence = $this->lastEvidenceTimestamp((int) $entry['id']) ?? $started;
+            if ($now - $lastEvidence > $idleGrace + self::CLIENT_SILENCE_BUFFER_SEC) {
+                $cut = max($started + 60, $lastEvidence + $idleGrace);
+                $reason = sprintf('client stopped reporting %d min ago', intdiv($now - $lastEvidence, 60));
+            }
+        }
+
+        if ($maxSeconds > 0 && $elapsed > $maxSeconds) {
+            $capCut = $started + (int) ($entry['paused_duration_seconds'] ?? 0) + $maxSeconds;
+            if ($cut === null || $capCut < $cut) {
+                $cut = $capCut;
+                $reason = sprintf('passed the %dh session limit', (int) ($maxSeconds / 3600));
+            }
+        }
+
+        if ($cut === null || $cut >= $now) {
+            return $entry;
+        }
+
+        $this->closeOpenEntryAt($entry, gmdate('Y-m-d H:i:s', $cut), false);
+
+        log_message('warning', sprintf(
+            'Timer %d (user %d) auto-stopped at %s: %s.',
+            (int) $entry['id'],
+            (int) $entry['user_id'],
+            gmdate('Y-m-d H:i:s', $cut),
+            $reason
+        ));
+
+        return null;
+    }
+
+    /**
+     * Latest proof that the client was alive for an entry: activity segment or screenshot.
+     */
+    public function lastEvidenceTimestamp(int $entryId): ?int
+    {
+        $stamps = [];
+
+        $activity = $this->db->table('activity_logs')
+            ->select('logged_at, duration_seconds')
+            ->where('time_entry_id', $entryId)
+            ->orderBy('logged_at', 'DESC')
+            ->limit(1)
+            ->get()
+            ->getRowArray();
+
+        if ($activity) {
+            $loggedAt = strtotime((string) $activity['logged_at']);
+            if ($loggedAt) {
+                $stamps[] = $loggedAt + max(0, (int) $activity['duration_seconds']);
+            }
+        }
+
+        $screenshot = $this->db->table('screenshots')
+            ->select('captured_at')
+            ->where('time_entry_id', $entryId)
+            ->orderBy('captured_at', 'DESC')
+            ->limit(1)
+            ->get()
+            ->getRowArray();
+
+        if ($screenshot) {
+            $capturedAt = strtotime((string) $screenshot['captured_at']);
+            if ($capturedAt) {
+                $stamps[] = $capturedAt;
+            }
+        }
+
+        return $stamps === [] ? null : max($stamps);
+    }
+
+    /**
      * Split open timers that crossed midnight (org timezone).
      *
      * - Running overnight: close prior day(s) at 23:59:59, open continuation at 00:00:00.
@@ -155,6 +280,10 @@ class TimeEntryService
     public function syncOpenTimerDayBoundary(array $entry): ?array
     {
         if (!empty($entry['ended_at'])) {
+            return null;
+        }
+
+        if ($this->enforceSessionIntegrity($entry) === null) {
             return null;
         }
 
@@ -478,6 +607,35 @@ class TimeEntryService
                 log_message('error', 'Day-boundary timer sync failed: ' . $e->getMessage());
             }
         }
+    }
+
+    /**
+     * Sweep every open timer: split at midnight and close the ones no client is backing.
+     *
+     * Meant for a scheduler so an abandoned timer is trimmed within minutes instead of
+     * whenever its owner happens to open the app again.
+     *
+     * @return array{checked:int,closed:int,failed:int}
+     */
+    public function sweepOpenTimers(): array
+    {
+        $rows = $this->timeEntryModel->where('ended_at', null)->findAll();
+
+        $stats = ['checked' => 0, 'closed' => 0, 'failed' => 0];
+
+        foreach ($rows as $row) {
+            $stats['checked']++;
+            try {
+                if ($this->syncOpenTimerDayBoundary($row) === null) {
+                    $stats['closed']++;
+                }
+            } catch (\Throwable $e) {
+                $stats['failed']++;
+                log_message('error', 'Open timer sweep failed for entry ' . $row['id'] . ': ' . $e->getMessage());
+            }
+        }
+
+        return $stats;
     }
 
     /**

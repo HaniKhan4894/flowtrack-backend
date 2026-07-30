@@ -98,6 +98,32 @@ Windows build notes:
 - Run migrations: `php spark migrate`
 - Seed if needed: `php spark db:seed OrganizationSeeder`
 
+## Scheduled Jobs
+
+Lifecycle marketing needs a scheduler. Run every 15 minutes:
+
+```
+php spark marketing:run-campaigns
+```
+
+Time tracking integrity — run every 5 minutes:
+
+```
+php spark tracking:sweep-timers
+```
+
+This splits timers that crossed midnight and closes timers no client is backing any more
+(sleeping machine, killed app, closed browser tab). Such a timer is cut back to the last
+activity or screenshot plus the org idle grace, so wall-clock time is never billed without
+proof of work. The `max_session_hours` tracking setting (default 12, 0 disables) caps a
+session regardless.
+
+One-off tasks:
+
+- `php spark stripe:backfill-payments --months=24` — import historic Stripe invoices into the `platform_payments` ledger
+- `php spark growth:smoke` — verify every growth/payment query still runs against the current schema
+- `php spark tracking:repair-activity` — report activity logs recorded outside their time entry (add `--apply` to fix). Add `--trim-entries` to also report finished entries holding time that nothing was reporting during; `--user=ID` and `--since=YYYY-MM-DD` narrow the scan
+
 ## API Health
 
 - `GET /api/v1/health`

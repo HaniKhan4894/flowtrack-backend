@@ -256,6 +256,11 @@ export function TrackerSettingsModal({ open, onClose }: Props) {
                   <Row label="Working-while-paused reminder" hint="Set by admin.">
                     <span className="text-xs text-slate-400">{orgTracking.timer_reminder_enabled ? 'On' : 'Off'}</span>
                   </Row>
+                  <Row label="Max session length" hint="A timer left running is stopped at your last activity.">
+                    <span className="text-xs font-mono text-slate-300">
+                      {orgTracking.max_session_hours > 0 ? `${orgTracking.max_session_hours} h` : 'Off'}
+                    </span>
+                  </Row>
                   <p className="mt-3 flex items-start gap-2 rounded-lg border border-white/5 bg-white/[0.02] p-3 text-xs text-slate-500">
                     <Clock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                     Timer rules are managed by your organization. Contact your admin to change defaults.

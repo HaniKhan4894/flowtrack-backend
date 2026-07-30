@@ -16,5 +16,5 @@ export function formatClockShort(seconds: number): string {
 export function computeActivityPct(loggedSeconds: number, timeline: HourlyTimelineData | null): number {
   if (!timeline || loggedSeconds <= 0) return 0;
   const activitySeconds = timeline.summary.productive_seconds + timeline.summary.unproductive_seconds;
-  return Math.round((activitySeconds / loggedSeconds) * 100);
+  return Math.min(100, Math.round((activitySeconds / loggedSeconds) * 100));
 }

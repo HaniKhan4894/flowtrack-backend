@@ -21,6 +21,8 @@ class OrganizationSettingsService
         'url_tracking_enabled' => true,
         'idle_timeout_minutes' => 5,
         'keep_idle_time' => 'prompt',
+        /** Safety net for timers left running (sleeping laptop, crashed client). 0 disables it. */
+        'max_session_hours' => 12,
         'timer_tolerance_minutes' => 2,
         'timer_reminder_enabled' => true,
         'automated_tracking' => true,
@@ -181,6 +183,7 @@ class OrganizationSettingsService
 
         $effective['idle_timeout_minutes'] = max(1, min(60, (int) ($tracking['idle_timeout_minutes'] ?? 5)));
         $effective['timer_tolerance_minutes'] = max(1, min(30, (int) ($tracking['timer_tolerance_minutes'] ?? 2)));
+        $effective['max_session_hours'] = max(0, min(24, (int) ($tracking['max_session_hours'] ?? 12)));
 
         $keepIdle = (string) ($tracking['keep_idle_time'] ?? 'prompt');
         $effective['keep_idle_time'] = in_array($keepIdle, ['prompt', 'always', 'never'], true) ? $keepIdle : 'prompt';
@@ -288,6 +291,9 @@ class OrganizationSettingsService
         }
         if (array_key_exists('timer_tolerance_minutes', $data)) {
             $out['timer_tolerance_minutes'] = max(1, min(30, (int) $data['timer_tolerance_minutes']));
+        }
+        if (array_key_exists('max_session_hours', $data)) {
+            $out['max_session_hours'] = max(0, min(24, (int) $data['max_session_hours']));
         }
         if (array_key_exists('keep_idle_time', $data)) {
             $val = (string) $data['keep_idle_time'];

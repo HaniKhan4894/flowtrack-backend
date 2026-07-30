@@ -102,6 +102,16 @@ class ActivityLogController extends ResourceController
                 return $this->fail('time_entry_id is required', 400);
             }
 
+            $entry = (new \App\Models\TimeEntryModel())->find((int) $data['time_entry_id']);
+            if (!$entry || (int) $entry['user_id'] !== $userId) {
+                return $this->fail('Invalid time entry context', 404);
+            }
+
+            // A stopped or paused timer must not keep collecting: the desktop client can lose
+            // the stop signal (crash, offline, timer stopped elsewhere) and would otherwise
+            // pile hours of "activity" onto a finished entry.
+            $collecting = $this->activityLogService->isEntryCollecting($entry);
+
             // Batch payload uses `logs`; single-segment payloads include app_name/window_title.
             if (isset($data['logs']) && is_array($data['logs'])) {
                 $logs = $data['logs'];
@@ -123,44 +133,62 @@ class ActivityLogController extends ResourceController
             $batchIdleSeconds = (int) ($data['idle_seconds'] ?? 0);
             $batchActiveSeconds = (int) ($data['active_seconds'] ?? 0);
 
-            $results = [];
+            $stored = 0;
+            $rejected = 0;
             foreach ($logs as $log) {
                 if (!is_array($log)) {
                     continue;
                 }
                 unset($log['idle_seconds'], $log['active_seconds'], $log['metadata']);
-                $results[] = $this->activityLogService->logActivity($data['time_entry_id'], $userId, $log);
+                $result = $this->activityLogService->logActivity($data['time_entry_id'], $userId, $log);
+                if ($result === null) {
+                    $rejected++;
+                    continue;
+                }
+                $stored++;
             }
 
-            if ($batchIdleSeconds > 0 || $batchActiveSeconds > 0) {
-                $entry = (new \App\Models\TimeEntryModel())->find($data['time_entry_id']);
-                if ($entry) {
-                    $this->activityLogService->recordIdleStats(
-                        $userId,
-                        (int) $entry['organization_id'],
-                        date('Y-m-d H:i:s'),
-                        (int) $batchIdleSeconds,
-                        (int) $batchActiveSeconds
-                    );
+            if ($collecting && ($batchIdleSeconds > 0 || $batchActiveSeconds > 0)) {
+                $this->activityLogService->recordIdleStats(
+                    $userId,
+                    (int) $entry['organization_id'],
+                    date('Y-m-d H:i:s'),
+                    (int) $batchIdleSeconds,
+                    (int) $batchActiveSeconds
+                );
 
-                    if (!empty($data['client_router_mac']) || !empty($data['router_mac'])) {
-                        try {
-                            (new TimeEntryService())->updateWorkLocationFromClient(
-                                (int) $data['time_entry_id'],
-                                (int) $entry['organization_id'],
-                                $data
-                            );
-                        } catch (\Throwable $locationError) {
-                            log_message('warning', 'Work location update skipped: ' . $locationError->getMessage());
-                        }
+                if (!empty($data['client_router_mac']) || !empty($data['router_mac'])) {
+                    try {
+                        (new TimeEntryService())->updateWorkLocationFromClient(
+                            (int) $data['time_entry_id'],
+                            (int) $entry['organization_id'],
+                            $data
+                        );
+                    } catch (\Throwable $locationError) {
+                        log_message('warning', 'Work location update skipped: ' . $locationError->getMessage());
                     }
                 }
+            }
+
+            if ($rejected > 0) {
+                log_message(
+                    'info',
+                    sprintf(
+                        'Activity sync: dropped %d out-of-window segment(s) for entry %d (user %d).',
+                        $rejected,
+                        (int) $data['time_entry_id'],
+                        $userId
+                    )
+                );
             }
 
             return $this->respondCreated([
                 'success' => true,
                 'message' => $activityEnabled ? 'Activity logs synced successfully' : 'Idle stats recorded (activity tracking disabled)',
-                'count' => count($results)
+                'count' => $stored,
+                'rejected' => $rejected,
+                'entry_closed' => !empty($entry['ended_at']),
+                'entry_paused' => empty($entry['ended_at']) && !empty($entry['paused_at']),
             ]);
 
         } catch (\Exception $e) {
@@ -190,6 +218,9 @@ class ActivityLogController extends ResourceController
             }
 
             $log = $this->activityLogService->logActivity($data['time_entry_id'], $userId, $data);
+            if ($log === null) {
+                return $this->fail('Activity falls outside the timer window', 409);
+            }
 
             return $this->respondCreated([
                 'success' => true,

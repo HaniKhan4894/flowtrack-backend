@@ -4,6 +4,7 @@ import { BrowserRouter, HashRouter, Routes, Route, Navigate, useLocation } from 
 import './index.css'
 
 import { Shell } from './layouts/Shell'
+import { AdminShell } from './layouts/AdminShell'
 import { TrackerProtectedRoute, DesktopOnlyTrackerRoute, DesktopOnlyTrackerLoginRoute } from './features/desktop-tracker/DesktopTrackerLayout'
 import { useAuthStore } from './store/authStore'
 import { canAccessPath, isSuperAdmin, isPathPlanLocked } from './utils/access'
@@ -53,7 +54,22 @@ const IntegrationsPage = lazy(() => import('./features/integrations/Integrations
 const JiraHubPage = lazy(() => import('./features/integrations/JiraHubPage'))
 const GitHubHubPage = lazy(() => import('./features/integrations/GitHubHubPage'))
 const SlackHubPage = lazy(() => import('./features/integrations/SlackHubPage'))
-const AdminDashboardPage = lazy(() => import('./features/admin/AdminDashboardPage'))
+const AdminOverviewPage = lazy(() => import('./features/admin/AdminOverviewPage'))
+const AdminOrganizationsPage = lazy(() => import('./features/admin/AdminOrganizationsPage'))
+const AdminOrganizationDetailPage = lazy(() => import('./features/admin/AdminOrganizationDetailPage'))
+const AdminUsersPage = lazy(() => import('./features/admin/AdminUsersPage'))
+const AdminUserDetailPage = lazy(() => import('./features/admin/AdminUserDetailPage'))
+const AdminSubscriptionsPage = lazy(() => import('./features/admin/AdminSubscriptionsPage'))
+const AdminPlansPage = lazy(() => import('./features/admin/AdminPlansPage'))
+const AdminUsagePage = lazy(() => import('./features/admin/AdminUsagePage'))
+const AdminAuditPage = lazy(() => import('./features/admin/AdminAuditPage'))
+const AdminAnnouncementsPage = lazy(() => import('./features/admin/AdminAnnouncementsPage'))
+const AdminHealthPage = lazy(() => import('./features/admin/AdminHealthPage'))
+const AdminPaymentsPage = lazy(() => import('./features/admin/AdminPaymentsPage'))
+const AdminGrowthPage = lazy(() => import('./features/admin/AdminGrowthPage'))
+const AdminCampaignsPage = lazy(() => import('./features/admin/AdminCampaignsPage'))
+const AdminCampaignDetailPage = lazy(() => import('./features/admin/AdminCampaignDetailPage'))
+const AdminCouponsPage = lazy(() => import('./features/admin/AdminCouponsPage'))
 const MemberTrackingPage = lazy(() => import('./features/team/MemberTrackingPage'))
 const AdvancedMonitoringReportPage = lazy(() => import('./features/team/AdvancedMonitoringReportPage'))
 const ActivityFeedPage = lazy(() => import('./features/activity/ActivityFeedPage'))
@@ -86,9 +102,11 @@ const ProtectedRoute = ({ children }: { children: ReactNode }) => {
 const SuperAdminRoute = ({ children }: { children: ReactNode }) => {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
   const user = useAuthStore((s) => s.user)
+  const sessionReady = useAuthStore((s) => s.sessionReady)
+  if (!sessionReady) return <AuthBootLoader />
   if (!isAuthenticated) return <Navigate to={getAppLoginPath()} />
   if (!isSuperAdmin(user)) return <Navigate to="/app" replace />
-  return <Shell><Lazy>{children}</Lazy></Shell>
+  return <AdminShell><Lazy>{children}</Lazy></AdminShell>
 }
 
 const MemberTrackingRoute = ({ children }: { children: ReactNode }) => {
@@ -226,7 +244,22 @@ function AppChrome() {
         <Route path="/leave" element={<RoleRoute path="/leave"><LeavePage /></RoleRoute>} />
         <Route path="/payroll" element={<RoleRoute path="/payroll"><PayrollPage /></RoleRoute>} />
         <Route path="/payroll/runs/:runId" element={<RoleRoute path="/payroll"><PayrollRunDetailPage /></RoleRoute>} />
-        <Route path="/admin" element={<SuperAdminRoute><AdminDashboardPage /></SuperAdminRoute>} />
+        <Route path="/admin" element={<SuperAdminRoute><AdminOverviewPage /></SuperAdminRoute>} />
+        <Route path="/admin/organizations" element={<SuperAdminRoute><AdminOrganizationsPage /></SuperAdminRoute>} />
+        <Route path="/admin/organizations/:id" element={<SuperAdminRoute><AdminOrganizationDetailPage /></SuperAdminRoute>} />
+        <Route path="/admin/users" element={<SuperAdminRoute><AdminUsersPage /></SuperAdminRoute>} />
+        <Route path="/admin/users/:id" element={<SuperAdminRoute><AdminUserDetailPage /></SuperAdminRoute>} />
+        <Route path="/admin/subscriptions" element={<SuperAdminRoute><AdminSubscriptionsPage /></SuperAdminRoute>} />
+        <Route path="/admin/payments" element={<SuperAdminRoute><AdminPaymentsPage /></SuperAdminRoute>} />
+        <Route path="/admin/growth" element={<SuperAdminRoute><AdminGrowthPage /></SuperAdminRoute>} />
+        <Route path="/admin/campaigns" element={<SuperAdminRoute><AdminCampaignsPage /></SuperAdminRoute>} />
+        <Route path="/admin/campaigns/:campaignId" element={<SuperAdminRoute><AdminCampaignDetailPage /></SuperAdminRoute>} />
+        <Route path="/admin/coupons" element={<SuperAdminRoute><AdminCouponsPage /></SuperAdminRoute>} />
+        <Route path="/admin/plans" element={<SuperAdminRoute><AdminPlansPage /></SuperAdminRoute>} />
+        <Route path="/admin/usage" element={<SuperAdminRoute><AdminUsagePage /></SuperAdminRoute>} />
+        <Route path="/admin/audit" element={<SuperAdminRoute><AdminAuditPage /></SuperAdminRoute>} />
+        <Route path="/admin/announcements" element={<SuperAdminRoute><AdminAnnouncementsPage /></SuperAdminRoute>} />
+        <Route path="/admin/health" element={<SuperAdminRoute><AdminHealthPage /></SuperAdminRoute>} />
 
         <Route path="*" element={<FallbackRedirect />} />
       </Routes>

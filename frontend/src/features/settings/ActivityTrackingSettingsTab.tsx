@@ -194,6 +194,13 @@ export function ActivityTrackingSettingsTab({ organizationId, onSaved }: Props) 
         <Row label="Timer reminder">
           <Toggle checked={tracking.timer_reminder_enabled} onChange={(v) => setTracking((p) => ({ ...p, timer_reminder_enabled: v }))} />
         </Row>
+        <Row label="Max session length (hours)">
+          <input type="number" min={0} max={24} value={tracking.max_session_hours} onChange={(e) => setTracking((p) => ({ ...p, max_session_hours: Number(e.target.value) }))} className="form-field w-24 text-sm" />
+        </Row>
+        <p className="text-xs text-slate-500 -mt-2 mb-2">
+          A timer left running longer than this is stopped automatically at the last recorded
+          activity, so a sleeping laptop or crashed app cannot log a full night of work. Set 0 to disable.
+        </p>
       </Section>
 
       <div className="flex justify-end">

@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Shield, Loader2, PartyPopper, AlertTriangle, Calendar, CreditCard, RefreshCw, ExternalLink, Sparkles } from 'lucide-react';
+import { Shield, Loader2, PartyPopper, AlertTriangle, Calendar, CreditCard, RefreshCw, ExternalLink, Sparkles, Ticket } from 'lucide-react';
 import { Button } from '../../components/ui';
-import { billingService, type Subscription } from '../../api/billingService';
+import { billingService, type PromoPreview, type Subscription } from '../../api/billingService';
 import { useSearchParams } from 'react-router-dom';
 import { formatApiDate } from '../../utils/date';
 import { formatPlanForDisplay, type ApiPlan, type DisplayPlan } from './billingPlanUtils';
@@ -27,6 +27,10 @@ const BillingPage = () => {
   const [portalLoading, setPortalLoading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [promoInput, setPromoInput] = useState('');
+  const [promoChecking, setPromoChecking] = useState(false);
+  const [promoApplied, setPromoApplied] = useState<PromoPreview | null>(null);
+  const [promoError, setPromoError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchSubscription();
@@ -99,7 +103,11 @@ const BillingPage = () => {
         return;
       }
 
-      const resp = await billingService.createCheckoutSession(plan.id, billingCycle);
+      const resp = await billingService.createCheckoutSession(
+        plan.id,
+        billingCycle,
+        promoApplied?.code,
+      );
       const checkoutUrl = resp?.data?.url;
       if (!checkoutUrl) throw new Error('Checkout URL not returned');
       window.location.href = checkoutUrl;
@@ -110,6 +118,38 @@ const BillingPage = () => {
     } finally {
       setSubscribingId(null);
     }
+  };
+
+  const applyPromo = async () => {
+    const code = promoInput.trim();
+    if (!code) return;
+
+    // Codes can be plan-restricted, so validate against the cheapest paid plan
+    // the customer can actually buy right now.
+    const paidPlan = displayPlans.find((p) => !p.isFree && !p.disabled);
+    if (!paidPlan) {
+      setPromoError('No paid plan available to apply this code to.');
+      return;
+    }
+
+    setPromoChecking(true);
+    setPromoError(null);
+    try {
+      const resp = await billingService.validatePromoCode(paidPlan.id, code);
+      setPromoApplied(resp.data);
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setPromoApplied(null);
+      setPromoError(msg || 'That code is not valid.');
+    } finally {
+      setPromoChecking(false);
+    }
+  };
+
+  const clearPromo = () => {
+    setPromoApplied(null);
+    setPromoError(null);
+    setPromoInput('');
   };
 
   const openBillingPortal = async () => {
@@ -303,6 +343,56 @@ const BillingPage = () => {
           </p>
         )}
       </div>
+
+      {!currentSub?.stripe_subscription_id && (
+        <div className="glass-card p-6 max-w-3xl mx-auto">
+          <div className="flex items-start gap-4">
+            <Ticket className="text-primary-400 shrink-0 mt-1" size={22} />
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-white">Have a promo code?</p>
+              <p className="text-sm text-slate-400 mt-0.5">
+                Apply it here and the discount is attached to your checkout automatically.
+              </p>
+
+              {promoApplied ? (
+                <div className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3">
+                  <span className="font-mono font-bold text-emerald-200">{promoApplied.code}</span>
+                  <span className="text-sm text-emerald-100/90">{promoApplied.discount_label} applied</span>
+                  <button
+                    type="button"
+                    onClick={clearPromo}
+                    className="ml-auto text-xs text-emerald-200/70 hover:text-white underline"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ) : (
+                <div className="mt-4 flex flex-col sm:flex-row gap-3">
+                  <input
+                    value={promoInput}
+                    onChange={(e) => setPromoInput(e.target.value.toUpperCase())}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') void applyPromo();
+                    }}
+                    placeholder="COMEBACK30"
+                    className="flex-1 bg-white/5 border border-white/10 rounded-2xl px-4 py-3 font-mono text-white placeholder:text-slate-600 focus:outline-none focus:border-primary-500/50"
+                  />
+                  <Button
+                    variant="secondary"
+                    onClick={applyPromo}
+                    isLoading={promoChecking}
+                    disabled={promoInput.trim() === ''}
+                  >
+                    Apply code
+                  </Button>
+                </div>
+              )}
+
+              {promoError && <p className="text-sm text-rose-300 mt-3">{promoError}</p>}
+            </div>
+          </div>
+        </div>
+      )}
 
       {displayPlans.length > 0 ? (
         <PricingCards

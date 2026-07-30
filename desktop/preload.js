@@ -109,6 +109,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
         return () => ipcRenderer.removeListener('timer-reminder-resume', handler);
     },
 
+    onTimerSyncRequired: (callback) => {
+        const handler = () => callback();
+        ipcRenderer.on('timer-sync-required', handler);
+        return () => ipcRenderer.removeListener('timer-sync-required', handler);
+    },
+
     onBrowserSignInComplete: (callback) => {
         const handler = (_event, tokens) => callback(tokens);
         ipcRenderer.on('browser-sign-in-complete', handler);

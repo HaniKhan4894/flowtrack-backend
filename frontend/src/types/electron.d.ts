@@ -36,6 +36,7 @@ declare global {
       }) => void) => () => void;
       onAppLifecycle: (callback: (state: 'hide' | 'show' | 'shutdown') => void) => () => void;
       onTimerReminderResume: (callback: () => void) => () => void;
+      onTimerSyncRequired: (callback: () => void) => () => void;
       onBrowserSignInComplete: (callback: (tokens: {
         access_token: string;
         refresh_token?: string | null;

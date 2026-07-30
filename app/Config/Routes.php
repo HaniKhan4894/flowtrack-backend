@@ -50,6 +50,10 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\API\V1'], function ($r
     // Public webhook (no auth)
     $routes->post('webhooks/stripe', 'StripeWebhookController::handle');
 
+    // Email tracking pixels / click redirects (no auth — opened by mail clients)
+    $routes->get('track/open/(:segment)', 'TrackingController::open/$1');
+    $routes->get('track/click/(:segment)', 'TrackingController::click/$1');
+
     // Client portal (public, token-based)
     $routes->get('portal/invoice/(:segment)', 'ClientPortalController::show/$1');
     $routes->get('portal/invoice/(:segment)/screenshots/(:num)/thumbnail', 'ClientPortalController::screenshotThumbnail/$1/$2');
@@ -74,12 +78,124 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\API\V1'], function ($r
     $routes->get('locations/cities', 'LocationController::cities', ['filter' => 'auth']);
     $routes->get('locations/timezones', 'LocationController::timezones', ['filter' => 'auth']);
 
-    // Super-admin routes
+    // Platform announcements (read side for any signed-in member)
+    $routes->get('announcements', 'AnnouncementController::index', ['filter' => 'auth']);
+    $routes->post('announcements/(:num)/dismiss', 'AnnouncementController::dismiss/$1', ['filter' => 'auth']);
+
+    // Super-admin (platform portal) routes
     $routes->group('admin', ['filter' => ['auth', 'superadmin']], function ($routes) {
-        $routes->get('organizations', 'AdminController::organizations');
-        $routes->get('subscriptions/stats', 'AdminController::subscriptionStats');
+        // Overview & metrics
+        $routes->get('overview', 'AdminController::overview');
+        $routes->get('metrics', 'AdminController::metrics');
+        $routes->get('timeseries', 'AdminController::timeseries');
         $routes->get('activity/overview', 'AdminController::activityOverview');
-        $routes->get('organizations/(:num)', 'AdminController::organizationDetail/$1');
+
+        // Organizations
+        $routes->get('orgs', 'AdminOrganizationController::index');
+        $routes->get('orgs/(:num)', 'AdminOrganizationController::show/$1');
+        $routes->put('orgs/(:num)', 'AdminOrganizationController::update/$1');
+        $routes->delete('orgs/(:num)', 'AdminOrganizationController::delete/$1');
+        $routes->post('orgs/(:num)/suspend', 'AdminOrganizationController::suspend/$1');
+        $routes->post('orgs/(:num)/activate', 'AdminOrganizationController::activate/$1');
+        $routes->put('orgs/(:num)/plan', 'AdminOrganizationController::changePlan/$1');
+        $routes->post('orgs/(:num)/extend-trial', 'AdminOrganizationController::extendTrial/$1');
+
+        // Users
+        $routes->get('users', 'AdminUserController::index');
+        $routes->get('users/(:num)', 'AdminUserController::show/$1');
+        $routes->delete('users/(:num)', 'AdminUserController::delete/$1');
+        $routes->post('users/(:num)/activate', 'AdminUserController::activate/$1');
+        $routes->post('users/(:num)/deactivate', 'AdminUserController::deactivate/$1');
+        $routes->put('users/(:num)/super-admin', 'AdminUserController::setSuperAdmin/$1');
+        $routes->post('users/(:num)/verify-email', 'AdminUserController::verifyEmail/$1');
+        $routes->post('users/(:num)/password-reset', 'AdminUserController::sendPasswordReset/$1');
+        $routes->post('users/(:num)/revoke-sessions', 'AdminUserController::revokeSessions/$1');
+        $routes->post('users/(:num)/impersonate', 'AdminUserController::impersonate/$1');
+        $routes->get('impersonation', 'AdminUserController::impersonationHistory');
+        $routes->post('impersonation/(:num)/stop', 'AdminUserController::stopImpersonation/$1');
+
+        // Billing & subscriptions
+        $routes->get('subscriptions', 'AdminBillingController::subscriptions');
+        $routes->get('subscriptions/stats', 'AdminController::subscriptionStats');
+        $routes->put('subscriptions/(:num)/status', 'AdminBillingController::updateStatus/$1');
+        $routes->get('revenue/trend', 'AdminBillingController::revenueTrend');
+        $routes->get('invoices', 'AdminBillingController::invoices');
+
+        // Plans & feature flags
+        $routes->get('plans', 'AdminPlanController::index');
+        $routes->post('plans', 'AdminPlanController::create');
+        $routes->put('plans/(:num)', 'AdminPlanController::update/$1');
+        $routes->delete('plans/(:num)', 'AdminPlanController::delete/$1');
+        $routes->put('plans/(:num)/features', 'AdminPlanController::upsertFeature/$1');
+        $routes->delete('plans/(:num)/features/(:num)', 'AdminPlanController::deleteFeature/$1/$2');
+        $routes->put('billing-settings', 'AdminPlanController::updateBillingSettings');
+
+        // Payment ledger & revenue reporting
+        $routes->get('payments', 'AdminPaymentController::index');
+        $routes->get('payments/summary', 'AdminPaymentController::summary');
+        $routes->get('payments/revenue', 'AdminPaymentController::revenue');
+        $routes->get('payments/dunning', 'AdminPaymentController::dunning');
+        $routes->get('payments/export', 'AdminPaymentController::export');
+        $routes->get('payments/organization/(:num)', 'AdminPaymentController::forOrganization/$1');
+        $routes->post('payments', 'AdminPaymentController::recordManual');
+        $routes->post('payments/(:num)/retry', 'AdminPaymentController::retry/$1');
+        $routes->post('payments/(:num)/refund', 'AdminPaymentController::refund/$1');
+
+        // Coupons & offers
+        $routes->get('coupons', 'AdminCouponController::index');
+        $routes->post('coupons', 'AdminCouponController::create');
+        $routes->get('coupons/(:num)', 'AdminCouponController::show/$1');
+        $routes->put('coupons/(:num)', 'AdminCouponController::update/$1');
+        $routes->delete('coupons/(:num)', 'AdminCouponController::delete/$1');
+        $routes->post('coupons/(:num)/resync', 'AdminCouponController::resync/$1');
+
+        // Growth analytics
+        $routes->get('growth/overview', 'AdminGrowthController::overview');
+        $routes->get('growth/cohorts', 'AdminGrowthController::cohorts');
+        $routes->get('growth/churn', 'AdminGrowthController::churn');
+        $routes->get('growth/health', 'AdminGrowthController::health');
+        $routes->get('growth/segments', 'AdminGrowthController::segments');
+        $routes->get('growth/segments/(:segment)', 'AdminGrowthController::segmentMembers/$1');
+
+        // Lifecycle marketing campaigns
+        $routes->get('campaigns', 'AdminCampaignController::index');
+        $routes->post('campaigns', 'AdminCampaignController::create');
+        $routes->get('campaigns/playbooks', 'AdminCampaignController::playbooks');
+        $routes->post('campaigns/playbooks', 'AdminCampaignController::installPlaybook');
+        $routes->post('campaigns/preview', 'AdminCampaignController::preview');
+        $routes->get('campaigns/(:num)', 'AdminCampaignController::show/$1');
+        $routes->put('campaigns/(:num)', 'AdminCampaignController::update/$1');
+        $routes->delete('campaigns/(:num)', 'AdminCampaignController::delete/$1');
+        $routes->post('campaigns/(:num)/duplicate', 'AdminCampaignController::duplicate/$1');
+        $routes->post('campaigns/(:num)/send', 'AdminCampaignController::send/$1');
+        $routes->post('campaigns/(:num)/test', 'AdminCampaignController::test/$1');
+        $routes->put('campaigns/(:num)/status', 'AdminCampaignController::status/$1');
+
+        // Usage analytics
+        $routes->get('usage', 'AdminUsageController::index');
+
+        // Audit & security
+        $routes->get('audit-logs', 'AdminAuditController::index');
+        $routes->get('audit-logs/options', 'AdminAuditController::options');
+        $routes->get('security', 'AdminAuditController::security');
+
+        // Announcements
+        $routes->get('announcements', 'AdminAnnouncementController::index');
+        $routes->post('announcements', 'AdminAnnouncementController::create');
+        $routes->put('announcements/(:num)', 'AdminAnnouncementController::update/$1');
+        $routes->delete('announcements/(:num)', 'AdminAnnouncementController::delete/$1');
+        $routes->post('announcements/(:num)/resend', 'AdminAnnouncementController::resend/$1');
+
+        // System health & settings
+        $routes->get('system/health', 'AdminSystemController::health');
+        $routes->get('system/logs', 'AdminSystemController::logs');
+        $routes->get('system/settings', 'AdminSystemController::settings');
+        $routes->put('system/settings', 'AdminSystemController::updateSettings');
+        $routes->post('system/close-stale-timers', 'AdminSystemController::closeStaleTimers');
+
+        // Legacy endpoints kept for older clients
+        $routes->get('organizations', 'AdminController::organizations');
+        $routes->get('organizations/(:num)', 'AdminOrganizationController::show/$1');
     });
 
     // User Routes (Protected)
@@ -417,6 +533,7 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\API\V1'], function ($r
     $routes->post('subscriptions', 'SubscriptionController::subscribe', ['filter' => 'auth']);
     $routes->post('subscriptions/checkout-session', 'SubscriptionController::checkoutSession', ['filter' => 'auth']);
     $routes->post('subscriptions/confirm-checkout', 'SubscriptionController::confirmCheckout', ['filter' => 'auth']);
+    $routes->post('subscriptions/validate-promo', 'SubscriptionController::validatePromo', ['filter' => 'auth']);
     $routes->post('subscriptions/billing-portal', 'SubscriptionController::billingPortal', ['filter' => 'auth']);
     $routes->get('subscriptions/current', 'SubscriptionController::current', ['filter' => 'auth']);
     $routes->put('subscriptions/upgrade', 'SubscriptionController::upgrade', ['filter' => 'auth']);

@@ -17,6 +17,7 @@ import {
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { TimerWidget } from '../components/TimerWidget';
+import { PlatformBanners } from '../components/PlatformBanners';
 import { notificationService } from '../api/notificationService';
 import { getNavGroupsForUser, getNavItemsForUser, isSuperAdmin, canViewOrgPackage } from '../utils/access';
 import { hardRedirectToLogin, isDesktopApp } from '../utils/electronAuth';
@@ -485,6 +486,7 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
         </div>
 
         <div className="flex-1 glass rounded-2xl sm:rounded-3xl p-4 sm:p-6 lg:p-8 overflow-y-auto overflow-x-hidden min-w-0">
+          <PlatformBanners />
           {user?.advanced_monitoring?.active && (
             <div className="mb-6 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-5 py-4 flex items-start gap-3">
               <ShieldAlert className="text-rose-400 shrink-0 mt-0.5" size={20} />

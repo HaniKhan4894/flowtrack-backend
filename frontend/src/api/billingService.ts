@@ -50,6 +50,12 @@ export interface SubscriptionUsage {
     };
 }
 
+export interface PromoPreview {
+    code: string;
+    name: string;
+    discount_label: string;
+}
+
 export const billingService = {
     getSubscription: async (): Promise<{ data: Subscription | null }> => {
         const response = await client.get('/subscriptions/current');
@@ -62,8 +68,26 @@ export const billingService = {
         const response = await client.post('/subscriptions', { plan_id: planId, billing_cycle: cycle });
         return response.data;
     },
-    createCheckoutSession: async (planId: number, cycle: 'monthly' | 'yearly'): Promise<{ data: { id: string; url: string } }> => {
-        const response = await client.post('/subscriptions/checkout-session', { plan_id: planId, billing_cycle: cycle });
+    createCheckoutSession: async (
+        planId: number,
+        cycle: 'monthly' | 'yearly',
+        promoCode?: string,
+    ): Promise<{ data: { id: string; url: string } }> => {
+        const response = await client.post('/subscriptions/checkout-session', {
+            plan_id: planId,
+            billing_cycle: cycle,
+            promo_code: promoCode || undefined,
+        });
+        return response.data;
+    },
+    validatePromoCode: async (
+        planId: number,
+        promoCode: string,
+    ): Promise<{ data: PromoPreview }> => {
+        const response = await client.post('/subscriptions/validate-promo', {
+            plan_id: planId,
+            promo_code: promoCode,
+        });
         return response.data;
     },
     confirmCheckout: async (sessionId: string): Promise<any> => {

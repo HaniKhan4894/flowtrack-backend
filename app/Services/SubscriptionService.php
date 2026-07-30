@@ -17,6 +17,7 @@ class SubscriptionService
     protected $emailService;
     protected $db;
     protected ?StripeClient $stripeClient = null;
+    protected ?PaymentLedgerService $paymentLedger = null;
 
     public function __construct()
     {
@@ -25,6 +26,11 @@ class SubscriptionService
         $this->organizationModel = new OrganizationModel();
         $this->emailService = new EmailService();
         $this->db = \Config\Database::connect();
+    }
+
+    private function paymentLedger(): PaymentLedgerService
+    {
+        return $this->paymentLedger ??= new PaymentLedgerService();
     }
 
     /**
@@ -110,8 +116,13 @@ class SubscriptionService
         }
     }
 
-    public function createCheckoutSession(int $organizationId, int $planId, string $billingCycle = 'monthly', ?int $userCount = null): array
-    {
+    public function createCheckoutSession(
+        int $organizationId,
+        int $planId,
+        string $billingCycle = 'monthly',
+        ?int $userCount = null,
+        ?string $promoCode = null
+    ): array {
         $plan = $this->planModel->find($planId);
         if (!$plan) {
             throw new \Exception('Plan not found');
@@ -167,6 +178,20 @@ class SubscriptionService
             $sessionParams['customer'] = $subscription['stripe_customer_id'];
         }
 
+        $appliedCoupon = null;
+        if ($promoCode !== null && trim($promoCode) !== '') {
+            $couponService = new \App\Services\Admin\AdminCouponService();
+            $appliedCoupon = $couponService->resolveForCheckout($promoCode, $planId);
+            $sessionParams['discounts'] = [[
+                'promotion_code' => $appliedCoupon['stripe_promotion_code_id'],
+            ]];
+            $sessionParams['metadata']['coupon_code'] = $appliedCoupon['code'];
+            $sessionParams['subscription_data']['metadata']['coupon_code'] = $appliedCoupon['code'];
+        } else {
+            // Let customers paste a Stripe promotion code straight into Checkout.
+            $sessionParams['allow_promotion_codes'] = true;
+        }
+
         $session = $this->getStripeClient()->checkout->sessions->create($sessionParams);
 
         return [
@@ -175,6 +200,11 @@ class SubscriptionService
             'trial_days' => $this->qualifiesForTrial($organizationId, $plan) ? (int) ($plan['trial_days'] ?? 14) : 0,
             'user_count' => $userCount,
             'estimated_amount' => $this->calculatePrice($planId, $userCount, $billingCycle),
+            'coupon' => $appliedCoupon === null ? null : [
+                'code' => $appliedCoupon['code'],
+                'name' => $appliedCoupon['name'],
+                'discount_label' => $appliedCoupon['discount_label'],
+            ],
         ];
     }
 
@@ -1106,6 +1136,7 @@ class SubscriptionService
 
             case 'invoice.paid':
                 $invoice = $event->data->object;
+                $orgId = 0;
                 if (!empty($invoice->subscription)) {
                     $stripeSub = $this->getStripeClient()->subscriptions->retrieve((string) $invoice->subscription);
                     $orgId = (int) ($stripeSub->metadata->organization_id ?? 0);
@@ -1123,6 +1154,7 @@ class SubscriptionService
                         }
                     }
                 }
+                $this->paymentLedger()->recordStripeInvoice($invoice, $orgId ?: null);
                 break;
 
             case 'invoice.payment_failed':
@@ -1133,6 +1165,11 @@ class SubscriptionService
                         $this->subscriptionModel->update($local['id'], ['status' => 'past_due']);
                     }
                 }
+                $this->paymentLedger()->markInvoiceFailed($invoice);
+                break;
+
+            case 'charge.refunded':
+                $this->paymentLedger()->recordRefundFromCharge($event->data->object);
                 break;
 
             case 'customer.subscription.updated':

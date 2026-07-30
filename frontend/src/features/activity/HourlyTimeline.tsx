@@ -316,11 +316,19 @@ export const HourlyTimeline = ({ data, isLoading, selectedDate, topApps = [], va
   }
 
   const maxSeconds = Math.max(...data.hours.map((h) => h.total_seconds), 1);
-  const activitySeconds = data.summary.productive_seconds + data.summary.unproductive_seconds;
   const timeLoggedSeconds = loggedSeconds ?? data.summary.total_seconds;
+  // Activity is always part of tracked time, so it can never read higher than the hours logged.
+  const activitySeconds = Math.min(
+    data.summary.productive_seconds + data.summary.unproductive_seconds,
+    timeLoggedSeconds > 0 ? timeLoggedSeconds : Number.MAX_SAFE_INTEGER,
+  );
   const activityPct = timeLoggedSeconds > 0
-    ? Math.round((activitySeconds / timeLoggedSeconds) * 100)
+    ? Math.min(100, Math.round((activitySeconds / timeLoggedSeconds) * 100))
     : 0;
+  const rawActivitySeconds = data.summary.productive_seconds + data.summary.unproductive_seconds;
+  const activityScale = rawActivitySeconds > 0 ? activitySeconds / rawActivitySeconds : 1;
+  const productiveSeconds = Math.round(data.summary.productive_seconds * activityScale);
+  const unproductiveSeconds = Math.max(0, activitySeconds - productiveSeconds);
 
   const peakHour = data.hours.reduce(
     (best, h) => (h.total_seconds > best.total_seconds ? h : best),
@@ -331,7 +339,7 @@ export const HourlyTimeline = ({ data, isLoading, selectedDate, topApps = [], va
     data.hours.flatMap((h) => h.apps.map((a) => a.app_name)),
   ).size;
   const productiveShare = activitySeconds > 0
-    ? Math.round((data.summary.productive_seconds / activitySeconds) * 100)
+    ? Math.round((productiveSeconds / activitySeconds) * 100)
     : 0;
   const allTrackedSeconds = data.summary.productive_seconds
     + data.summary.unproductive_seconds
@@ -397,13 +405,13 @@ export const HourlyTimeline = ({ data, isLoading, selectedDate, topApps = [], va
                 </div>
                 <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/[0.06]">
                   <div className="flex h-full">
-                    <div className="h-full bg-sky-500" style={{ width: `${(data.summary.productive_seconds / activityBarTotal) * 100}%` }} />
-                    <div className="h-full bg-amber-400/70" style={{ width: `${(data.summary.unproductive_seconds / activityBarTotal) * 100}%` }} />
+                    <div className="h-full bg-sky-500" style={{ width: `${(productiveSeconds / activityBarTotal) * 100}%` }} />
+                    <div className="h-full bg-amber-400/70" style={{ width: `${(unproductiveSeconds / activityBarTotal) * 100}%` }} />
                   </div>
                 </div>
                 <div className="mt-1 flex justify-between text-[9px] text-slate-500">
-                  <span>{formatHm(data.summary.productive_seconds)} productive</span>
-                  <span>{formatHm(data.summary.unproductive_seconds)} off-track</span>
+                  <span>{formatHm(productiveSeconds)} productive</span>
+                  <span>{formatHm(unproductiveSeconds)} off-track</span>
                 </div>
               </div>
             </div>

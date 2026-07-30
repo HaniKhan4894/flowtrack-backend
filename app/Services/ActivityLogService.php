@@ -9,6 +9,12 @@ use App\Services\TimezoneService;
 
 class ActivityLogService
 {
+    /**
+     * Tolerance for client/server clock skew when matching a segment to its entry window.
+     * Desktop segments are stamped with their start time and flushed up to a minute later.
+     */
+    private const WINDOW_GRACE_SECONDS = 90;
+
     protected $activityLogModel;
     protected $productivityRuleModel;
     protected $timeEntryModel;
@@ -24,7 +30,13 @@ class ActivityLogService
         $this->db = \Config\Database::connect();
     }
 
-    public function logActivity(int $timeEntryId, int $userId, array $data): array
+    /**
+     * Store one activity segment, trimmed to the part that overlaps its time entry.
+     *
+     * @return array|null The stored log, or null when the segment lies outside the entry window
+     *                    (stale desktop client still syncing to a stopped/paused timer).
+     */
+    public function logActivity(int $timeEntryId, int $userId, array $data): ?array
     {
         $entry = $this->timeEntryModel->find($timeEntryId);
         if (!$entry || (int)$entry['user_id'] !== $userId) {
@@ -37,6 +49,13 @@ class ActivityLogService
             $loggedAt = date('Y-m-d H:i:s', strtotime($loggedAt));
         }
 
+        $duration = (int)($data['duration_seconds'] ?? 0) ?: 60;
+        [$loggedAt, $duration] = $this->clampSegmentToEntry($entry, $loggedAt, $duration);
+
+        if ($duration <= 0) {
+            return null;
+        }
+
         $insertData = [
             'time_entry_id'    => (int)$timeEntryId,
             'user_id'          => (int)$userId,
@@ -44,7 +63,7 @@ class ActivityLogService
             'window_title'     => $this->truncate((string) ($data['window_title'] ?? ''), 500),
             'url'              => $this->truncate((string) ($data['url'] ?? ''), 1000),
             'category'         => $data['category'] ?? $this->categorizeActivity($data, (int) $entry['organization_id']),
-            'duration_seconds' => (int)($data['duration_seconds'] ?? 0) ?: 60,
+            'duration_seconds' => $duration,
             'keyboard_strokes' => (int)($data['keyboard_strokes'] ?? 0),
             'mouse_clicks'     => (int)($data['mouse_clicks'] ?? 0),
             'mouse_movement'   => (int)($data['mouse_movement'] ?? 0),
@@ -56,6 +75,59 @@ class ActivityLogService
         $logId = $this->db->insertID();
 
         return $this->activityLogModel->find($logId);
+    }
+
+    /**
+     * Seconds a timer is allowed to collect activity for: start until stop / pause / now.
+     *
+     * @return array{0:string,1:int} Clamped logged_at and duration (0 when fully outside).
+     */
+    private function clampSegmentToEntry(array $entry, string $loggedAt, int $duration): array
+    {
+        $entryStart = strtotime((string) ($entry['started_at'] ?? ''));
+        if (!$entryStart) {
+            return [$loggedAt, $duration];
+        }
+
+        $entryEnd = $this->entryTrackingEnd($entry);
+        $windowStart = $entryStart - self::WINDOW_GRACE_SECONDS;
+        $windowEnd = $entryEnd + self::WINDOW_GRACE_SECONDS;
+
+        $segmentStart = strtotime($loggedAt) ?: time();
+        $segmentEnd = $segmentStart + max(0, $duration);
+
+        $start = max($segmentStart, $windowStart);
+        $end = min($segmentEnd, $windowEnd);
+
+        if ($end <= $start) {
+            return [$loggedAt, 0];
+        }
+
+        return [date('Y-m-d H:i:s', $start), $end - $start];
+    }
+
+    /**
+     * Last moment an entry was actively tracking (stop time, pause time, or now).
+     */
+    private function entryTrackingEnd(array $entry): int
+    {
+        if (!empty($entry['ended_at'])) {
+            return (int) (strtotime((string) $entry['ended_at']) ?: time());
+        }
+
+        if (!empty($entry['paused_at'])) {
+            return (int) (strtotime((string) $entry['paused_at']) ?: time());
+        }
+
+        return time();
+    }
+
+    /**
+     * Whether a timer can still accept activity — used to tell stale clients to stop.
+     */
+    public function isEntryCollecting(array $entry): bool
+    {
+        return empty($entry['ended_at']) && empty($entry['paused_at']);
     }
 
     public function recordIdleStats(int $userId, int $organizationId, string $loggedAt, int $idleSeconds, int $activeSeconds): void

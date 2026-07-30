@@ -1,6 +1,6 @@
 {
     "name": "flowtrack-desktop",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "description": "FlowTrack desktop time tracker",
     "main": "main.js",
     "author": "FlowTrack",
@@ -13,9 +13,9 @@
         "dev": "cross-env FLOWTRACK_DESKTOP_VARIANT=tracker electron . --disable-gpu-sandbox",
         "sync-env": "node ../scripts/sync-deploy-env.js",
         "build:frontend": "npm run sync-env && cd ../frontend && npm run build",
-        "pack:win": "node scripts/prepack-clean.js && npm run icons && npm run build:frontend && cross-env FLOWTRACK_DESKTOP_VARIANT=tracker electron-builder --win && node ../scripts/publish-installers.js",
-        "pack:mac": "npm run icons && npm run build:frontend && cross-env FLOWTRACK_DESKTOP_VARIANT=tracker electron-builder --mac && node ../scripts/publish-installers.js",
-        "pack": "npm run icons && npm run build:frontend && cross-env FLOWTRACK_DESKTOP_VARIANT=tracker electron-builder --win --mac && node ../scripts/publish-installers.js",
+        "pack:win": "node scripts/prepack-clean.js && npm run icons && npm run build:frontend && cross-env FLOWTRACK_DESKTOP_VARIANT=tracker electron-builder --win --publish never && node ../scripts/publish-installers.js",
+        "pack:mac": "npm run icons && npm run build:frontend && cross-env FLOWTRACK_DESKTOP_VARIANT=tracker electron-builder --mac --publish never && node ../scripts/publish-installers.js",
+        "pack": "npm run icons && npm run build:frontend && cross-env FLOWTRACK_DESKTOP_VARIANT=tracker electron-builder --win --mac --publish never && node ../scripts/publish-installers.js",
         "dist:win": "npm run pack:win",
         "dist:mac": "npm run pack:mac",
         "dist": "npm run pack"
@@ -136,6 +136,12 @@
         },
         "dmg": {
             "title": "FlowTrack Tracker"
-        }
+        },
+        "publish": [
+            {
+                "provider": "generic",
+                "url": "https://violation-blade-pretty.ngrok-free.dev/flowtrack-backend/public/downloads"
+            }
+        ]
     }
 }

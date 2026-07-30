@@ -201,6 +201,8 @@ export interface OrgTrackingSettings {
     url_tracking_enabled: boolean;
     idle_timeout_minutes: number;
     keep_idle_time: 'prompt' | 'always' | 'never';
+    /** Timers running longer than this are auto-stopped. 0 disables the guard. */
+    max_session_hours: number;
     timer_tolerance_minutes: number;
     timer_reminder_enabled: boolean;
     automated_tracking: boolean;

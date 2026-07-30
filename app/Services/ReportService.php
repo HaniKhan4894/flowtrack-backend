@@ -1128,6 +1128,95 @@ class ReportService
     }
 
     /**
+     * Net tracked seconds of an entry — stored duration once stopped, live elapsed while running.
+     */
+    private function entryCountedSeconds(array $entry): int
+    {
+        if (!empty($entry['ended_at'])) {
+            return max(0, (int) ($entry['duration_seconds'] ?? 0));
+        }
+
+        $started = strtotime((string) ($entry['started_at'] ?? ''));
+        if (!$started) {
+            return 0;
+        }
+
+        $until = !empty($entry['paused_at']) ? (strtotime((string) $entry['paused_at']) ?: time()) : time();
+
+        return max(0, $until - $started - (int) ($entry['paused_duration_seconds'] ?? 0));
+    }
+
+    /**
+     * Spread an entry's tracked seconds over the local days it actually ran on.
+     *
+     * Keeping the whole session on its start date made a night shift look like a 12h day
+     * followed by an empty one, and made the next day's activity exceed its tracked hours.
+     *
+     * @return array<string,int> Local date => seconds
+     */
+    private function splitSecondsByLocalDay(array $entry, int $seconds, \DateTimeZone $tz): array
+    {
+        $started = strtotime((string) ($entry['started_at'] ?? ''));
+        if (!$started || $seconds <= 0) {
+            return [];
+        }
+
+        $ended = !empty($entry['ended_at'])
+            ? (strtotime((string) $entry['ended_at']) ?: $started)
+            : (!empty($entry['paused_at']) ? (strtotime((string) $entry['paused_at']) ?: time()) : time());
+
+        $startDate = (new \DateTime('@' . $started))->setTimezone($tz)->format('Y-m-d');
+        $span = $ended - $started;
+
+        if ($span <= 0) {
+            return [$startDate => $seconds];
+        }
+
+        $utc = new \DateTimeZone('UTC');
+        $overlapByDate = [];
+        $cursor = $started;
+
+        while ($cursor < $ended) {
+            $localDate = (new \DateTime('@' . $cursor))->setTimezone($tz)->format('Y-m-d');
+            $nextMidnight = (new \DateTime($localDate . ' 00:00:00', $tz))
+                ->modify('+1 day')
+                ->setTimezone($utc)
+                ->getTimestamp();
+            $sliceEnd = min($ended, $nextMidnight);
+            if ($sliceEnd <= $cursor) {
+                break;
+            }
+            $overlapByDate[$localDate] = ($overlapByDate[$localDate] ?? 0) + ($sliceEnd - $cursor);
+            $cursor = $sliceEnd;
+        }
+
+        if ($overlapByDate === []) {
+            return [$startDate => $seconds];
+        }
+
+        if (count($overlapByDate) === 1) {
+            return [array_key_first($overlapByDate) => $seconds];
+        }
+
+        // Pauses are not timestamped, so share the net seconds in proportion to wall-clock overlap.
+        $perDay = [];
+        $assigned = 0;
+        foreach ($overlapByDate as $date => $overlap) {
+            $share = (int) floor($seconds * ($overlap / $span));
+            $perDay[$date] = $share;
+            $assigned += $share;
+        }
+
+        $remainder = $seconds - $assigned;
+        if ($remainder > 0) {
+            $largest = array_keys($overlapByDate, max($overlapByDate), true)[0];
+            $perDay[$largest] += $remainder;
+        }
+
+        return array_filter($perDay, static fn ($secs) => $secs > 0);
+    }
+
+    /**
      * Month calendar of logged hours (org timezone) with week totals + project list.
      *
      * Filters: organization_id, year, month, user_id?, user_ids?
@@ -1153,12 +1242,15 @@ class ReportService
 
         [$startUtc, $endUtc] = $this->timezoneService->dateRangeUtc($startLocal, $endLocal, $phpTz);
 
+        // A day earlier than the grid so a session that began late on the previous day still
+        // lands its post-midnight hours on the first day of this month.
+        $lookbackUtc = (new \DateTime($startUtc, new \DateTimeZone('UTC')))->modify('-2 days')->format('Y-m-d H:i:s');
+
         $builder = $this->db->table('time_entries')
-            ->select('started_at, duration_seconds, project_id, ended_at')
+            ->select('started_at, duration_seconds, paused_duration_seconds, paused_at, project_id, ended_at')
             ->where('organization_id', $organizationId)
-            ->where('started_at >=', $startUtc)
-            ->where('started_at <=', $endUtc)
-            ->where('ended_at IS NOT NULL', null, false);
+            ->where('started_at >=', $lookbackUtc)
+            ->where('started_at <=', $endUtc);
 
         if (isset($filters['user_id'])) {
             $builder->where('user_id', (int) $filters['user_id']);
@@ -1174,29 +1266,30 @@ class ReportService
         $allProjects = [];
 
         foreach ($rows as $row) {
-            $seconds = (int) ($row['duration_seconds'] ?? 0);
+            // Running timers count too — otherwise today's hours read lower than the activity
+            // recorded for the very same session.
+            $seconds = $this->entryCountedSeconds($row);
             if ($seconds <= 0) {
                 continue;
             }
 
-            try {
-                $localDate = (new \DateTime((string) $row['started_at'], new \DateTimeZone('UTC')))
-                    ->setTimezone($tz)
-                    ->format('Y-m-d');
-            } catch (\Exception $e) {
+            $perDay = $this->splitSecondsByLocalDay($row, $seconds, $tz);
+            if ($perDay === []) {
                 continue;
             }
-
-            $secondsByDate[$localDate] = ($secondsByDate[$localDate] ?? 0) + $seconds;
 
             $projectId = isset($row['project_id']) && $row['project_id'] !== null && $row['project_id'] !== ''
                 ? (int) $row['project_id']
                 : 0;
 
-            if ($projectId > 0) {
-                $projectsByDate[$localDate][$projectId] = true;
-                $projectSeconds[$projectId] = ($projectSeconds[$projectId] ?? 0) + $seconds;
-                $allProjects[$projectId] = true;
+            foreach ($perDay as $localDate => $daySeconds) {
+                $secondsByDate[$localDate] = ($secondsByDate[$localDate] ?? 0) + $daySeconds;
+
+                if ($projectId > 0) {
+                    $projectsByDate[$localDate][$projectId] = true;
+                    $projectSeconds[$projectId] = ($projectSeconds[$projectId] ?? 0) + $daySeconds;
+                    $allProjects[$projectId] = true;
+                }
             }
         }
 

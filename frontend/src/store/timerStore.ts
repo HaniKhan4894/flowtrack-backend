@@ -250,9 +250,13 @@ export const useTimerStore = create<TimerState>((set, get) => ({
                 startResync();
                 setTrackingSessionActive(true);
             } else {
-                set({ activeEntry: null, isRunning: false, isPaused: false });
+                // The timer ended elsewhere (web app, another device, server auto-stop).
+                // Desktop capture must stop too, or it keeps logging activity onto a dead entry.
+                set({ activeEntry: null, isRunning: false, isPaused: false, elapsed: 0 });
                 setTrackingSessionActive(false);
                 pausedBySystemIdle = false;
+                pausedBySystemLock = false;
+                monitoringService.stopMonitoring();
                 stopResync();
             }
         } catch (error) {
@@ -291,6 +295,12 @@ if (typeof window !== 'undefined') {
             if (store.isRunning && store.isPaused) {
                 store.resume().catch(() => undefined);
             }
+        });
+    }
+
+    if ('electronAPI' in window && window.electronAPI?.onTimerSyncRequired) {
+        window.electronAPI.onTimerSyncRequired(() => {
+            useTimerStore.getState().loadActive().catch(() => undefined);
         });
     }
 
