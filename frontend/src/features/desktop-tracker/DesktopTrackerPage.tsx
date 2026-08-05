@@ -173,6 +173,16 @@ export function DesktopTrackerPage() {
     void syncOfflineSession();
   }, [isOnline, syncOfflineSession]);
 
+  // Auto-refresh summary every 65 s while the timer is running so the hourly
+  // breakdown always reflects recently-synced activity (sync cycle is ~60 s).
+  useEffect(() => {
+    if (!isRunning) return;
+    const id = setInterval(() => {
+      setRefreshToken((n) => n + 1);
+    }, 65_000);
+    return () => clearInterval(id);
+  }, [isRunning]);
+
   const liveSessionApps = useMemo(
     () => (liveActivity?.session_apps ?? []).map((a) => ({
       app_name: a.app_name,
@@ -294,7 +304,7 @@ export function DesktopTrackerPage() {
       {/* subtle mesh */}
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_at_top,_rgba(56,189,248,0.07),transparent_55%),radial-gradient(ellipse_at_bottom_right,_rgba(139,92,246,0.06),transparent_50%)]" />
       {/* ── Static top: timer through tabs ── */}
-      <div className="relative z-10 shrink-0">
+      <div className="relative z-20 shrink-0">
         <header className="mx-3 mt-1 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 pb-2.5 pt-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-sm">
           <div className="flex items-center justify-between gap-2">
             <Avatar
@@ -367,7 +377,7 @@ export function DesktopTrackerPage() {
                     initial={{ opacity: 0, y: -4 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -4 }}
-                    className="absolute right-0 top-full z-50 mt-2 w-44 overflow-hidden rounded-xl border border-white/10 bg-[#141824] shadow-xl"
+                    className="absolute right-0 top-full z-[200] mt-2 w-44 overflow-hidden rounded-xl border border-white/10 bg-[#141824] shadow-xl"
                   >
                     <button
                       type="button"
