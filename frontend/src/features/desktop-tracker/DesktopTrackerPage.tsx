@@ -6,7 +6,6 @@ import { useTimerStore } from '../../store/timerStore';
 import { projectService, type Project } from '../../api/projectService';
 import { taskService } from '../../api/taskService';
 import type { Task } from '../../types';
-import { useLiveSessionForUser } from '../../hooks/useLiveSessionForUser';
 import { formatDurationHms, localDateKey } from '../../utils/liveTimer';
 import { getApiErrorMessage } from '../../utils/apiError';
 import { toastError, toastSuccess } from '../../store/toastStore';
@@ -16,13 +15,16 @@ import { reportService } from '../../api/reportService';
 import { Avatar } from '../../components/ui/Avatar';
 import { TrackerDailySummaryTab } from './TrackerDailySummaryTab';
 import { TrackerWeekStrip, getWeekStartDate } from './TrackerWeekStrip';
+import { useWeekEntryTotals } from '../../hooks/useWeekEntryTotals';
 import { TrackerTimesheetTab } from './TrackerTimesheetTab';
 import { TrackerScreenshotsTab } from './TrackerScreenshotsTab';
 import { TrackerSettingsModal } from './TrackerSettingsModal';
 import { TrackerAddEntryModal } from './TrackerAddEntryModal';
-import { TrackerLiveActivityStrip } from './TrackerLiveActivityStrip';
+import { TrackerOfflineOverlay } from './TrackerOfflineOverlay';
 import { formatClockShort } from './trackerMetrics';
 import { cn } from '../../lib/cn';
+import { useLiveActivity } from '../../hooks/useLiveActivity';
+import { useConnectivity } from '../../hooks/useConnectivity';
 
 type TabId = 'summary' | 'timesheet' | 'screenshots';
 
@@ -93,6 +95,7 @@ export function DesktopTrackerPage() {
   const pause = useTimerStore((s) => s.pause);
   const resume = useTimerStore((s) => s.resume);
   const loadActive = useTimerStore((s) => s.loadActive);
+  const syncOfflineSession = useTimerStore((s) => s.syncOfflineSession);
 
   const today = localDateKey();
   const [selectedDate, setSelectedDate] = useState(today);
@@ -114,7 +117,15 @@ export function DesktopTrackerPage() {
   const [showAddEntry, setShowAddEntry] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
-  const live = useLiveSessionForUser(user?.id ?? null, { enabled: true });
+  const isOnline = useConnectivity();
+  const liveActivity = useLiveActivity(isRunning);
+  const { sumsByDate: weekSumsByDate } = useWeekEntryTotals(
+    weekOffset,
+    refreshToken,
+    activeEntry,
+    isRunning,
+    elapsed,
+  );
   const brandName = user?.organization?.name ?? `${user?.first_name ?? ''} ${user?.last_name ?? ''}`.trim();
 
   const showScreenshots = canAccessScreenshotsPage(user);
@@ -168,7 +179,23 @@ export function DesktopTrackerPage() {
     return () => { cancelled = true; };
   }, [refreshToken, today]);
 
-  const displayTodayLogged = Math.max(todayLoggedSeconds, isTodaySelected ? live.elapsed : 0, isRunning ? elapsed : 0);
+  const displayTodayLogged = Math.max(todayLoggedSeconds, weekSumsByDate[today] ?? 0);
+  const selectedDayLogged = Math.max(weekSumsByDate[selectedDate] ?? 0, isTodaySelected ? displayTodayLogged : 0);
+
+  // When back online, flush any offline timer session and activity queue.
+  useEffect(() => {
+    if (!isOnline) return;
+    void syncOfflineSession();
+  }, [isOnline, syncOfflineSession]);
+
+  const liveSessionApps = useMemo(
+    () => (liveActivity?.session_apps ?? []).map((a) => ({
+      app_name: a.app_name,
+      duration_seconds: a.duration_seconds,
+      percentage: a.percentage,
+    })),
+    [liveActivity?.session_apps],
+  );
 
   useEffect(() => {
     if (!showUserMenu) return;
@@ -230,7 +257,7 @@ export function DesktopTrackerPage() {
         toastSuccess('Timer stopped');
       } else {
         await start(selectedProjectId, description, selectedTaskId ?? undefined);
-        toastSuccess('Timer started');
+        toastSuccess(isOnline ? 'Timer started' : 'Timer started offline — will sync when online');
       }
     } catch (e) {
       const msg = getApiErrorMessage(e, 'Timer action failed');
@@ -454,8 +481,11 @@ export function DesktopTrackerPage() {
             </div>
           )}
         </header>
+      </div>
 
-        <TrackerLiveActivityStrip enabled={isRunning} />
+      {/* ── Dashboard (offline overlay covers this, not the timer) ── */}
+      <div className="relative z-10 flex min-h-0 flex-1 flex-col">
+        <TrackerOfflineOverlay visible={!isOnline} />
 
         <div className="mx-3 mt-2 flex items-center justify-between rounded-xl border border-white/[0.05] bg-white/[0.02] px-3 py-2">
           <p className="truncate text-sm text-slate-300">
@@ -481,7 +511,10 @@ export function DesktopTrackerPage() {
             onWeekOffsetChange={setWeekOffset}
             selectedDate={selectedDate}
             onSelectDate={handleSelectDate}
-            liveTodaySeconds={live.elapsed}
+            refreshToken={refreshToken}
+            activeEntry={activeEntry}
+            isRunning={isRunning}
+            elapsed={elapsed}
           />
         </div>
 
@@ -523,10 +556,9 @@ export function DesktopTrackerPage() {
             <RefreshCw className={cn('h-3.5 w-3.5', refreshing && 'animate-spin')} />
           </button>
         </div>
-      </div>
 
       {/* ── Scrollable content below tabs ── */}
-      <main className="relative z-10 flex-1 overflow-y-auto overflow-x-hidden px-3 py-3">
+      <main className="relative flex-1 overflow-y-auto overflow-x-hidden px-3 py-3">
         <AnimatePresence mode="wait">
           <motion.div
             key={`${tab}-${selectedDate}-${refreshToken}`}
@@ -539,7 +571,8 @@ export function DesktopTrackerPage() {
               <TrackerDailySummaryTab
                 selectedDate={selectedDate}
                 refreshToken={refreshToken}
-                liveLoggedSeconds={isTodaySelected ? live.elapsed : undefined}
+                liveLoggedSeconds={selectedDayLogged > 0 ? selectedDayLogged : undefined}
+                liveSessionApps={isTodaySelected && isRunning ? liveSessionApps : undefined}
               />
             )}
             {tab === 'timesheet' && (
@@ -551,6 +584,7 @@ export function DesktopTrackerPage() {
           </motion.div>
         </AnimatePresence>
       </main>
+      </div>
 
       <TrackerAddEntryModal
         open={showAddEntry}

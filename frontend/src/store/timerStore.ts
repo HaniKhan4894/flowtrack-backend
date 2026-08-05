@@ -1,9 +1,20 @@
-import { create } from 'zustand';
-import { timeService } from '../api/timeService';
-import { monitoringService } from '../api/monitoringService';
+import {
+  buildOfflineTimeEntry,
+  clearOfflineTimerSession,
+  flushOfflineTimerSession,
+  loadOfflineTimerSession,
+  OFFLINE_ENTRY_ID,
+  offlineElapsedSeconds,
+  saveOfflineTimerSession,
+  type OfflineTimerSession,
+} from '../utils/offlineTimer';
+import { isNetworkError } from '../utils/networkError';
 import { syncElectronAuthToken } from '../utils/electronAuth';
 import { isDesktopForeground } from '../utils/desktopLifecycle';
 import { useAuthStore } from './authStore';
+import { create } from 'zustand';
+import { timeService } from '../api/timeService';
+import { monitoringService } from '../api/monitoringService';
 import { type TimeEntry } from '../types';
 
 interface TimerState {
@@ -11,6 +22,7 @@ interface TimerState {
     elapsed: number;
     isRunning: boolean;
     isPaused: boolean;
+    isOfflineSession: boolean;
     start: (projectId?: number | null, description?: string, taskId?: number) => Promise<void>;
     stop: () => Promise<void>;
     /** Stop running timer without reverting UI — used before logout/sign-out. */
@@ -18,6 +30,7 @@ interface TimerState {
     pause: (options?: { discardIdleSeconds?: number }) => Promise<void>;
     resume: () => Promise<void>;
     loadActive: () => Promise<void>;
+    syncOfflineSession: () => Promise<void>;
     tick: () => void;
     resetLocal: () => void;
 }
@@ -37,8 +50,8 @@ function startResync() {
     if (resyncInterval || !isDesktopForeground()) return;
     resyncInterval = setInterval(() => {
         if (!isDesktopForeground()) return;
-        const { isRunning } = useTimerStore.getState();
-        if (isRunning) {
+        const { isRunning, isOfflineSession } = useTimerStore.getState();
+        if (isRunning && !isOfflineSession) {
             useTimerStore.getState().loadActive().catch(() => undefined);
         }
     }, 60_000);
@@ -51,29 +64,75 @@ function stopResync() {
     }
 }
 
+function persistOfflineSession(patch: Partial<OfflineTimerSession> & Pick<OfflineTimerSession, 'clientId' | 'startedAt' | 'status'>) {
+    const existing = loadOfflineTimerSession();
+    saveOfflineTimerSession({
+        clientId: patch.clientId,
+        startedAt: patch.startedAt,
+        status: patch.status,
+        endedAt: patch.endedAt ?? existing?.endedAt ?? null,
+        projectId: patch.projectId ?? existing?.projectId ?? null,
+        taskId: patch.taskId ?? existing?.taskId ?? null,
+        description: patch.description ?? existing?.description ?? '',
+        isPaused: patch.isPaused ?? existing?.isPaused ?? false,
+        elapsedAtPause: patch.elapsedAtPause ?? existing?.elapsedAtPause,
+        serverEntryId: patch.serverEntryId ?? existing?.serverEntryId ?? null,
+        pendingAction: patch.pendingAction ?? existing?.pendingAction ?? null,
+    });
+}
+
+function beginOfflineSession(
+    set: (partial: Partial<TimerState> | ((state: TimerState) => Partial<TimerState>)) => void,
+    session: OfflineTimerSession,
+) {
+    const token = useAuthStore.getState().accessToken ?? localStorage.getItem('access_token') ?? undefined;
+    saveOfflineTimerSession(session);
+    set({
+        activeEntry: buildOfflineTimeEntry(session),
+        isRunning: true,
+        isPaused: session.isPaused,
+        isOfflineSession: true,
+        elapsed: offlineElapsedSeconds(session),
+    });
+    setTrackingSessionActive(true);
+    monitoringService.startMonitoring(OFFLINE_ENTRY_ID, token ?? undefined);
+    syncElectronAuthToken(token ?? null);
+    startResync();
+}
+
+function hydrateOfflineSession(
+    set: (partial: Partial<TimerState> | ((state: TimerState) => Partial<TimerState>)) => void,
+) {
+    const session = loadOfflineTimerSession();
+    if (!session || session.status === 'stopped') return false;
+    beginOfflineSession(set, session);
+    return true;
+}
+
 export const useTimerStore = create<TimerState>((set, get) => ({
     activeEntry: null,
     elapsed: 0,
     isRunning: false,
     isPaused: false,
+    isOfflineSession: false,
 
     start: async (projectId, description, taskId) => {
-        // Optimistic UI — show running state immediately
-        const optimisticId = -Date.now();
+        const startedAt = new Date().toISOString();
         set({
             isRunning: true,
             isPaused: false,
+            isOfflineSession: false,
             elapsed: 0,
             activeEntry: {
-                id: optimisticId,
+                id: OFFLINE_ENTRY_ID,
                 project_id: projectId ?? null,
                 task_id: taskId ?? null,
                 description: description ?? '',
-                started_at: new Date().toISOString(),
+                started_at: startedAt,
                 ended_at: null,
                 duration_seconds: 0,
                 elapsed_seconds: 0,
-            } as import('../types').TimeEntry,
+            } as TimeEntry,
         });
         setTrackingSessionActive(true);
         try {
@@ -83,10 +142,12 @@ export const useTimerStore = create<TimerState>((set, get) => ({
                 description,
             });
             const entry = response.data;
+            clearOfflineTimerSession();
             set({
                 activeEntry: entry,
                 isRunning: true,
                 isPaused: false,
+                isOfflineSession: false,
                 elapsed: entry.elapsed_seconds ?? 0,
             });
             const token = useAuthStore.getState().accessToken ?? undefined;
@@ -94,43 +155,81 @@ export const useTimerStore = create<TimerState>((set, get) => ({
             syncElectronAuthToken(token ?? localStorage.getItem('access_token'));
             startResync();
         } catch (error) {
-            console.error('Failed to start timer', error);
-            set({ activeEntry: null, isRunning: false, isPaused: false, elapsed: 0 });
-            setTrackingSessionActive(false);
-            await get().loadActive();
-            if (get().isRunning) {
-                return;
+            if (!isNetworkError(error)) {
+                console.error('Failed to start timer', error);
+                set({ activeEntry: null, isRunning: false, isPaused: false, isOfflineSession: false, elapsed: 0 });
+                setTrackingSessionActive(false);
+                await get().loadActive();
+                if (get().isRunning) {
+                    return;
+                }
+                throw error;
             }
-            throw error;
+
+            console.warn('[Timer] Offline — running locally until sync.');
+            beginOfflineSession(set, {
+                clientId: `offline-${Date.now()}`,
+                startedAt,
+                projectId: projectId ?? null,
+                taskId: taskId ?? null,
+                description: description ?? '',
+                isPaused: false,
+                status: 'running',
+            });
         }
     },
 
     stop: async () => {
-        const { activeEntry, elapsed } = get();
+        const { activeEntry, elapsed, isOfflineSession } = get();
         if (!activeEntry) return;
 
-        // Optimistic clear — revert on failure
         const snapshot = { activeEntry, elapsed, isRunning: true as const, isPaused: get().isPaused };
-        set({ activeEntry: null, isRunning: false, isPaused: false, elapsed: 0 });
+        set({ activeEntry: null, isRunning: false, isPaused: false, isOfflineSession: false, elapsed: 0 });
         setTrackingSessionActive(false);
         pausedBySystemIdle = false;
         pausedBySystemLock = false;
         monitoringService.stopMonitoring();
         stopResync();
 
-        if (activeEntry.id < 0) {
+        if (isOfflineSession || activeEntry.id === OFFLINE_ENTRY_ID) {
+            const session = loadOfflineTimerSession();
+            persistOfflineSession({
+                clientId: session?.clientId ?? `offline-${Date.now()}`,
+                startedAt: session?.startedAt ?? activeEntry.started_at ?? new Date().toISOString(),
+                projectId: session?.projectId ?? activeEntry.project_id ?? null,
+                taskId: session?.taskId ?? activeEntry.task_id ?? null,
+                description: session?.description ?? activeEntry.description ?? '',
+                isPaused: false,
+                status: 'stopped',
+                endedAt: new Date().toISOString(),
+            });
             return;
         }
 
         try {
             await timeService.stopTimer(activeEntry.id);
+            clearOfflineTimerSession();
         } catch (error: unknown) {
+            if (isNetworkError(error)) {
+                persistOfflineSession({
+                    clientId: `srv-${activeEntry.id}`,
+                    serverEntryId: activeEntry.id,
+                    startedAt: activeEntry.started_at,
+                    projectId: activeEntry.project_id ?? null,
+                    taskId: activeEntry.task_id ?? null,
+                    description: activeEntry.description ?? '',
+                    isPaused: false,
+                    status: 'stopped',
+                    endedAt: new Date().toISOString(),
+                    pendingAction: 'stop',
+                });
+                return;
+            }
             console.error('Failed to stop timer', error);
             const message = (error as { response?: { data?: { message?: string } } })?.response?.data?.message ?? '';
             if (message.toLowerCase().includes('already stopped')) {
                 return;
             }
-            // Revert optimistic clear
             set({
                 activeEntry: snapshot.activeEntry,
                 isRunning: true,
@@ -151,7 +250,6 @@ export const useTimerStore = create<TimerState>((set, get) => ({
         const { activeEntry } = get();
         const entryId = activeEntry?.id;
 
-        // Stop on the server first while the auth token is still valid.
         if (entryId && entryId > 0) {
             try {
                 await timeService.stopTimer(entryId);
@@ -160,16 +258,17 @@ export const useTimerStore = create<TimerState>((set, get) => ({
             }
         }
 
-        set({ activeEntry: null, isRunning: false, isPaused: false, elapsed: 0 });
+        set({ activeEntry: null, isRunning: false, isPaused: false, isOfflineSession: false, elapsed: 0 });
         setTrackingSessionActive(false);
         pausedBySystemIdle = false;
         pausedBySystemLock = false;
         monitoringService.stopMonitoring();
         stopResync();
+        clearOfflineTimerSession();
     },
 
     resetLocal: () => {
-        set({ activeEntry: null, isRunning: false, isPaused: false, elapsed: 0 });
+        set({ activeEntry: null, isRunning: false, isPaused: false, isOfflineSession: false, elapsed: 0 });
         setTrackingSessionActive(false);
         pausedBySystemIdle = false;
         pausedBySystemLock = false;
@@ -178,8 +277,22 @@ export const useTimerStore = create<TimerState>((set, get) => ({
     },
 
     pause: async (options) => {
-        const { activeEntry } = get();
+        const { activeEntry, elapsed, isOfflineSession } = get();
         if (!activeEntry) return;
+
+        if (isOfflineSession || activeEntry.id === OFFLINE_ENTRY_ID) {
+            const session = loadOfflineTimerSession();
+            if (!session) return;
+            persistOfflineSession({
+                ...session,
+                isPaused: true,
+                status: 'paused',
+                elapsedAtPause: elapsed,
+            });
+            set({ isPaused: true, elapsed });
+            monitoringService.pauseMonitoring();
+            return;
+        }
 
         try {
             const discard = Math.max(0, Math.round(options?.discardIdleSeconds ?? 0));
@@ -193,13 +306,45 @@ export const useTimerStore = create<TimerState>((set, get) => ({
             });
             monitoringService.pauseMonitoring();
         } catch (error) {
+            if (isNetworkError(error)) {
+                persistOfflineSession({
+                    clientId: `srv-${activeEntry.id}`,
+                    serverEntryId: activeEntry.id,
+                    startedAt: activeEntry.started_at,
+                    projectId: activeEntry.project_id ?? null,
+                    taskId: activeEntry.task_id ?? null,
+                    description: activeEntry.description ?? '',
+                    isPaused: true,
+                    status: 'paused',
+                    elapsedAtPause: elapsed,
+                    pendingAction: 'pause',
+                });
+                set({ isPaused: true });
+                monitoringService.pauseMonitoring();
+                return;
+            }
             console.error('Failed to pause timer', error);
         }
     },
 
     resume: async () => {
-        const { activeEntry } = get();
+        const { activeEntry, isOfflineSession } = get();
         if (!activeEntry) return;
+
+        if (isOfflineSession || activeEntry.id === OFFLINE_ENTRY_ID) {
+            const session = loadOfflineTimerSession();
+            if (!session) return;
+            persistOfflineSession({
+                ...session,
+                isPaused: false,
+                status: 'running',
+                elapsedAtPause: undefined,
+            });
+            set({ isPaused: false });
+            const token = useAuthStore.getState().accessToken ?? undefined;
+            monitoringService.resumeMonitoring(token);
+            return;
+        }
 
         try {
             const response = await timeService.resumeTimer(activeEntry.id);
@@ -211,14 +356,30 @@ export const useTimerStore = create<TimerState>((set, get) => ({
             const token = useAuthStore.getState().accessToken ?? undefined;
             monitoringService.resumeMonitoring(token);
         } catch (error: unknown) {
+            if (isNetworkError(error)) {
+                persistOfflineSession({
+                    clientId: `srv-${activeEntry.id}`,
+                    serverEntryId: activeEntry.id,
+                    startedAt: activeEntry.started_at,
+                    projectId: activeEntry.project_id ?? null,
+                    taskId: activeEntry.task_id ?? null,
+                    description: activeEntry.description ?? '',
+                    isPaused: false,
+                    status: 'running',
+                    pendingAction: 'resume',
+                });
+                set({ isPaused: false });
+                const token = useAuthStore.getState().accessToken ?? undefined;
+                monitoringService.resumeMonitoring(token);
+                return;
+            }
             console.error('Failed to resume timer', error);
             const message = (error as { response?: { data?: { message?: string } } })?.response?.data?.message ?? '';
-            // Overnight pause closes yesterday's entry — start a fresh timer for today.
             if (/already stopped|start a new timer/i.test(message)) {
                 const projectId = activeEntry.project_id ?? null;
                 const description = activeEntry.description || undefined;
                 const taskId = activeEntry.task_id ?? undefined;
-                set({ activeEntry: null, isRunning: false, isPaused: false, elapsed: 0 });
+                set({ activeEntry: null, isRunning: false, isPaused: false, isOfflineSession: false, elapsed: 0 });
                 await get().start(projectId, description, taskId ?? undefined);
                 return;
             }
@@ -226,17 +387,33 @@ export const useTimerStore = create<TimerState>((set, get) => ({
         }
     },
 
+    syncOfflineSession: async () => {
+        const synced = await flushOfflineTimerSession();
+        if (!synced) return;
+        await get().loadActive();
+    },
+
     loadActive: async () => {
+        const offlineSession = loadOfflineTimerSession();
+        if (offlineSession && offlineSession.status !== 'stopped') {
+            const { isRunning } = get();
+            if (!isRunning) {
+                hydrateOfflineSession(set);
+            }
+        }
+
         try {
             const response = await timeService.getActive();
             if (response.data && response.data.started_at) {
                 const isPaused = !!response.data.paused_at;
                 const elapsed = response.data.elapsed_seconds ?? 0;
 
+                clearOfflineTimerSession();
                 set({
                     activeEntry: response.data,
                     isRunning: true,
                     isPaused,
+                    isOfflineSession: false,
                     elapsed: elapsed > 0 ? elapsed : 0,
                 });
 
@@ -250,9 +427,10 @@ export const useTimerStore = create<TimerState>((set, get) => ({
                 startResync();
                 setTrackingSessionActive(true);
             } else {
-                // The timer ended elsewhere (web app, another device, server auto-stop).
-                // Desktop capture must stop too, or it keeps logging activity onto a dead entry.
-                set({ activeEntry: null, isRunning: false, isPaused: false, elapsed: 0 });
+                if (offlineSession && offlineSession.status !== 'stopped') {
+                    return;
+                }
+                set({ activeEntry: null, isRunning: false, isPaused: false, isOfflineSession: false, elapsed: 0 });
                 setTrackingSessionActive(false);
                 pausedBySystemIdle = false;
                 pausedBySystemLock = false;
@@ -260,6 +438,12 @@ export const useTimerStore = create<TimerState>((set, get) => ({
                 stopResync();
             }
         } catch (error) {
+            if (isNetworkError(error)) {
+                if (offlineSession && offlineSession.status !== 'stopped') {
+                    hydrateOfflineSession(set);
+                }
+                return;
+            }
             console.error('Failed to load active timer', error);
         }
     },
@@ -378,4 +562,6 @@ if (typeof window !== 'undefined') {
             }
         });
     }
+
+    void useTimerStore.getState().loadActive();
 }

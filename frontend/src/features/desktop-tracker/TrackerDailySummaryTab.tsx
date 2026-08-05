@@ -9,9 +9,15 @@ interface Props {
   selectedDate: string;
   refreshToken?: number;
   liveLoggedSeconds?: number;
+  liveSessionApps?: { app_name: string; duration_seconds?: number; percentage?: number }[];
 }
 
-export function TrackerDailySummaryTab({ selectedDate, refreshToken = 0, liveLoggedSeconds = 0 }: Props) {
+export function TrackerDailySummaryTab({
+  selectedDate,
+  refreshToken = 0,
+  liveLoggedSeconds = 0,
+  liveSessionApps,
+}: Props) {
   const [timelineData, setTimelineData] = useState<HourlyTimelineData | null>(null);
   const [topApps, setTopApps] = useState<{ app_name: string; duration_seconds?: number; percentage?: number }[]>([]);
   const [loggedSeconds, setLoggedSeconds] = useState<number | undefined>();
@@ -74,6 +80,13 @@ export function TrackerDailySummaryTab({ selectedDate, refreshToken = 0, liveLog
 
   const effectiveLoggedSeconds = Math.max(loggedSeconds ?? 0, liveLoggedSeconds ?? 0);
 
+  const effectiveTopApps = useMemo(() => {
+    if (liveSessionApps && liveSessionApps.length > 0) {
+      return liveSessionApps;
+    }
+    return topApps;
+  }, [liveSessionApps, topApps]);
+
   const activityTrendDelta = useMemo(() => {
     if (!timelineData || yesterdayLogged <= 0 || effectiveLoggedSeconds <= 0) return null;
     const todayPct = computeActivityPct(effectiveLoggedSeconds, timelineData);
@@ -86,7 +99,7 @@ export function TrackerDailySummaryTab({ selectedDate, refreshToken = 0, liveLog
       data={timelineData}
       isLoading={loading}
       selectedDate={selectedDate}
-      topApps={topApps}
+      topApps={effectiveTopApps}
       variant="tracker"
       loggedSeconds={effectiveLoggedSeconds > 0 ? effectiveLoggedSeconds : undefined}
       activityTrendDelta={activityTrendDelta}

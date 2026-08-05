@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Camera, ChevronLeft, ChevronRight, Loader2, ZoomIn, X } from 'lucide-react';
-import { resolveScreenshotMediaUrl, type ScreenshotItem } from '../../api/screenshotService';
+import { resolveScreenshotMediaUrl, screenshotService, type ScreenshotItem } from '../../api/screenshotService';
 import { useScreenshotsQuery } from '../../hooks/useScreenshotsQuery';
 import { useAuthStore } from '../../store/authStore';
 import { areOwnScreenshotsHidden } from '../../utils/access';
@@ -8,6 +8,45 @@ import { getApiErrorMessage } from '../../utils/apiError';
 import { toastError } from '../../store/toastStore';
 
 const PER_PAGE = 9;
+
+function ScreenshotThumb({ shot }: { shot: ScreenshotItem }) {
+  const [src, setSrc] = useState(shot.thumb_url || '');
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    setSrc(shot.thumb_url || '');
+    setFailed(false);
+  }, [shot.id, shot.thumb_url]);
+
+  const handleError = useCallback(async () => {
+    if (failed) return;
+    setFailed(true);
+    try {
+      const url = await screenshotService.getThumbnailBlobUrl(shot.id);
+      setSrc(url);
+    } catch {
+      setSrc('');
+    }
+  }, [failed, shot.id]);
+
+  if (!src) {
+    return (
+      <div className="flex h-full items-center justify-center text-slate-600">
+        <Camera className="h-5 w-5" />
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt=""
+      loading="lazy"
+      className="h-full w-full object-cover"
+      onError={() => void handleError()}
+    />
+  );
+}
 
 interface Props {
   selectedDate: string;
@@ -105,8 +144,8 @@ export function TrackerScreenshotsTab({ selectedDate, refreshToken = 0 }: Props)
                 onClick={() => void openFull(shot)}
                 className="group relative aspect-video overflow-hidden rounded-lg border border-white/10 bg-black/40"
               >
-                {shot.thumb_url ? (
-                  <img src={shot.thumb_url} alt="" loading="lazy" className="h-full w-full object-cover" />
+                {shot.thumb_url || shot.id ? (
+                  <ScreenshotThumb shot={shot} />
                 ) : (
                   <div className="flex h-full items-center justify-center text-slate-600">
                     <Camera className="h-5 w-5" />

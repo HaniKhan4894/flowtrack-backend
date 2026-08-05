@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, desktopCapturer, nativeImage, screen, Tray, Menu, powerMonitor, Notification, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, desktopCapturer, nativeImage, screen, Tray, Menu, powerMonitor, Notification, shell, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
@@ -1653,6 +1653,26 @@ app.whenReady().then(() => {
     console.log(`[Config] API base URL: ${API_BASE_URL}`);
     console.log(`[Config] Frontend URL: ${FRONTEND_URL}`);
     console.log(`[Config] Update feed: ${getUpdateFeedUrl()}`);
+
+    // ngrok returns an HTML interstitial unless this header is present — img/src
+    // requests from the renderer cannot set it, so inject for all API host requests.
+    try {
+        const apiPattern = new URL(API_BASE_URL);
+        const apiFilter = `${apiPattern.protocol}//${apiPattern.host}/*`;
+        session.defaultSession.webRequest.onBeforeSendHeaders(
+            { urls: [apiFilter, '*://*.ngrok-free.app/*', '*://*.ngrok.io/*'] },
+            (details, callback) => {
+                const headers = { ...details.requestHeaders };
+                if (API_BASE_URL.includes('ngrok') || details.url.includes('ngrok')) {
+                    headers['ngrok-skip-browser-warning'] = 'true';
+                }
+                callback({ requestHeaders: headers });
+            },
+        );
+    } catch (err) {
+        console.warn('[Config] webRequest header injection skipped:', err.message);
+    }
+
     createWindow();
     setupTray();
     windowVisible = true;

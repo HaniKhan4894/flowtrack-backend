@@ -1,28 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { reportService, type HoursCalendarDay } from '../../api/reportService';
+import { useWeekEntryTotals } from '../../hooks/useWeekEntryTotals';
 import { localDateKey } from '../../utils/liveTimer';
+import { getWeekDateKeysFromStart, getWeekStartDate } from '../../utils/trackerWeek';
+import type { TimeEntry } from '../../types';
 import { cn } from '../../lib/cn';
 import { formatClockShort } from './trackerMetrics';
 
 const DAILY_GOAL_SECONDS = 8 * 3600;
-
-export function getWeekStartDate(weekOffset = 0): Date {
-  const start = new Date();
-  const day = start.getDay();
-  const diff = start.getDate() - day + (day === 0 ? -6 : 1);
-  start.setDate(diff + weekOffset * 7);
-  start.setHours(0, 0, 0, 0);
-  return start;
-}
-
-export function getWeekDateKeysFromStart(weekStart: Date): string[] {
-  return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(weekStart);
-    d.setDate(weekStart.getDate() + i);
-    return localDateKey(d);
-  });
-}
 
 function dayShortLabel(dateKey: string): string {
   const d = new Date(`${dateKey}T12:00:00`);
@@ -69,7 +55,10 @@ interface Props {
   onWeekOffsetChange: (offset: number) => void;
   selectedDate: string;
   onSelectDate: (dateKey: string) => void;
-  liveTodaySeconds?: number;
+  refreshToken?: number;
+  activeEntry?: TimeEntry | null;
+  isRunning?: boolean;
+  elapsed?: number;
   compact?: boolean;
 }
 
@@ -78,11 +67,21 @@ export function TrackerWeekStrip({
   onWeekOffsetChange,
   selectedDate,
   onSelectDate,
-  liveTodaySeconds = 0,
+  refreshToken = 0,
+  activeEntry = null,
+  isRunning = false,
+  elapsed = 0,
   compact = false,
 }: Props) {
   const weekStart = useMemo(() => getWeekStartDate(weekOffset), [weekOffset]);
   const weekKeys = useMemo(() => getWeekDateKeysFromStart(weekStart), [weekStart]);
+  const { sumsByDate: entrySecondsByDate } = useWeekEntryTotals(
+    weekOffset,
+    refreshToken,
+    activeEntry,
+    isRunning,
+    elapsed,
+  );
   const [dayMap, setDayMap] = useState<Record<string, HoursCalendarDay>>({});
   const today = localDateKey();
 
@@ -159,10 +158,7 @@ export function TrackerWeekStrip({
           const row = dayMap[dateKey];
           const isSelected = dateKey === selectedDate;
           const isToday = dateKey === today;
-          let seconds = row?.seconds ?? 0;
-          if (isToday && liveTodaySeconds > 0) {
-            seconds = Math.max(seconds, liveTodaySeconds);
-          }
+          const seconds = Math.max(row?.seconds ?? 0, entrySecondsByDate[dateKey] ?? 0);
           const h = Math.floor(seconds / 3600);
           const m = Math.floor((seconds % 3600) / 60);
           const hoursLabel = `${h}:${String(m).padStart(2, '0')}`;
@@ -260,3 +256,5 @@ export function TrackerWeekStrip({
     </div>
   );
 }
+
+export { getWeekStartDate, getWeekDateKeysFromStart } from '../../utils/trackerWeek';

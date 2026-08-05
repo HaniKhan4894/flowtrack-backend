@@ -380,13 +380,21 @@ class TimeEntryService
         $this->db->transStart();
 
         try {
+            $startedAt = date('Y-m-d H:i:s');
+            if (!empty($data['started_at'])) {
+                $parsed = strtotime((string) $data['started_at']);
+                if ($parsed !== false && $parsed <= time() && $parsed >= time() - (7 * 86400)) {
+                    $startedAt = date('Y-m-d H:i:s', $parsed);
+                }
+            }
+
             $entryData = [
                 'user_id' => $userId,
                 'organization_id' => $organizationId,
                 'project_id' => $data['project_id'] ?? null,
                 'task_id' => $data['task_id'] ?? null,
                 'description' => $data['description'] ?? null,
-                'started_at' => date('Y-m-d H:i:s'),
+                'started_at' => $startedAt,
                 'is_manual' => false,
                 'is_billable' => $data['is_billable'] ?? true,
                 'hourly_rate' => $data['hourly_rate'] ?? null,

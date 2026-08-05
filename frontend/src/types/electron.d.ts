@@ -8,6 +8,11 @@ export type LiveActivitySnapshot = {
     url: string;
     duration_seconds: number;
   } | null;
+  session_apps?: Array<{
+    app_name: string;
+    duration_seconds: number;
+    percentage: number;
+  }>;
   soft_idle: boolean;
   system_idle_seconds: number;
   pending_count: number;

@@ -325,6 +325,29 @@ function markSyncFailed(message) {
     emitLiveUpdate();
 }
 
+function getSessionTopApps() {
+    const segments = [...pendingSegments];
+    if (currentSegment && !isInternalApp(currentSegment.app_name, currentSegment.window_title)) {
+        segments.push({ ...currentSegment });
+    }
+    if (segments.length === 0) return [];
+
+    const map = new Map();
+    for (const seg of segments) {
+        const name = seg.app_name || 'Unknown';
+        map.set(name, (map.get(name) || 0) + (Number(seg.duration_seconds) || 0));
+    }
+    const total = [...map.values()].reduce((sum, v) => sum + v, 0) || 1;
+    return [...map.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([app_name, duration_seconds]) => ({
+            app_name,
+            duration_seconds,
+            percentage: Math.round((duration_seconds / total) * 100),
+        }));
+}
+
 function getLiveSnapshot() {
     const idleSec = systemInput.getSystemIdleSeconds();
     const softIdle = idleSec >= activityIdleThresholdSec;
@@ -343,6 +366,7 @@ function getLiveSnapshot() {
                 duration_seconds: currentSegment.duration_seconds || 0,
             }
             : null,
+        session_apps: getSessionTopApps(),
         soft_idle: softIdle,
         system_idle_seconds: idleSec,
         pending_count: pendingSegments.length + (currentSegment ? 1 : 0),
