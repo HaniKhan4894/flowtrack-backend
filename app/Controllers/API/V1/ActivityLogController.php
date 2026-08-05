@@ -321,4 +321,39 @@ class ActivityLogController extends ResourceController
             return $this->fail($e->getMessage(), 400);
         }
     }
+
+    /**
+     * POST /api/v1/activity-logs/recategorize
+     * Re-applies current productivity rules to all existing logs for the org.
+     * Optional body: { "from_date": "2026-08-01" } to limit scope.
+     */
+    public function recategorize()
+    {
+        try {
+            $organizationId = (int)($this->request->getServer('FLOWTRACK_ORGANIZATION_ID') ?? 0);
+            $userId = (int)($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
+            if (!$userId || !$organizationId) {
+                return $this->fail('Unauthorized', 401);
+            }
+
+            $permissionService = new PermissionService();
+            if (!$permissionService->userHasPermission($userId, $organizationId, 'settings.manage')) {
+                return $this->fail('Forbidden', 403);
+            }
+
+            $body = $this->request->getJSON(true) ?? [];
+            $fromDate = isset($body['from_date']) ? (string) $body['from_date'] : null;
+
+            $updated = $this->activityLogService->recategorizeForOrganization($organizationId, $fromDate);
+
+            return $this->respond([
+                'success' => true,
+                'updated' => $updated,
+                'message' => "Recategorized {$updated} activity log(s).",
+            ]);
+        } catch (\Exception $e) {
+            log_message('error', 'Recategorize failed: ' . $e->getMessage());
+            return $this->fail($e->getMessage(), 500);
+        }
+    }
 }

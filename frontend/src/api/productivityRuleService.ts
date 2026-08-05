@@ -35,3 +35,10 @@ export const productivityRuleService = {
         await client.delete(`/productivity-rules/${id}`);
     },
 };
+
+export const activityRecategorizeService = {
+    recategorize: async (fromDate?: string): Promise<{ updated: number; message: string }> => {
+        const response = await client.post('/activity-logs/recategorize', fromDate ? { from_date: fromDate } : {});
+        return response.data;
+    },
+};

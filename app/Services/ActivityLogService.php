@@ -62,7 +62,7 @@ class ActivityLogService
             'app_name'         => $this->truncate((string) ($data['app_name'] ?? 'Unknown'), 191),
             'window_title'     => $this->truncate((string) ($data['window_title'] ?? ''), 500),
             'url'              => $this->truncate((string) ($data['url'] ?? ''), 1000),
-            'category'         => $data['category'] ?? $this->categorizeActivity($data, (int) $entry['organization_id']),
+            'category'         => $this->categorizeActivity($data, (int) $entry['organization_id']),
             'duration_seconds' => $duration,
             'keyboard_strokes' => (int)($data['keyboard_strokes'] ?? 0),
             'mouse_clicks'     => (int)($data['mouse_clicks'] ?? 0),
@@ -170,33 +170,49 @@ class ActivityLogService
             ->where('is_active', true)
             ->findAll();
 
+        // Check in specificity order: url and keyword rules first (more specific),
+        // app rules last (more general). This prevents a broad "Chrome → neutral"
+        // rule from hiding specific "netflix.com → unproductive" rules.
+        $typePriority = ['url' => 2, 'keyword' => 2, 'app' => 1];
+        usort($rules, static function (array $a, array $b) use ($typePriority): int {
+            return ($typePriority[$b['rule_type']] ?? 0) - ($typePriority[$a['rule_type']] ?? 0);
+        });
+
+        $appName    = (string) ($data['app_name'] ?? '');
+        $windowTitle = (string) ($data['window_title'] ?? '');
+        $url        = (string) ($data['url'] ?? '');
+
         foreach ($rules as $rule) {
             $match = false;
 
             switch ($rule['rule_type']) {
                 case 'app':
-                    if (isset($data['app_name']) && stripos($data['app_name'], $rule['pattern']) !== false) {
+                    if ($appName !== '' && stripos($appName, (string) $rule['pattern']) !== false) {
                         $match = true;
                     }
                     break;
                 case 'url':
-                    if (isset($data['url']) && stripos($data['url'], $rule['pattern']) !== false) {
+                    // Only apply URL rules when a real URL was captured
+                    if ($url !== '' && stripos($url, (string) $rule['pattern']) !== false) {
                         $match = true;
                     }
                     break;
                 case 'keyword':
-                    if (isset($data['window_title']) && stripos($data['window_title'], $rule['pattern']) !== false) {
+                    if ($windowTitle !== '' && stripos($windowTitle, (string) $rule['pattern']) !== false) {
                         $match = true;
                     }
                     break;
             }
 
             if ($match) {
-                return $rule['category'];
+                return (string) $rule['category'];
             }
         }
 
-        return 'uncategorized';
+        // No rule matched – fall back to any valid client-supplied category
+        $clientCat = $data['category'] ?? null;
+        $valid = ['productive', 'unproductive', 'neutral', 'uncategorized'];
+        return in_array($clientCat, $valid, true) ? (string) $clientCat : 'uncategorized';
     }
 
     private function truncate(string $value, int $maxLength): string
@@ -206,6 +222,102 @@ class ActivityLogService
         }
 
         return mb_strlen($value) > $maxLength ? mb_substr($value, 0, $maxLength) : $value;
+    }
+
+    /**
+     * Re-apply current productivity rules to all existing activity logs for an org.
+     * Processes in batches of 500 to avoid memory/lock issues.
+     * Returns the number of rows updated.
+     */
+    public function recategorizeForOrganization(int $organizationId, ?string $fromDate = null): int
+    {
+        $rules = $this->productivityRuleModel
+            ->where('organization_id', $organizationId)
+            ->where('is_active', true)
+            ->findAll();
+
+        $typePriority = ['url' => 2, 'keyword' => 2, 'app' => 1];
+        usort($rules, static function (array $a, array $b) use ($typePriority): int {
+            return ($typePriority[$b['rule_type']] ?? 0) - ($typePriority[$a['rule_type']] ?? 0);
+        });
+
+        $batchSize = 500;
+        $offset    = 0;
+        $updated   = 0;
+
+        while (true) {
+            $builder = $this->db->table('activity_logs al')
+                ->join('time_entries te', 'te.id = al.time_entry_id', 'inner')
+                ->select('al.id, al.app_name, al.window_title, al.url, al.category')
+                ->where('te.organization_id', $organizationId)
+                ->limit($batchSize, $offset);
+
+            if ($fromDate !== null) {
+                $builder->where('al.logged_at >=', $fromDate . ' 00:00:00');
+            }
+
+            $rows = $builder->get()->getResultArray();
+            if (empty($rows)) {
+                break;
+            }
+
+            foreach ($rows as $row) {
+                $data = [
+                    'app_name'     => $row['app_name'],
+                    'window_title' => $row['window_title'],
+                    'url'          => $row['url'],
+                ];
+                $newCategory = $this->applyRules($data, $rules);
+
+                if ($newCategory !== $row['category']) {
+                    $this->db->table('activity_logs')
+                        ->where('id', $row['id'])
+                        ->update(['category' => $newCategory]);
+                    $updated++;
+                }
+            }
+
+            $offset += $batchSize;
+            if (count($rows) < $batchSize) {
+                break;
+            }
+        }
+
+        return $updated;
+    }
+
+    /** Apply a pre-loaded, pre-sorted rule list to a data row. */
+    private function applyRules(array $data, array $rules): string
+    {
+        $appName     = (string) ($data['app_name'] ?? '');
+        $windowTitle = (string) ($data['window_title'] ?? '');
+        $url         = (string) ($data['url'] ?? '');
+
+        foreach ($rules as $rule) {
+            $match = false;
+            switch ($rule['rule_type']) {
+                case 'app':
+                    if ($appName !== '' && stripos($appName, (string) $rule['pattern']) !== false) {
+                        $match = true;
+                    }
+                    break;
+                case 'url':
+                    if ($url !== '' && stripos($url, (string) $rule['pattern']) !== false) {
+                        $match = true;
+                    }
+                    break;
+                case 'keyword':
+                    if ($windowTitle !== '' && stripos($windowTitle, (string) $rule['pattern']) !== false) {
+                        $match = true;
+                    }
+                    break;
+            }
+            if ($match) {
+                return (string) $rule['category'];
+            }
+        }
+
+        return 'uncategorized';
     }
 
     public function getActivityLogs(array $filters): array
@@ -361,7 +473,9 @@ class ActivityLogService
 
             $merged[$displayName]['duration_seconds'] += $seconds;
 
-            $categories = ['productive' => 3, 'unproductive' => 2, 'neutral' => 1, 'uncategorized' => 0];
+            // Unproductive beats productive — if any segment was unproductive,
+            // the whole tab entry should display as unproductive.
+            $categories = ['unproductive' => 3, 'productive' => 2, 'neutral' => 1, 'uncategorized' => 0];
             $current = $categories[$merged[$displayName]['category']] ?? 0;
             $incoming = $categories[$row['category'] ?? 'uncategorized'] ?? 0;
             if ($incoming > $current) {

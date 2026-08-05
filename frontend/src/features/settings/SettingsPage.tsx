@@ -13,7 +13,7 @@ import { taxTemplateService, type PayrollTaxTemplate } from '../../api/taxTempla
 import { getApiErrorMessage } from '../../utils/apiError';
 import { hasPermission, hasPlanFeature } from '../../utils/access';
 import { formatApiDate } from '../../utils/date';
-import { productivityRuleService } from '../../api/productivityRuleService';
+import { productivityRuleService, activityRecategorizeService } from '../../api/productivityRuleService';
 import { roleService } from '../../api/roleService';
 import { notificationPreferenceService } from '../../api/notificationPreferenceService';
 import { Link, useNavigate } from 'react-router-dom';
@@ -112,6 +112,7 @@ const SettingsPage = () => {
 
   const [productivityRules, setProductivityRules] = useState<ProductivityRule[]>([]);
   const [rulesLoading, setRulesLoading] = useState(false);
+  const [recategorizing, setRecategorizing] = useState(false);
   const [showRuleModal, setShowRuleModal] = useState(false);
   const [editingRule, setEditingRule] = useState<ProductivityRule | null>(null);
   const [ruleForm, setRuleForm] = useState({
@@ -1179,12 +1180,36 @@ const SettingsPage = () => {
                   <h3 className="text-xl font-bold text-white mb-1">Productivity Rules</h3>
                   <p className="text-sm text-slate-400">Classify apps, URLs, and keywords for productivity scoring.</p>
                 </div>
-                <button
-                  onClick={() => openRuleModal()}
-                  className="flex items-center gap-2 bg-ai-gradient text-white px-5 py-2.5 rounded-xl font-bold shadow-ai"
-                >
-                  <Plus size={18} /> Add rule
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={async () => {
+                      setRecategorizing(true);
+                      try {
+                        const res = await activityRecategorizeService.recategorize();
+                        setShowSuccess(true);
+                        setTimeout(() => setShowSuccess(false), 4000);
+                        // eslint-disable-next-line no-console
+                        console.info('[Recategorize]', res.message);
+                      } catch {
+                        setError('Recategorization failed. Try again.');
+                      } finally {
+                        setRecategorizing(false);
+                      }
+                    }}
+                    disabled={recategorizing}
+                    title="Re-apply current rules to all existing activity logs"
+                    className="flex items-center gap-2 rounded-xl border border-sky-500/30 bg-sky-500/10 px-4 py-2.5 text-sm font-semibold text-sky-300 transition-colors hover:bg-sky-500/20 disabled:opacity-50"
+                  >
+                    {recategorizing ? <RefreshCw size={15} className="animate-spin" /> : <RefreshCw size={15} />}
+                    Re-apply rules
+                  </button>
+                  <button
+                    onClick={() => openRuleModal()}
+                    className="flex items-center gap-2 bg-ai-gradient text-white px-5 py-2.5 rounded-xl font-bold shadow-ai"
+                  >
+                    <Plus size={18} /> Add rule
+                  </button>
+                </div>
               </div>
 
               {rulesLoading ? (

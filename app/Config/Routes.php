@@ -310,6 +310,7 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\API\V1'], function ($r
         $routes->post('sync', 'ActivityLogController::sync', ['filter' => 'permission:activity.create']);
         $routes->get('stats', 'ActivityLogController::productivityStats', ['filter' => 'permission:activity.view_team']);
         $routes->get('top-apps', 'ActivityLogController::topApps', ['filter' => 'permission:activity.view_own']);
+        $routes->post('recategorize', 'ActivityLogController::recategorize', ['filter' => 'permission:settings.manage']);
     });
 
     // Invoice Routes
