@@ -75,6 +75,7 @@ export function TrackerWeekStrip({
 }: Props) {
   const weekStart = useMemo(() => getWeekStartDate(weekOffset), [weekOffset]);
   const weekKeys = useMemo(() => getWeekDateKeysFromStart(weekStart), [weekStart]);
+
   const { sumsByDate: entrySecondsByDate } = useWeekEntryTotals(
     weekOffset,
     refreshToken,

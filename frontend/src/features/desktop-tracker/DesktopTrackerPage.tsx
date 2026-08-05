@@ -34,16 +34,6 @@ const ALL_TABS: { id: TabId; label: string }[] = [
   { id: 'screenshots', label: 'Screenshots' },
 ];
 
-function formatSelectedDateLabel(dateKey: string): string {
-  const d = new Date(`${dateKey}T12:00:00`);
-  return d.toLocaleDateString(undefined, {
-    weekday: 'short',
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-  });
-}
-
 type ControlVariant = 'play' | 'pause' | 'stop';
 
 const controlVariantClass: Record<ControlVariant, string> = {
@@ -286,9 +276,22 @@ export function DesktopTrackerPage() {
     hardRedirectToLogin();
   };
 
-  const nowTimeLabel = new Date().toLocaleTimeString(undefined, {
-    hour: '2-digit',
-    minute: '2-digit',
+  const [nowLabel, setNowLabel] = useState(() =>
+    new Date().toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }),
+  );
+  useEffect(() => {
+    const id = setInterval(
+      () => setNowLabel(new Date().toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })),
+      60_000,
+    );
+    return () => clearInterval(id);
+  }, []);
+
+  const selectedDateShort = new Date(`${today}T12:00:00`).toLocaleDateString(undefined, {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
   });
 
   return (
@@ -487,23 +490,6 @@ export function DesktopTrackerPage() {
       <div className="relative z-10 flex min-h-0 flex-1 flex-col">
         <TrackerOfflineOverlay visible={!isOnline} />
 
-        <div className="mx-3 mt-2 flex items-center justify-between rounded-xl border border-white/[0.05] bg-white/[0.02] px-3 py-2">
-          <p className="truncate text-sm text-slate-300">
-            <span className="font-semibold text-white">{formatSelectedDateLabel(selectedDate)}</span>
-            <span className="mx-2 text-slate-600">·</span>
-            <span className="tabular-nums text-slate-400">{nowTimeLabel}</span>
-          </p>
-          {!isTodaySelected && (
-            <button
-              type="button"
-              onClick={goToToday}
-              className="shrink-0 text-xs font-semibold text-sky-400 hover:underline"
-            >
-              Today →
-            </button>
-          )}
-        </div>
-
         <div className="mx-3 mt-2 rounded-xl border border-white/[0.05] bg-white/[0.02] px-2 py-2">
           <TrackerWeekStrip
             compact
@@ -519,7 +505,7 @@ export function DesktopTrackerPage() {
         </div>
 
         <div className="relative mx-3 mt-2 flex items-end justify-center border-b border-white/[0.06] px-1 pb-0 pt-1">
-          {tab === 'timesheet' && (
+          {tab === 'timesheet' ? (
             <button
               type="button"
               onClick={() => setShowAddEntry(true)}
@@ -528,6 +514,12 @@ export function DesktopTrackerPage() {
               <Plus className="h-3.5 w-3.5" />
               Add
             </button>
+          ) : (
+            <div className="absolute left-0 bottom-1.5 flex items-center gap-1 text-[10px] leading-none">
+              <span className="font-semibold text-slate-300">{selectedDateShort}</span>
+              <span className="text-slate-600">·</span>
+              <span className="tabular-nums text-slate-400">{nowLabel}</span>
+            </div>
           )}
           <div className="flex items-center gap-1">
             {tabs.map((t) => (

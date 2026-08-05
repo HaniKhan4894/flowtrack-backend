@@ -346,7 +346,7 @@ export const HourlyTimeline = ({ data, isLoading, selectedDate, topApps = [], va
     + (data.summary.neutral_seconds ?? 0);
   const trackedBarTotal = allTrackedSeconds || 1;
   const activityBarTotal = activitySeconds || 1;
-  const trackerTopApps = dayTopApps.slice(0, 3);
+  const trackerTopApps = dayTopApps.slice(0, 5);
 
   const isActive = (hour: number, row: RowType) => hover?.hour === hour && hover?.row === row;
   const isTracker = variant === 'tracker';
@@ -375,35 +375,58 @@ export const HourlyTimeline = ({ data, isLoading, selectedDate, topApps = [], va
 
         {isTracker ? (
           <div className="overflow-hidden rounded-2xl border border-white/[0.07] bg-[#0b0f17]/90">
-            {/* ── Stats + apps ── */}
-            <div className="grid grid-cols-5 border-b border-white/[0.06]">
-              <div className="col-span-2 flex flex-col items-center justify-center border-r border-white/[0.06] px-3 py-3">
-                <p className="text-[10px] font-medium text-slate-500">Hours tracked</p>
-                <p className="mt-0.5 text-2xl font-bold tabular-nums text-white">{formatClock(timeLoggedSeconds)}</p>
-              </div>
+            {/* ── Where time went ── */}
+            <div className="border-b border-white/[0.06] px-2.5 py-2.5">
+              <p className="mb-2 text-[10px] font-medium text-slate-500">Where time went</p>
+              {trackerTopApps.length > 0 ? (
+                <div className="flex w-full items-end justify-between gap-1">
+                  {trackerTopApps.map((app) => {
+                    const isHot = hoveredApp === app.app_name;
+                    const label = getAppDisplayName(app.app_name);
+                    return (
+                      <button
+                        key={app.app_name}
+                        type="button"
+                        onMouseEnter={() => setHoveredApp(app.app_name)}
+                        onMouseLeave={() => setHoveredApp(null)}
+                        className={cn(
+                          'flex min-w-0 flex-1 flex-col items-center justify-center gap-1.5 rounded-xl py-2 transition-colors',
+                          isHot ? 'bg-white/[0.05]' : 'hover:bg-white/[0.03]',
+                        )}
+                        title={`${label} · ${app.percentage ?? 0}%`}
+                      >
+                        <AppIcon appName={app.app_name} size={44} />
+                        <span className="max-w-[58px] truncate text-[9px] text-slate-500">{label.split(' ')[0]}</span>
+                        <span className="text-[11px] font-bold tabular-nums text-slate-300">{app.percentage ?? 0}%</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="flex h-16 items-center justify-center">
+                  <p className="text-[10px] text-slate-600">No app data yet</p>
+                </div>
+              )}
+            </div>
 
-              <div className="col-span-3 px-3 py-2.5">
-                <div className="flex items-start justify-between gap-2">
+            {/* ── Hours tracked + Active work | Day insights ── */}
+            <div className="grid grid-cols-2 divide-x divide-white/[0.06] border-b border-white/[0.06]">
+              {/* Left: Hours tracked + Active work */}
+              <div className="px-3 py-2.5">
+                <div className="mb-2 flex items-start justify-between gap-1">
                   <div>
-                    <p className="text-[10px] font-medium text-slate-500">Active work</p>
-                    <p className="text-xl font-bold tabular-nums text-sky-300">{formatClock(activitySeconds)}</p>
+                    <p className="text-[10px] font-medium text-slate-500">Hours tracked</p>
+                    <p className="text-2xl font-bold tabular-nums text-white">{formatClock(timeLoggedSeconds)}</p>
                   </div>
                   <div className="flex flex-col items-end gap-1">
+                    <p className="text-[10px] font-medium text-slate-500">Active work</p>
+                    <p className="text-lg font-bold tabular-nums text-sky-300">{formatClock(activitySeconds)}</p>
                     <span className="rounded-md bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-sky-300">
                       {activityPct}% active
                     </span>
-                    {activityTrendDelta != null && activityTrendDelta !== 0 && (
-                      <span className={cn(
-                        'inline-flex items-center gap-0.5 text-[9px] font-medium',
-                        activityTrendDelta > 0 ? 'text-emerald-400' : 'text-rose-400',
-                      )}>
-                        {activityTrendDelta > 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-                        {Math.abs(activityTrendDelta)}% vs yesterday
-                      </span>
-                    )}
                   </div>
                 </div>
-                <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/[0.06]">
+                <div className="h-1 overflow-hidden rounded-full bg-white/[0.06]">
                   <div className="flex h-full">
                     <div className="h-full bg-sky-500" style={{ width: `${(productiveSeconds / activityBarTotal) * 100}%` }} />
                     <div className="h-full bg-amber-400/70" style={{ width: `${(unproductiveSeconds / activityBarTotal) * 100}%` }} />
@@ -413,46 +436,19 @@ export const HourlyTimeline = ({ data, isLoading, selectedDate, topApps = [], va
                   <span>{formatHm(productiveSeconds)} productive</span>
                   <span>{formatHm(unproductiveSeconds)} off-track</span>
                 </div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 divide-x divide-white/[0.06] border-b border-white/[0.06]">
-              <div className="flex min-h-[118px] flex-col px-2.5 py-2.5">
-                <p className="mb-1 text-[10px] font-medium text-slate-500">Where time went</p>
-                {trackerTopApps.length > 0 ? (
-                  <div className="flex flex-1 items-center justify-center">
-                    <div className="flex w-full items-center justify-between gap-1">
-                      {trackerTopApps.map((app) => {
-                        const isHot = hoveredApp === app.app_name;
-                        const label = getAppDisplayName(app.app_name);
-                        return (
-                          <button
-                            key={app.app_name}
-                            type="button"
-                            onMouseEnter={() => setHoveredApp(app.app_name)}
-                            onMouseLeave={() => setHoveredApp(null)}
-                            className={cn(
-                              'flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-lg py-1 transition-colors',
-                              isHot ? 'bg-white/[0.05]' : 'hover:bg-white/[0.03]',
-                            )}
-                            title={`${label} · ${app.percentage ?? 0}%`}
-                          >
-                            <AppIcon appName={app.app_name} size={56} />
-                            <span className="max-w-[64px] truncate text-[9px] text-slate-500">{label.split(' ')[0]}</span>
-                            <span className="text-[10px] font-bold tabular-nums text-slate-400">{app.percentage ?? 0}%</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex flex-1 items-center justify-center">
-                    <p className="text-[10px] text-slate-600">No app data yet</p>
-                  </div>
+                {activityTrendDelta != null && activityTrendDelta !== 0 && (
+                  <span className={cn(
+                    'mt-1.5 inline-flex items-center gap-0.5 text-[9px] font-medium',
+                    activityTrendDelta > 0 ? 'text-emerald-400' : 'text-rose-400',
+                  )}>
+                    {activityTrendDelta > 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                    {Math.abs(activityTrendDelta)}% vs yesterday
+                  </span>
                 )}
               </div>
 
-              <div className="flex min-h-[118px] flex-col justify-center px-2.5 py-2.5">
+              {/* Right: Day insights */}
+              <div className="px-2.5 py-2.5">
                 <p className="mb-2 text-[10px] font-medium text-slate-500">Day insights</p>
                 <div className="grid grid-cols-2 gap-x-2 gap-y-2">
                   <div className="rounded-lg bg-white/[0.03] px-2 py-1.5">

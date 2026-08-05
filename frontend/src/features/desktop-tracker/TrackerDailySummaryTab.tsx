@@ -80,11 +80,36 @@ export function TrackerDailySummaryTab({
 
   const effectiveLoggedSeconds = Math.max(loggedSeconds ?? 0, liveLoggedSeconds ?? 0);
 
+  /**
+   * Merge historical API topApps with current-session live data.
+   * We never replace API data — we add session seconds on top so the
+   * percentage is always relative to the FULL day (like Trackabi).
+   */
   const effectiveTopApps = useMemo(() => {
-    if (liveSessionApps && liveSessionApps.length > 0) {
-      return liveSessionApps;
+    if (!liveSessionApps || liveSessionApps.length === 0) {
+      return topApps;
     }
-    return topApps;
+
+    const merged = new Map<string, number>();
+
+    for (const app of topApps) {
+      merged.set(app.app_name, (merged.get(app.app_name) ?? 0) + (app.duration_seconds ?? 0));
+    }
+
+    for (const app of liveSessionApps) {
+      merged.set(app.app_name, (merged.get(app.app_name) ?? 0) + (app.duration_seconds ?? 0));
+    }
+
+    const total = Array.from(merged.values()).reduce((s, v) => s + v, 0) || 1;
+
+    return Array.from(merged.entries())
+      .map(([app_name, duration_seconds]) => ({
+        app_name,
+        duration_seconds,
+        percentage: Math.round((duration_seconds / total) * 100),
+      }))
+      .sort((a, b) => b.duration_seconds - a.duration_seconds)
+      .slice(0, 5);
   }, [liveSessionApps, topApps]);
 
   const activityTrendDelta = useMemo(() => {
