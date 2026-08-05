@@ -140,11 +140,6 @@ export function DesktopTrackerPage() {
     setWeekOffset(Math.floor(diffDays / 7));
   }, []);
 
-  const goToToday = useCallback(() => {
-    setWeekOffset(0);
-    setSelectedDate(today);
-  }, [today]);
-
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     await loadActive();
