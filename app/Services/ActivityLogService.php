@@ -165,46 +165,10 @@ class ActivityLogService
 
     private function categorizeActivity(array $data, int $organizationId): string
     {
-        $rules = $this->productivityRuleModel
-            ->where('organization_id', $organizationId)
-            ->where('is_active', true)
-            ->findAll();
-
-        // Check in specificity order: url and keyword rules first (more specific),
-        // app rules last (more general). This prevents a broad "Chrome → neutral"
-        // rule from hiding specific "netflix.com → unproductive" rules.
-        $typePriority = ['url' => 2, 'keyword' => 2, 'app' => 1];
-        usort($rules, static function (array $a, array $b) use ($typePriority): int {
-            return ($typePriority[$b['rule_type']] ?? 0) - ($typePriority[$a['rule_type']] ?? 0);
-        });
-
-        $appName    = (string) ($data['app_name'] ?? '');
-        $windowTitle = (string) ($data['window_title'] ?? '');
-        $url        = (string) ($data['url'] ?? '');
+        $rules = $this->sortedActiveRules($organizationId);
 
         foreach ($rules as $rule) {
-            $match = false;
-
-            switch ($rule['rule_type']) {
-                case 'app':
-                    if ($appName !== '' && stripos($appName, (string) $rule['pattern']) !== false) {
-                        $match = true;
-                    }
-                    break;
-                case 'url':
-                    // Only apply URL rules when a real URL was captured
-                    if ($url !== '' && stripos($url, (string) $rule['pattern']) !== false) {
-                        $match = true;
-                    }
-                    break;
-                case 'keyword':
-                    if ($windowTitle !== '' && stripos($windowTitle, (string) $rule['pattern']) !== false) {
-                        $match = true;
-                    }
-                    break;
-            }
-
-            if ($match) {
+            if ($this->ruleMatches($data, $rule)) {
                 return (string) $rule['category'];
             }
         }
@@ -213,6 +177,52 @@ class ActivityLogService
         $clientCat = $data['category'] ?? null;
         $valid = ['productive', 'unproductive', 'neutral', 'uncategorized'];
         return in_array($clientCat, $valid, true) ? (string) $clientCat : 'uncategorized';
+    }
+
+    /** @return list<array<string, mixed>> */
+    private function sortedActiveRules(int $organizationId): array
+    {
+        $rules = $this->productivityRuleModel
+            ->where('organization_id', $organizationId)
+            ->where('is_active', true)
+            ->findAll();
+
+        // url/keyword rules before app rules (more specific first).
+        $typePriority = ['url' => 2, 'keyword' => 2, 'app' => 1];
+        usort($rules, static function (array $a, array $b) use ($typePriority): int {
+            return ($typePriority[$b['rule_type']] ?? 0) - ($typePriority[$a['rule_type']] ?? 0);
+        });
+
+        return $rules;
+    }
+
+    /** @param array<string, mixed> $data */
+    /** @param array<string, mixed> $rule */
+    private function ruleMatches(array $data, array $rule): bool
+    {
+        $appName = (string) ($data['app_name'] ?? '');
+        $windowTitle = (string) ($data['window_title'] ?? '');
+        $url = (string) ($data['url'] ?? '');
+        $pattern = (string) ($rule['pattern'] ?? '');
+
+        if ($pattern === '') {
+            return false;
+        }
+
+        switch ($rule['rule_type']) {
+            case 'app':
+                return $appName !== '' && stripos($appName, $pattern) !== false;
+            case 'url':
+                // Match captured URL, or fall back to window title (browser tabs often lack a URL).
+                if ($url !== '' && stripos($url, $pattern) !== false) {
+                    return true;
+                }
+                return $windowTitle !== '' && stripos($windowTitle, $pattern) !== false;
+            case 'keyword':
+                return $windowTitle !== '' && stripos($windowTitle, $pattern) !== false;
+            default:
+                return false;
+        }
     }
 
     private function truncate(string $value, int $maxLength): string
@@ -231,15 +241,7 @@ class ActivityLogService
      */
     public function recategorizeForOrganization(int $organizationId, ?string $fromDate = null): int
     {
-        $rules = $this->productivityRuleModel
-            ->where('organization_id', $organizationId)
-            ->where('is_active', true)
-            ->findAll();
-
-        $typePriority = ['url' => 2, 'keyword' => 2, 'app' => 1];
-        usort($rules, static function (array $a, array $b) use ($typePriority): int {
-            return ($typePriority[$b['rule_type']] ?? 0) - ($typePriority[$a['rule_type']] ?? 0);
-        });
+        $rules = $this->sortedActiveRules($organizationId);
 
         $batchSize = 500;
         $offset    = 0;
@@ -289,30 +291,8 @@ class ActivityLogService
     /** Apply a pre-loaded, pre-sorted rule list to a data row. */
     private function applyRules(array $data, array $rules): string
     {
-        $appName     = (string) ($data['app_name'] ?? '');
-        $windowTitle = (string) ($data['window_title'] ?? '');
-        $url         = (string) ($data['url'] ?? '');
-
         foreach ($rules as $rule) {
-            $match = false;
-            switch ($rule['rule_type']) {
-                case 'app':
-                    if ($appName !== '' && stripos($appName, (string) $rule['pattern']) !== false) {
-                        $match = true;
-                    }
-                    break;
-                case 'url':
-                    if ($url !== '' && stripos($url, (string) $rule['pattern']) !== false) {
-                        $match = true;
-                    }
-                    break;
-                case 'keyword':
-                    if ($windowTitle !== '' && stripos($windowTitle, (string) $rule['pattern']) !== false) {
-                        $match = true;
-                    }
-                    break;
-            }
-            if ($match) {
+            if ($this->ruleMatches($data, $rule)) {
                 return (string) $rule['category'];
             }
         }

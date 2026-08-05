@@ -4,17 +4,114 @@ import { activityService } from '../../api/activityService';
 import { HourlyTimeline } from '../activity/HourlyTimeline';
 import type { HourlyTimelineData } from '../../types';
 import { computeActivityPct, shiftDateKey } from './trackerMetrics';
+import { localDateKey } from '../../utils/liveTimer';
 
 interface Props {
   selectedDate: string;
   refreshToken?: number;
+  autoRefresh?: boolean;
   liveLoggedSeconds?: number;
   liveSessionApps?: { app_name: string; duration_seconds?: number; percentage?: number }[];
+}
+
+function guessLiveCategory(appName: string): 'productive' | 'unproductive' | 'neutral' | 'uncategorized' {
+  const hay = appName.toLowerCase();
+  if (/cursor|code|vscode|phpstorm|terminal|devenv|sublime|notion|figma|slack|teams|zoom/i.test(hay)) {
+    return 'productive';
+  }
+  if (/tiktok|netflix|spotify|youtube|instagram|facebook|reddit/i.test(hay)) {
+    return 'unproductive';
+  }
+  return 'neutral';
+}
+
+/** Merge unsynced live session apps into the current hour bucket. */
+function mergeLiveIntoTimeline(
+  timeline: HourlyTimelineData | null,
+  liveSessionApps: { app_name: string; duration_seconds?: number }[] | undefined,
+  selectedDate: string,
+): HourlyTimelineData | null {
+  if (!timeline || !liveSessionApps?.length) return timeline;
+  if (selectedDate !== localDateKey()) return timeline;
+
+  const currentHour = new Date().getHours();
+  let dayProductive = timeline.summary.productive_seconds;
+  let dayUnproductive = timeline.summary.unproductive_seconds;
+  let dayNeutral = timeline.summary.neutral_seconds ?? 0;
+  let dayTotal = timeline.summary.total_seconds;
+
+  const hours = timeline.hours.map((h) => {
+    if (h.hour !== currentHour) return h;
+
+    const appsMap = new Map(h.apps.map((a) => [a.app_name, { ...a }]));
+    let addedProductive = 0;
+    let addedUnproductive = 0;
+    let addedNeutral = 0;
+    let addedTotal = 0;
+
+    for (const app of liveSessionApps) {
+      const secs = app.duration_seconds ?? 0;
+      if (secs <= 0) continue;
+
+      addedTotal += secs;
+      const category = guessLiveCategory(app.app_name);
+      if (category === 'productive') addedProductive += secs;
+      else if (category === 'unproductive') addedUnproductive += secs;
+      else addedNeutral += secs;
+
+      const existing = appsMap.get(app.app_name);
+      if (existing) {
+        existing.seconds += secs;
+      } else {
+        appsMap.set(app.app_name, {
+          app_name: app.app_name,
+          seconds: secs,
+          category,
+        });
+      }
+    }
+
+    if (addedTotal <= 0) return h;
+
+    const apps = Array.from(appsMap.values())
+      .sort((a, b) => b.seconds - a.seconds)
+      .slice(0, 10);
+
+    dayProductive += addedProductive;
+    dayUnproductive += addedUnproductive;
+    dayNeutral += addedNeutral;
+    dayTotal += addedTotal;
+
+    return {
+      ...h,
+      total_seconds: h.total_seconds + addedTotal,
+      productive_seconds: h.productive_seconds + addedProductive,
+      unproductive_seconds: h.unproductive_seconds + addedUnproductive,
+      neutral_seconds: (h.neutral_seconds ?? 0) + addedNeutral,
+      apps,
+    };
+  });
+
+  if (dayTotal === timeline.summary.total_seconds) return timeline;
+
+  return {
+    ...timeline,
+    hours,
+    summary: {
+      ...timeline.summary,
+      total_seconds: dayTotal,
+      productive_seconds: dayProductive,
+      unproductive_seconds: dayUnproductive,
+      neutral_seconds: dayNeutral,
+      focus_score: dayTotal > 0 ? Math.round((dayProductive / dayTotal) * 100) : 0,
+    },
+  };
 }
 
 export function TrackerDailySummaryTab({
   selectedDate,
   refreshToken = 0,
+  autoRefresh = false,
   liveLoggedSeconds = 0,
   liveSessionApps,
 }: Props) {
@@ -78,6 +175,15 @@ export function TrackerDailySummaryTab({
     void load(hasLoadedRef.current);
   }, [load, refreshToken]);
 
+  // Silent background refresh while timer runs — no UI remount / spinner.
+  useEffect(() => {
+    if (!autoRefresh) return;
+    const id = setInterval(() => {
+      void load(true);
+    }, 65_000);
+    return () => clearInterval(id);
+  }, [autoRefresh, load]);
+
   const effectiveLoggedSeconds = Math.max(loggedSeconds ?? 0, liveLoggedSeconds ?? 0);
 
   /**
@@ -119,9 +225,14 @@ export function TrackerDailySummaryTab({
     return todayPct - yesterdayPct;
   }, [timelineData, yesterdayTimeline, yesterdayLogged, effectiveLoggedSeconds]);
 
+  const effectiveTimelineData = useMemo(
+    () => mergeLiveIntoTimeline(timelineData, liveSessionApps, selectedDate),
+    [timelineData, liveSessionApps, selectedDate],
+  );
+
   return (
     <HourlyTimeline
-      data={timelineData}
+      data={effectiveTimelineData}
       isLoading={loading}
       selectedDate={selectedDate}
       topApps={effectiveTopApps}

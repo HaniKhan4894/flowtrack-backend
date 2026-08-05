@@ -173,16 +173,6 @@ export function DesktopTrackerPage() {
     void syncOfflineSession();
   }, [isOnline, syncOfflineSession]);
 
-  // Auto-refresh summary every 65 s while the timer is running so the hourly
-  // breakdown always reflects recently-synced activity (sync cycle is ~60 s).
-  useEffect(() => {
-    if (!isRunning) return;
-    const id = setInterval(() => {
-      setRefreshToken((n) => n + 1);
-    }, 65_000);
-    return () => clearInterval(id);
-  }, [isRunning]);
-
   const liveSessionApps = useMemo(
     () => (liveActivity?.session_apps ?? []).map((a) => ({
       app_name: a.app_name,
@@ -558,7 +548,7 @@ export function DesktopTrackerPage() {
       <main className="relative flex-1 overflow-y-auto overflow-x-hidden px-3 py-3">
         <AnimatePresence mode="wait">
           <motion.div
-            key={`${tab}-${selectedDate}-${refreshToken}`}
+            key={`${tab}-${selectedDate}`}
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
@@ -568,6 +558,7 @@ export function DesktopTrackerPage() {
               <TrackerDailySummaryTab
                 selectedDate={selectedDate}
                 refreshToken={refreshToken}
+                autoRefresh={isTodaySelected && isRunning}
                 liveLoggedSeconds={selectedDayLogged > 0 ? selectedDayLogged : undefined}
                 liveSessionApps={isTodaySelected && isRunning ? liveSessionApps : undefined}
               />
