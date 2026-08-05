@@ -4,7 +4,8 @@ import { useQuery } from '@tanstack/react-query';
 import { Clock, TrendingUp, Users, Activity, Timer, Radio } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { dashboardService } from '../../api/dashboardService';
-import { reportService, type ActiveSession } from '../../api/reportService';
+import { type ActiveSession } from '../../api/reportService';
+import { useActiveSessions } from '../../hooks/useActiveSessions';
 import { useAuthStore } from '../../store/authStore';
 import { useTimerStore } from '../../store/timerStore';
 import { canViewMemberTracking, canViewOrgPackage, hasPlanFeature } from '../../utils/access';
@@ -100,11 +101,7 @@ const DashboardPage = () => {
     enabled: !!user?.id,
   });
 
-  const sessionsQuery = useQuery({
-    queryKey: ['dashboard', 'active-sessions'],
-    queryFn: () => reportService.getActiveSessions().then((r) => r.data ?? []).catch(() => []),
-    refetchInterval: 60_000,
-  });
+  const sessionsQuery = useActiveSessions({ pollMs: 60_000 });
 
   const stats = statsQuery.data;
   const activeSessions = useLiveActiveSessions(

@@ -54,7 +54,13 @@ export interface AdvancedMonitoringReport {
   };
   top_apps: Array<{ app_name: string; category: string; duration_seconds: number; percentage: number }>;
   top_urls: Array<{ url: string; category: string; duration_seconds: number; percentage: number }>;
-  recent_screenshots: Array<{ id: number; captured_at: string; activity_level: number }>;
+  recent_screenshots: Array<{
+    id: number;
+    captured_at: string;
+    activity_level: number;
+    thumb_url?: string;
+    view_url?: string;
+  }>;
   sessions: AdvancedMonitoringSession[];
 }
 

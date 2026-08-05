@@ -194,35 +194,73 @@ class ScreenshotController extends ResourceController
     private function serveScreenshotFile(int $id, bool $thumbnail)
     {
         try {
-            $userId = (int)($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
-            $organizationId = (int)($this->request->getServer('FLOWTRACK_ORGANIZATION_ID') ?? 0);
-            if (!$userId) {
+            $mode = $thumbnail ? 'thumb' : 'view';
+            $exp = $this->request->getGet('exp');
+            $sig = $this->request->getGet('sig');
+            $signedOk = \App\Libraries\SignedUrl::isValid('screenshot', $id, $mode, $exp !== null ? (string) $exp : null, $sig !== null ? (string) $sig : null);
+
+            $userId = (int) ($this->request->getServer('FLOWTRACK_USER_ID') ?? 0);
+            $organizationId = (int) ($this->request->getServer('FLOWTRACK_ORGANIZATION_ID') ?? 0);
+
+            // Public route (for <img src>) has no auth filter — resolve JWT when present.
+            if (!$signedOk && !$userId) {
+                $authHeader = $this->request->getHeaderLine('Authorization');
+                if ($authHeader) {
+                    $jwt = new \App\Libraries\JWTHandler();
+                    $token = $jwt->extractTokenFromHeader($authHeader);
+                    $userData = $token ? $jwt->getUserFromToken($token) : null;
+                    if ($userData) {
+                        $userId = (int) ($userData['user_id'] ?? $userData['sub'] ?? 0);
+                        $organizationId = (int) ($userData['organization_id'] ?? 0);
+                    }
+                }
+            }
+
+            if (!$signedOk && !$userId) {
                 return $this->fail('Unauthorized', 401);
             }
 
             $screenshot = $this->screenshotService->getScreenshot($id);
-            if (!$screenshot) {
+            if (!$screenshot || !empty($screenshot['deleted_by_user'])) {
                 return $this->fail('Screenshot not found', 404);
             }
 
-            if (!$this->screenshotService->canViewScreenshot($userId, $organizationId, $screenshot)) {
+            // Signed URLs already prove the list endpoint authorized this id; JWT path
+            // still enforces the usual permission / team scope checks.
+            if (!$signedOk && !$this->screenshotService->canViewScreenshot($userId, $organizationId, $screenshot)) {
                 return $this->fail('Forbidden', 403);
             }
 
             $relativePath = $this->screenshotService->resolveFilePath($screenshot, $thumbnail);
             $path = WRITEPATH . 'uploads/screenshots/' . $relativePath;
 
-            if (!file_exists($path)) {
+            if (!is_file($path)) {
                 return $this->fail('File not found', 404);
             }
 
+            $mtime = (int) filemtime($path);
+            $size = (int) filesize($path);
+            $etag = '"' . md5($id . '|' . $mode . '|' . $mtime . '|' . $size) . '"';
+            $clientEtag = trim((string) $this->request->getHeaderLine('If-None-Match'));
+            if ($clientEtag !== '' && hash_equals($etag, $clientEtag)) {
+                return $this->response
+                    ->setStatusCode(304)
+                    ->setHeader('ETag', $etag)
+                    ->setHeader('Cache-Control', 'private, max-age=3600');
+            }
+
             $mimeType = mime_content_type($path) ?: 'image/jpeg';
+            $contents = file_get_contents($path);
+            if ($contents === false) {
+                return $this->fail('File not found', 404);
+            }
 
             return $this->response
                 ->setHeader('Content-Type', $mimeType)
                 ->setHeader('Cache-Control', 'private, max-age=3600')
-                ->setBody(file_get_contents($path));
-
+                ->setHeader('ETag', $etag)
+                ->setHeader('Content-Length', (string) strlen($contents))
+                ->setBody($contents);
         } catch (\Exception $e) {
             return $this->fail($e->getMessage(), 400);
         }

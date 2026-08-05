@@ -1,5 +1,22 @@
 export {};
 
+export type LiveActivitySnapshot = {
+  tracking: boolean;
+  current: {
+    app_name: string;
+    window_title: string;
+    url: string;
+    duration_seconds: number;
+  } | null;
+  soft_idle: boolean;
+  system_idle_seconds: number;
+  pending_count: number;
+  queued_seconds: number;
+  last_sync_at: number | null;
+  last_sync_error: string | null;
+  sync_in_flight: boolean;
+};
+
 declare global {
   interface Window {
     electronAPI?: {
@@ -26,6 +43,8 @@ declare global {
       resumeTracking: () => Promise<{ success: boolean }>;
       captureNow: () => Promise<{ success: boolean; error?: string; activityLevel?: number; capturedScreens?: number }>;
       sendActivityEvent: (type: string) => void;
+      getLiveActivity: () => Promise<LiveActivitySnapshot>;
+      onActivityLive: (callback: (snapshot: LiveActivitySnapshot) => void) => () => void;
       onScreenshotCaptured: (callback: (data: { activityLevel: number }) => void) => () => void;
       onSystemLockChange: (callback: (locked: boolean) => void) => () => void;
       onSystemResume: (callback: () => void) => () => void;

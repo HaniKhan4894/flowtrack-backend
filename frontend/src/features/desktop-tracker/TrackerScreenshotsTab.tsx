@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Camera, ChevronLeft, ChevronRight, Loader2, ZoomIn, X } from 'lucide-react';
-import { screenshotService } from '../../api/screenshotService';
+import { resolveScreenshotMediaUrl, type ScreenshotItem } from '../../api/screenshotService';
+import { useScreenshotsQuery } from '../../hooks/useScreenshotsQuery';
 import { useAuthStore } from '../../store/authStore';
 import { areOwnScreenshotsHidden } from '../../utils/access';
 import { getApiErrorMessage } from '../../utils/apiError';
@@ -17,88 +18,46 @@ export function TrackerScreenshotsTab({ selectedDate, refreshToken = 0 }: Props)
   const user = useAuthStore((s) => s.user);
   const ownHidden = areOwnScreenshotsHidden(user);
 
-  const [screenshots, setScreenshots] = useState<any[]>([]);
-  const [thumbUrls, setThumbUrls] = useState<Record<number, string>>({});
-  const [loading, setLoading] = useState(true);
-  const [selected, setSelected] = useState<any | null>(null);
+  const [selected, setSelected] = useState<ScreenshotItem | null>(null);
   const [fullUrl, setFullUrl] = useState<string | null>(null);
   const [page, setPage] = useState(1);
-  const [pagination, setPagination] = useState({
-    current_page: 1,
-    per_page: PER_PAGE,
-    total: 0,
-    total_pages: 1,
-  });
-
-  const revokeUrls = useCallback((urls: Record<number, string>) => {
-    Object.values(urls).forEach((url) => {
-      if (url) URL.revokeObjectURL(url);
-    });
-  }, []);
-
-  const fetchScreenshots = useCallback(async () => {
-    if (ownHidden) {
-      setScreenshots([]);
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const resp = await screenshotService.getAll({
-        start_date: `${selectedDate} 00:00:00`,
-        end_date: `${selectedDate} 23:59:59`,
-        page,
-        per_page: PER_PAGE,
-      });
-      const list = resp.data ?? [];
-      setScreenshots(list);
-      setPagination(resp.pagination ?? {
-        current_page: page,
-        per_page: PER_PAGE,
-        total: list.length,
-        total_pages: 1,
-      });
-
-      setThumbUrls((prev) => {
-        revokeUrls(prev);
-        return {};
-      });
-
-      const thumbs: Record<number, string> = {};
-      await Promise.all(
-        list.map(async (item: { id: number }) => {
-          try {
-            thumbs[item.id] = await screenshotService.getThumbnailBlobUrl(item.id);
-          } catch {
-            // skip
-          }
-        }),
-      );
-      setThumbUrls(thumbs);
-    } catch (e) {
-      toastError(getApiErrorMessage(e, 'Failed to load screenshots'));
-      setScreenshots([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [ownHidden, page, revokeUrls, selectedDate]);
 
   useEffect(() => {
     setPage(1);
   }, [selectedDate]);
 
+  const screenshotsQuery = useScreenshotsQuery(
+    {
+      page,
+      per_page: PER_PAGE,
+      start_date: `${selectedDate} 00:00:00`,
+      end_date: `${selectedDate} 23:59:59`,
+    },
+    { enabled: !ownHidden },
+  );
+
   useEffect(() => {
-    void fetchScreenshots();
-  }, [fetchScreenshots, refreshToken]);
+    if (refreshToken > 0) {
+      void screenshotsQuery.refetch();
+    }
+    // Only refetch when parent bumps refreshToken (e.g. after capture).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshToken]);
 
-  useEffect(() => () => revokeUrls(thumbUrls), [revokeUrls, thumbUrls]);
+  const screenshots = screenshotsQuery.data?.data ?? [];
+  const pagination = screenshotsQuery.data?.pagination ?? {
+    current_page: page,
+    per_page: PER_PAGE,
+    total: 0,
+    total_pages: 1,
+  };
+  const loading = screenshotsQuery.isLoading;
 
-  const openFull = async (shot: any) => {
+  const openFull = async (shot: ScreenshotItem) => {
     setSelected(shot);
     setFullUrl(null);
     try {
-      const url = await screenshotService.getImageBlobUrl(shot.id);
+      const url = await resolveScreenshotMediaUrl(shot, 'view');
       setFullUrl(url);
     } catch (e) {
       toastError(getApiErrorMessage(e, 'Failed to load image'));
@@ -106,7 +65,6 @@ export function TrackerScreenshotsTab({ selectedDate, refreshToken = 0 }: Props)
   };
 
   const closeFull = () => {
-    if (fullUrl) URL.revokeObjectURL(fullUrl);
     setFullUrl(null);
     setSelected(null);
   };
@@ -115,6 +73,14 @@ export function TrackerScreenshotsTab({ selectedDate, refreshToken = 0 }: Props)
     return (
       <p className="py-10 text-center text-sm text-slate-500">
         Screenshot viewing is disabled for your account.
+      </p>
+    );
+  }
+
+  if (screenshotsQuery.isError) {
+    return (
+      <p className="py-10 text-center text-sm text-slate-500">
+        Failed to load screenshots.
       </p>
     );
   }
@@ -139,8 +105,8 @@ export function TrackerScreenshotsTab({ selectedDate, refreshToken = 0 }: Props)
                 onClick={() => void openFull(shot)}
                 className="group relative aspect-video overflow-hidden rounded-lg border border-white/10 bg-black/40"
               >
-                {thumbUrls[shot.id] ? (
-                  <img src={thumbUrls[shot.id]} alt="" className="h-full w-full object-cover" />
+                {shot.thumb_url ? (
+                  <img src={shot.thumb_url} alt="" loading="lazy" className="h-full w-full object-cover" />
                 ) : (
                   <div className="flex h-full items-center justify-center text-slate-600">
                     <Camera className="h-5 w-5" />

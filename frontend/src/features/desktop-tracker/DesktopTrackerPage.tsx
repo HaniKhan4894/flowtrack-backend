@@ -20,6 +20,7 @@ import { TrackerTimesheetTab } from './TrackerTimesheetTab';
 import { TrackerScreenshotsTab } from './TrackerScreenshotsTab';
 import { TrackerSettingsModal } from './TrackerSettingsModal';
 import { TrackerAddEntryModal } from './TrackerAddEntryModal';
+import { TrackerLiveActivityStrip } from './TrackerLiveActivityStrip';
 import { formatClockShort } from './trackerMetrics';
 import { cn } from '../../lib/cn';
 
@@ -453,6 +454,8 @@ export function DesktopTrackerPage() {
             </div>
           )}
         </header>
+
+        <TrackerLiveActivityStrip enabled={isRunning} />
 
         <div className="mx-3 mt-2 flex items-center justify-between rounded-xl border border-white/[0.05] bg-white/[0.02] px-3 py-2">
           <p className="truncate text-sm text-slate-300">

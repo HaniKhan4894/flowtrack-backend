@@ -4,7 +4,7 @@ import { MessageSquare, Loader2, Wand2, Clock, Gauge, ListChecks, AlertCircle, S
 import { aiService, type AiStandupResult } from '../../api/aiService';
 import { slackService } from '../../api/slackService';
 import { teamService, type TeamMember } from '../../api/teamService';
-import { reportService, type ActiveSession } from '../../api/reportService';
+import { useActiveSessions } from '../../hooks/useActiveSessions';
 import { useAuthStore } from '../../store/authStore';
 import { canViewTeam } from '../../utils/access';
 import { getApiErrorMessage } from '../../utils/apiError';
@@ -57,25 +57,14 @@ const DailyStandupPage = () => {
   const [error, setError] = useState<string | null>(null);
   const [slackState, setSlackState] = useState<'idle' | 'sending' | 'sent'>('idle');
   const [slackNote, setSlackNote] = useState<string | null>(null);
-  const [presence, setPresence] = useState<ActiveSession[]>([]);
+  const sessionsQuery = useActiveSessions({ enabled: isManager, pollMs: 60_000 });
+  const presence = sessionsQuery.data ?? [];
 
   useEffect(() => {
     aiService.status().then((r) => setAiEnabled(!!r.data.enabled)).catch(() => setAiEnabled(false));
     if (isManager) {
       teamService.getAll().then((r) => setMembers(r.data)).catch(() => setMembers([]));
     }
-  }, [isManager]);
-
-  useEffect(() => {
-    if (!isManager) return;
-    const load = () => {
-      reportService.getActiveSessions()
-        .then((r) => setPresence(r.data ?? []))
-        .catch(() => setPresence([]));
-    };
-    load();
-    const t = setInterval(load, 30_000);
-    return () => clearInterval(t);
   }, [isManager]);
 
   const generate = async () => {

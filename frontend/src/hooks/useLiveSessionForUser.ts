@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { reportService, type ActiveSession } from '../api/reportService';
+import { useEffect, useMemo, useState } from 'react';
+import { useActiveSessions } from './useActiveSessions';
 import { useAuthStore } from '../store/authStore';
 import { useTimerStore } from '../store/timerStore';
 import type { TimeEntry } from '../types';
@@ -18,7 +18,7 @@ export interface LiveSessionView {
 }
 
 /**
- * Live timer for self (timerStore) or another teammate (active-sessions poll).
+ * Live timer for self (timerStore) or another teammate (shared active-sessions query).
  * Keeps admin/manager views in sync with a running user timer.
  */
 export function useLiveSessionForUser(
@@ -36,35 +36,18 @@ export function useLiveSessionForUser(
   const isSelf =
     targetUserId != null && selfId != null && Number(targetUserId) === Number(selfId);
 
-  const [remote, setRemote] = useState<ActiveSession | null>(null);
-  const [remoteFetchedAt, setRemoteFetchedAt] = useState<number>(0);
+  const sessionsQuery = useActiveSessions({
+    enabled: enabled && !isSelf && targetUserId != null,
+    pollMs,
+  });
+
+  const remote = useMemo(() => {
+    if (targetUserId == null) return null;
+    return (sessionsQuery.data ?? []).find((s) => Number(s.user_id) === Number(targetUserId)) ?? null;
+  }, [sessionsQuery.data, targetUserId]);
+
+  const remoteFetchedAt = sessionsQuery.dataUpdatedAt || 0;
   const [nowMs, setNowMs] = useState(() => Date.now());
-  const targetRef = useRef(targetUserId);
-  targetRef.current = targetUserId;
-
-  const loadRemote = useCallback(async () => {
-    const uid = targetRef.current;
-    if (uid == null || !enabled) return;
-    try {
-      const resp = await reportService.getActiveSessions();
-      const sessions = resp.data ?? [];
-      const match = sessions.find((s) => Number(s.user_id) === Number(uid)) ?? null;
-      setRemote(match);
-      setRemoteFetchedAt(Date.now());
-    } catch {
-      /* keep last known */
-    }
-  }, [enabled]);
-
-  useEffect(() => {
-    if (!enabled || isSelf || targetUserId == null) {
-      setRemote(null);
-      return;
-    }
-    loadRemote();
-    const id = window.setInterval(loadRemote, pollMs);
-    return () => window.clearInterval(id);
-  }, [enabled, isSelf, targetUserId, pollMs, loadRemote]);
 
   useEffect(() => {
     if (!enabled) return;

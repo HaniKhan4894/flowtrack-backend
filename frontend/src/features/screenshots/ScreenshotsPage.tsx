@@ -1,12 +1,13 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Camera, Calendar, ZoomIn, Trash2, Download, RefreshCw, X, Zap, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button, SkeletonCard, EmptyState } from '../../components/ui';
-import { screenshotService } from '../../api/screenshotService';
+import { screenshotService, resolveScreenshotMediaUrl, type ScreenshotItem } from '../../api/screenshotService';
 import { monitoringService } from '../../api/monitoringService';
 import { TeamMemberFilter } from '../../components/TeamMemberFilter';
 import { useAuthStore } from '../../store/authStore';
+import { useInvalidateScreenshots, useScreenshotsQuery } from '../../hooks/useScreenshotsQuery';
 import { canViewMemberTracking, canViewOrgPackage, hasPermission, canAccessScreenshotsPage, areOwnScreenshotsHidden } from '../../utils/access';
 import { Link, Navigate } from 'react-router-dom';
 import { toastSuccess, toastError } from '../../store/toastStore';
@@ -18,17 +19,13 @@ const ScreenshotsPage = () => {
   const [searchParams] = useSearchParams();
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
   const [viewingMemberName, setViewingMemberName] = useState('');
-  const [screenshots, setScreenshots] = useState<any[]>([]);
-  const [thumbUrls, setThumbUrls] = useState<Record<number, string>>({});
   const [fullImageUrl, setFullImageUrl] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
   const [isLoadingFull, setIsLoadingFull] = useState(false);
-  const [selectedScreenshot, setSelectedScreenshot] = useState<any | null>(null);
+  const [selectedScreenshot, setSelectedScreenshot] = useState<ScreenshotItem | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
   const [page, setPage] = useState(1);
-  const [pagination, setPagination] = useState({ current_page: 1, per_page: PER_PAGE, total: 0, total_pages: 1 });
-
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const invalidateScreenshots = useInvalidateScreenshots();
 
   const isDesktop = monitoringService.isDesktop;
   const disallowDeleting = user?.tracking_config?.screenshot_disallow_deleting === true;
@@ -44,76 +41,34 @@ const ScreenshotsPage = () => {
     }
   }, [searchParams, user]);
 
-  const revokeUrls = useCallback((urls: Record<number, string>) => {
-    Object.values(urls).forEach((url) => {
-      if (url) URL.revokeObjectURL(url);
-    });
-  }, []);
+  const filters = {
+    page,
+    per_page: PER_PAGE,
+    start_date: `${selectedDate} 00:00:00`,
+    end_date: `${selectedDate} 23:59:59`,
+    user_id: canViewMemberTracking(user) && selectedUserId ? selectedUserId : null,
+  };
 
-  const fetchScreenshots = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      const filters: Record<string, string | number> = {
-        page,
-        per_page: PER_PAGE,
-      };
-      if (selectedDate) {
-        filters.start_date = `${selectedDate} 00:00:00`;
-        filters.end_date = `${selectedDate} 23:59:59`;
-      }
-      if (canViewMemberTracking(user) && selectedUserId) {
-        filters.user_id = selectedUserId;
-      }
+  const screenshotsQuery = useScreenshotsQuery(filters, { enabled: canAccessScreenshotsPage(user) });
+  const screenshots = screenshotsQuery.data?.data ?? [];
+  const pagination = screenshotsQuery.data?.pagination ?? {
+    current_page: page,
+    per_page: PER_PAGE,
+    total: 0,
+    total_pages: 1,
+  };
+  const isLoading = screenshotsQuery.isLoading || screenshotsQuery.isFetching;
 
-      const response = await screenshotService.getAll(filters);
-      const nextScreenshots = response.data ?? [];
-      setScreenshots(nextScreenshots);
-      setPagination(response.pagination ?? { current_page: page, per_page: PER_PAGE, total: nextScreenshots.length, total_pages: 1 });
+  const refresh = () => {
+    void screenshotsQuery.refetch();
+  };
 
-      setThumbUrls((prev) => {
-        revokeUrls(prev);
-        return {};
-      });
-
-      const entries = await Promise.all(
-        nextScreenshots.map(async (item: any) => {
-          try {
-            const blobUrl = await screenshotService.getThumbnailBlobUrl(item.id);
-            return [item.id, blobUrl] as const;
-          } catch {
-            return [item.id, ''] as const;
-          }
-        })
-      );
-      setThumbUrls(Object.fromEntries(entries));
-    } catch (error) {
-      console.error('Failed to fetch screenshots', error);
-      setScreenshots([]);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [page, selectedDate, selectedUserId, user, revokeUrls]);
-
-  useEffect(() => {
-    fetchScreenshots();
-  }, [fetchScreenshots]);
-
-  useEffect(() => {
-    return () => {
-      revokeUrls(thumbUrls);
-      if (fullImageUrl) URL.revokeObjectURL(fullImageUrl);
-    };
-  }, [thumbUrls, fullImageUrl, revokeUrls]);
-
-  const openScreenshot = async (item: any) => {
+  const openScreenshot = async (item: ScreenshotItem) => {
     setSelectedScreenshot(item);
     setIsLoadingFull(true);
-    if (fullImageUrl) {
-      URL.revokeObjectURL(fullImageUrl);
-      setFullImageUrl(null);
-    }
+    setFullImageUrl(null);
     try {
-      const url = await screenshotService.getImageBlobUrl(item.id);
+      const url = await resolveScreenshotMediaUrl(item, 'view');
       setFullImageUrl(url);
     } catch (error) {
       console.error('Failed to load full screenshot', error);
@@ -124,10 +79,7 @@ const ScreenshotsPage = () => {
 
   const closeScreenshot = () => {
     setSelectedScreenshot(null);
-    if (fullImageUrl) {
-      URL.revokeObjectURL(fullImageUrl);
-      setFullImageUrl(null);
-    }
+    setFullImageUrl(null);
   };
 
   const handleDelete = async (id: number) => {
@@ -136,7 +88,7 @@ const ScreenshotsPage = () => {
       if (screenshots.length === 1 && page > 1) {
         setPage((p) => p - 1);
       } else {
-        fetchScreenshots();
+        invalidateScreenshots();
       }
     } catch (error) {
       console.error('Failed to delete screenshot', error);
@@ -150,7 +102,7 @@ const ScreenshotsPage = () => {
       if (result.success) {
         const count = result.capturedScreens ?? 1;
         toastSuccess(`Screenshot captured from ${count} screen${count > 1 ? 's' : ''}!`);
-        setTimeout(() => fetchScreenshots(), 2000);
+        setTimeout(() => invalidateScreenshots(), 2000);
       } else {
         toastError(result.error || 'Capture failed. Start a timer first.');
       }
@@ -233,7 +185,7 @@ const ScreenshotsPage = () => {
             </button>
           </div>
 
-          <Button variant="secondary" size="sm" onClick={fetchScreenshots} isLoading={isLoading}>
+          <Button variant="secondary" size="sm" onClick={refresh} isLoading={isLoading}>
             <RefreshCw className="w-4 h-4 mr-2" />
             Refresh
           </Button>
@@ -252,7 +204,7 @@ const ScreenshotsPage = () => {
         </div>
       </div>
 
-      {isLoading ? (
+      {screenshotsQuery.isLoading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
           {Array.from({ length: 8 }).map((_, i) => (
             <SkeletonCard key={i} className="aspect-video" />
@@ -270,7 +222,7 @@ const ScreenshotsPage = () => {
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
             {screenshots.map((item, index) => {
-              const imageUrl = thumbUrls[item.id] || '';
+              const imageUrl = item.thumb_url || '';
               const isBlurred = item.is_blurred === '1' || item.is_blurred === true;
 
               return (
@@ -294,7 +246,7 @@ const ScreenshotsPage = () => {
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-slate-500 text-xs">
-                        Loading preview...
+                        No preview
                       </div>
                     )}
                   </div>
@@ -303,7 +255,9 @@ const ScreenshotsPage = () => {
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-sm font-semibold text-white">#{item.id}</span>
                       <span className="text-[10px] text-slate-400 uppercase tracking-widest font-mono">
-                        {new Date(item.captured_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {item.captured_at
+                          ? new Date(item.captured_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                          : ''}
                       </span>
                     </div>
 
@@ -311,8 +265,8 @@ const ScreenshotsPage = () => {
                       <div className="flex items-center gap-2 min-w-0">
                         <div className="w-20 h-1.5 bg-white/5 rounded-full overflow-hidden shrink-0">
                           <div
-                            style={{ width: `${item.activity_level}%` }}
-                            className={`h-full ${item.activity_level > 70 ? 'bg-green-500' : item.activity_level > 30 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                            style={{ width: `${Number(item.activity_level) || 0}%` }}
+                            className={`h-full ${(Number(item.activity_level) || 0) > 70 ? 'bg-green-500' : (Number(item.activity_level) || 0) > 30 ? 'bg-yellow-500' : 'bg-red-500'}`}
                           />
                         </div>
                         <span className="text-[10px] font-bold text-slate-500 truncate">{item.activity_level}%</span>
@@ -412,7 +366,9 @@ const ScreenshotsPage = () => {
                 <div>
                   <h3 className="text-white font-bold text-sm">Screenshot #{selectedScreenshot.id}</h3>
                   <p className="text-slate-400 text-xs">
-                    {new Date(selectedScreenshot.captured_at).toLocaleString()} · {selectedScreenshot.activity_level}% activity
+                    {selectedScreenshot.captured_at
+                      ? new Date(selectedScreenshot.captured_at).toLocaleString()
+                      : ''} · {selectedScreenshot.activity_level}% activity
                   </p>
                 </div>
 

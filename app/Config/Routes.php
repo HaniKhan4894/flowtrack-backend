@@ -39,6 +39,11 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\API\V1'], function ($r
     $routes->post('slack/interactions', 'SlackCommandController::interactions');
     $routes->post('teams/commands', 'TeamsController::commands');
 
+    // Signed screenshot media — HMAC query auth so <img src> can use HTTP cache.
+    // JWT Bearer still works on the authenticated routes below when present.
+    $routes->get('screenshots/thumb/(:num)', 'ScreenshotController::thumbnail/$1');
+    $routes->get('screenshots/view/(:num)', 'ScreenshotController::view/$1');
+
     // Real-time notifications via SSE (Phase 12). Auth is by ?token= query param
     // (EventSource can't send headers), verified inside the controller.
     $routes->get('notifications/stream', 'NotificationController::stream');
@@ -291,11 +296,9 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\API\V1'], function ($r
         $routes->post('(:num)/reject', 'TimesheetController::reject/$1', ['filter' => 'permission:timesheet.approve']);
     });
 
-    // Screenshot Routes
+    // Screenshot Routes (thumb/view are public + signed/JWT — see routes above)
     $routes->group('screenshots', ['filter' => ['auth', 'planFeature:screenshots']], function ($routes) {
         $routes->get('(:num)', 'ScreenshotController::show/$1', ['filter' => 'permission:screenshots.view_own']);
-        $routes->get('view/(:num)', 'ScreenshotController::view/$1', ['filter' => 'permission:screenshots.view_own']);
-        $routes->get('thumb/(:num)', 'ScreenshotController::thumbnail/$1', ['filter' => 'permission:screenshots.view_own']);
         $routes->post('upload', 'ScreenshotController::upload', ['filter' => 'permission:screenshots.create']);
         $routes->delete('(:num)', 'ScreenshotController::delete/$1', ['filter' => 'permission:screenshots.delete']);
         $routes->get('/', 'ScreenshotController::index', ['filter' => 'permission:screenshots.view_own']);

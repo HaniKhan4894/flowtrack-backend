@@ -147,13 +147,10 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
   };
 
   useEffect(() => {
-    let interval: ReturnType<typeof setInterval> | null = null;
+    let unreadInterval: ReturnType<typeof setInterval> | null = null;
     let stream: EventSource | null = null;
+    let streamAlive = false;
 
-    const loadNotifications = () => {
-      if (!isDesktopForeground()) return;
-      notificationService.list().then((res) => setNotifications(res.data ?? [])).catch(() => setNotifications([]));
-    };
     const loadUnread = () => {
       if (!isDesktopForeground()) return;
       notificationService.unreadCount()
@@ -161,11 +158,27 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
         .catch(() => setUnreadCount(0));
     };
 
+    const stopUnreadPoll = () => {
+      if (unreadInterval) {
+        clearInterval(unreadInterval);
+        unreadInterval = null;
+      }
+    };
+
+    /** Fallback when SSE is down — 5 min, not 60s. */
+    const startUnreadPoll = () => {
+      if (!isDesktopForeground() || streamAlive) return;
+      stopUnreadPoll();
+      loadUnread();
+      unreadInterval = setInterval(loadUnread, 5 * 60_000);
+    };
+
     const stopStream = () => {
       if (stream) {
         stream.close();
         stream = null;
       }
+      streamAlive = false;
     };
 
     const startStream = () => {
@@ -177,43 +190,55 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
           setUnreadCount((c) => c + 1);
         },
         onUnread: (count) => setUnreadCount(count),
+        onError: () => {
+          streamAlive = false;
+          startUnreadPoll();
+        },
       });
-    };
-
-    const stopPolling = () => {
-      if (interval) {
-        clearInterval(interval);
-        interval = null;
+      if (stream) {
+        streamAlive = true;
+        stopUnreadPoll();
+        // EventSource fires error on transient reconnects; treat open as healthy.
+        stream.onopen = () => {
+          streamAlive = true;
+          stopUnreadPoll();
+        };
+      } else {
+        startUnreadPoll();
       }
     };
 
-    const startPolling = () => {
+    const startRealtime = () => {
       if (!isDesktopForeground()) return;
-      stopPolling();
-      loadNotifications();
       loadUnread();
       startStream();
-      interval = setInterval(loadUnread, 60000);
     };
 
-    startPolling();
+    startRealtime();
 
-    const onBackground = () => { stopPolling(); stopStream(); };
-    const onForeground = () => startPolling();
-    const onShutdown = () => { stopPolling(); stopStream(); };
+    const onBackground = () => { stopUnreadPoll(); stopStream(); };
+    const onForeground = () => startRealtime();
+    const onShutdown = () => { stopUnreadPoll(); stopStream(); };
 
     window.addEventListener('flowtrack-app-background', onBackground);
     window.addEventListener('flowtrack-app-foreground', onForeground);
     window.addEventListener('flowtrack-app-shutdown', onShutdown);
 
     return () => {
-      stopPolling();
+      stopUnreadPoll();
       stopStream();
       window.removeEventListener('flowtrack-app-background', onBackground);
       window.removeEventListener('flowtrack-app-foreground', onForeground);
       window.removeEventListener('flowtrack-app-shutdown', onShutdown);
     };
   }, []);
+
+  useEffect(() => {
+    if (!showNotifications) return;
+    notificationService.list()
+      .then((res) => setNotifications(res.data ?? []))
+      .catch(() => setNotifications([]));
+  }, [showNotifications]);
 
   const pageTitle =
     navItems.find((item) => item.path === location.pathname)?.label

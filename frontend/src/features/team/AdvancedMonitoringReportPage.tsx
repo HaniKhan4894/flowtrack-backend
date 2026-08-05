@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { Link, Navigate, useParams } from 'react-router-dom';
 import { ArrowLeft, ShieldAlert, Activity, Camera, Clock, Loader2, AlertTriangle } from 'lucide-react';
 import { advancedMonitoringService, type AdvancedMonitoringReport } from '../../api/advancedMonitoringService';
-import { screenshotService } from '../../api/screenshotService';
 import { teamService } from '../../api/teamService';
 import { useAuthStore } from '../../store/authStore';
 import { hasPermission } from '../../utils/access';
@@ -20,7 +19,6 @@ const AdvancedMonitoringReportPage = () => {
   const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [report, setReport] = useState<AdvancedMonitoringReport | null>(null);
   const [loading, setLoading] = useState(true);
-  const [thumbUrls, setThumbUrls] = useState<Record<number, string>>({});
 
   useEffect(() => {
     if (!userId) return;
@@ -36,28 +34,12 @@ const AdvancedMonitoringReportPage = () => {
     if (!userId) return;
     setLoading(true);
     advancedMonitoringService.getReport(Number(userId), startDate, endDate)
-      .then(async (resp) => {
+      .then((resp) => {
         setReport(resp.data);
-        const shots = resp.data.recent_screenshots ?? [];
-        const entries = await Promise.all(
-          shots.map(async (s) => {
-            try {
-              const url = await screenshotService.getThumbnailBlobUrl(s.id);
-              return [s.id, url] as const;
-            } catch {
-              return [s.id, ''] as const;
-            }
-          }),
-        );
-        setThumbUrls(Object.fromEntries(entries));
       })
       .catch(() => setReport(null))
       .finally(() => setLoading(false));
   }, [userId, startDate, endDate]);
-
-  useEffect(() => () => {
-    Object.values(thumbUrls).forEach((url) => url && URL.revokeObjectURL(url));
-  }, [thumbUrls]);
 
   const summary = report?.summary;
   const unusual = report?.unusual_activity?.instances ?? [];
@@ -147,8 +129,8 @@ const AdvancedMonitoringReportPage = () => {
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
               {(report.recent_screenshots ?? []).map((shot) => (
                 <div key={shot.id} className="rounded-xl overflow-hidden border border-white/10 bg-black/30">
-                  {thumbUrls[shot.id] ? (
-                    <img src={thumbUrls[shot.id]} alt="" className="w-full aspect-video object-cover" />
+                  {shot.thumb_url ? (
+                    <img src={shot.thumb_url} alt="" loading="lazy" className="w-full aspect-video object-cover" />
                   ) : (
                     <div className="w-full aspect-video bg-white/5 flex items-center justify-center text-slate-600 text-xs">No preview</div>
                   )}

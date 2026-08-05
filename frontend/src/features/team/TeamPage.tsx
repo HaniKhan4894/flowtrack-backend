@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { UserPlus, Mail, Shield, Trash2, Search, Filter, Loader2, CheckCircle2, SlidersHorizontal, UsersRound, Target, Pencil, ShieldAlert, Info, ExternalLink, FolderKanban } from 'lucide-react';
 import { teamService, type TeamMember, type TeamGroup } from '../../api/teamService';
 import { projectService, type Project } from '../../api/projectService';
 import type { AdvancedMonitoringStatus } from '../../api/advancedMonitoringService';
-import { reportService } from '../../api/reportService';
 import { billingService, type SubscriptionUsage } from '../../api/billingService';
+import { useActiveSessions } from '../../hooks/useActiveSessions';
 import { Button, Input, Modal } from '../../components/ui';
 import { useAuthStore } from '../../store/authStore';
 import { canManageTeam, canViewMemberTracking, hasPermission } from '../../utils/access';
@@ -43,7 +43,11 @@ const TeamPage = () => {
   const [closeNotify, setCloseNotify] = useState(false);
   const [savingAdvanced, setSavingAdvanced] = useState(false);
   const [savingMonitoring, setSavingMonitoring] = useState(false);
-  const [activeUserIds, setActiveUserIds] = useState<Set<number>>(new Set());
+  const sessionsQuery = useActiveSessions({ pollMs: 60_000 });
+  const activeUserIds = useMemo(
+    () => new Set((sessionsQuery.data ?? []).map((s) => s.user_id)),
+    [sessionsQuery.data],
+  );
   const [teams, setTeams] = useState<TeamGroup[]>([]);
   const [showTeamModal, setShowTeamModal] = useState(false);
   const [editingTeam, setEditingTeam] = useState<TeamGroup | null>(null);
@@ -72,17 +76,6 @@ const TeamPage = () => {
         }))
       );
     }).catch(() => setProjects([]));
-  }, []);
-
-  useEffect(() => {
-    const poll = () => {
-      reportService.getActiveSessions()
-        .then((r) => setActiveUserIds(new Set((r.data ?? []).map((s) => s.user_id))))
-        .catch(() => setActiveUserIds(new Set()));
-    };
-    poll();
-    const interval = setInterval(poll, 30_000);
-    return () => clearInterval(interval);
   }, []);
 
   const fetchMembers = async () => {

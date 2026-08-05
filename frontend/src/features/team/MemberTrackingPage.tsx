@@ -1,8 +1,8 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, Clock, Camera, Activity, Loader2, ExternalLink } from 'lucide-react';
 import { timeService } from '../../api/timeService';
-import { screenshotService } from '../../api/screenshotService';
+import { screenshotService, type ScreenshotItem } from '../../api/screenshotService';
 import { activityService } from '../../api/activityService';
 import { teamService } from '../../api/teamService';
 import { useAuthStore } from '../../store/authStore';
@@ -15,18 +15,11 @@ const MemberTrackingPage = () => {
   const { user } = useAuthStore();
   const [memberName, setMemberName] = useState('');
   const [timeEntries, setTimeEntries] = useState<any[]>([]);
-  const [screenshots, setScreenshots] = useState<any[]>([]);
+  const [screenshots, setScreenshots] = useState<ScreenshotItem[]>([]);
   const [activityLogs, setActivityLogs] = useState<any[]>([]);
-  const [thumbUrls, setThumbUrls] = useState<Record<number, string>>({});
   const [loading, setLoading] = useState(true);
 
   const today = new Date().toISOString().split('T')[0];
-
-  const revokeThumbs = useCallback((urls: Record<number, string>) => {
-    Object.values(urls).forEach((url) => {
-      if (url) URL.revokeObjectURL(url);
-    });
-  }, []);
 
   useEffect(() => {
     if (!userId) return;
@@ -52,34 +45,14 @@ const MemberTrackingPage = () => {
       screenshotService.getAll({ ...range, per_page: 12 }),
       activityService.getAll({ ...range, per_page: 20 }),
     ])
-      .then(async ([timeResp, ssResp, actResp]) => {
-        const shots = ssResp.data ?? [];
+      .then(([timeResp, ssResp, actResp]) => {
         setTimeEntries(timeResp.data ?? []);
-        setScreenshots(shots);
+        setScreenshots(ssResp.data ?? []);
         setActivityLogs(actResp.data ?? []);
-
-        setThumbUrls((prev) => {
-          revokeThumbs(prev);
-          return {};
-        });
-
-        const entries = await Promise.all(
-          shots.map(async (item: any) => {
-            try {
-              const blobUrl = await screenshotService.getThumbnailBlobUrl(item.id);
-              return [item.id, blobUrl] as const;
-            } catch {
-              return [item.id, ''] as const;
-            }
-          })
-        );
-        setThumbUrls(Object.fromEntries(entries));
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [userId, today, revokeThumbs]);
-
-  useEffect(() => () => revokeThumbs(thumbUrls), [thumbUrls, revokeThumbs]);
+  }, [userId, today]);
 
   if (loading) {
     return (
@@ -155,26 +128,25 @@ const MemberTrackingPage = () => {
             <Camera size={18} className="text-primary-400" /> Screenshots
           </h2>
           <div className="grid grid-cols-2 gap-3 max-h-96 overflow-y-auto">
-            {screenshots.map((s) => {
-              const thumb = thumbUrls[s.id];
-              return (
-                <div key={s.id} className="rounded-xl bg-white/5 border border-white/5 overflow-hidden">
-                  <div className="aspect-video bg-slate-900">
-                    {thumb ? (
-                      <img src={thumb} alt="" className="w-full h-full object-cover" loading="lazy" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-[10px] text-slate-500">Loading…</div>
-                    )}
-                  </div>
-                  <div className="p-2 text-center">
-                    <p className="text-[10px] text-slate-400">
-                      {new Date(s.captured_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </p>
-                    <p className="text-[10px] text-primary-400">{s.activity_level}%</p>
-                  </div>
+            {screenshots.map((s) => (
+              <div key={s.id} className="rounded-xl bg-white/5 border border-white/5 overflow-hidden">
+                <div className="aspect-video bg-slate-900">
+                  {s.thumb_url ? (
+                    <img src={s.thumb_url} alt="" className="w-full h-full object-cover" loading="lazy" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-[10px] text-slate-500">No preview</div>
+                  )}
                 </div>
-              );
-            })}
+                <div className="p-2 text-center">
+                  <p className="text-[10px] text-slate-400">
+                    {s.captured_at
+                      ? new Date(s.captured_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                      : ''}
+                  </p>
+                  <p className="text-[10px] text-primary-400">{s.activity_level}%</p>
+                </div>
+              </div>
+            ))}
             {screenshots.length === 0 && <p className="text-sm text-slate-500 col-span-2">No screenshots today.</p>}
           </div>
         </section>

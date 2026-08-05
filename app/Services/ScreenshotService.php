@@ -93,16 +93,20 @@ class ScreenshotService
 
     public function getScreenshot(int $id): ?array
     {
-        return $this->screenshotModel->find($id);
+        $row = $this->screenshotModel->find($id);
+
+        return $row ? $this->attachSignedUrls($row) : null;
     }
 
     public function getScreenshotsByTimeEntry(int $timeEntryId): array
     {
-        return $this->screenshotModel
+        $rows = $this->screenshotModel
             ->where('time_entry_id', $timeEntryId)
             ->where('deleted_by_user', false)
             ->orderBy('captured_at', 'ASC')
             ->findAll();
+
+        return array_map([$this, 'attachSignedUrls'], $rows);
     }
 
     public function deleteScreenshot(int $id, int $userId, int $organizationId): bool
@@ -163,6 +167,7 @@ class ScreenshotService
         $screenshots = $builder->orderBy('captured_at', 'DESC')->limit($perPage, $offset)->get()->getResultArray();
         $phpTz = $this->timezoneService->getOrgTimezone((int) ($filters['organization_id'] ?? 0));
         $screenshots = $this->timezoneService->applyToCollection($screenshots, $phpTz, ['captured_at', 'created_at']);
+        $screenshots = array_map([$this, 'attachSignedUrls'], $screenshots);
 
         return [
             'data' => $screenshots,
@@ -173,6 +178,22 @@ class ScreenshotService
                 'total_pages' => ceil($total / $perPage)
             ]
         ];
+    }
+
+    /**
+     * Attach browser-cacheable signed media URLs (no Bearer needed on <img src>).
+     */
+    public function attachSignedUrls(array $screenshot): array
+    {
+        $id = (int) ($screenshot['id'] ?? 0);
+        if ($id <= 0) {
+            return $screenshot;
+        }
+
+        $screenshot['thumb_url'] = \App\Libraries\SignedUrl::screenshotUrl($id, 'thumb');
+        $screenshot['view_url'] = \App\Libraries\SignedUrl::screenshotUrl($id, 'view');
+
+        return $screenshot;
     }
 
     public function blurImage(string $absolutePath): bool

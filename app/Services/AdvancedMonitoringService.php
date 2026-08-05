@@ -217,6 +217,12 @@ class AdvancedMonitoringService
             ->get()
             ->getResultArray();
 
+        $screenshotService = new ScreenshotService();
+        $recentScreenshots = array_map(
+            static fn (array $row) => $screenshotService->attachSignedUrls($row),
+            $recentScreenshots
+        );
+
         $trackedHours = (float) ($timeSummary['total_hours'] ?? 0);
         $integrityScore = $this->calculateIntegrityScore(
             $trackedHours,

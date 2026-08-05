@@ -887,20 +887,29 @@ async function getForegroundApp() {
 }
 
 async function syncActivityToBackend(retried = false) {
-    if (!currentSession.isTracking || isPaused || !currentSession.timeEntryId) return;
+    if (!currentSession.isTracking || isPaused || !currentSession.timeEntryId) {
+        // Still try to flush durable queue if we have a token + entry context from a stopping session.
+        // Callers that need a final flush pass forceFlush via flushActivityBeforeStop.
+        return;
+    }
 
     const token = await resolveAuthToken(false);
     if (!token) {
         console.warn('[Activity] No auth token available, skipping sync.');
+        activityTracker.markSyncFailed('No auth token');
+        return;
+    }
+
+    const prepared = activityTracker.prepareSyncPayload(currentSession.timeEntryId);
+    if (prepared.skipped) {
+        return;
+    }
+    const payload = prepared.payload;
+    if (!payload.logs.length && payload.idle_seconds <= 0 && payload.active_seconds <= 0) {
         return;
     }
 
     try {
-        const payload = activityTracker.buildSyncPayload(currentSession.timeEntryId);
-        if (!payload.logs.length && payload.idle_seconds <= 0 && payload.active_seconds <= 0) {
-            return;
-        }
-
         const routerMac = networkInfo.getDefaultGatewayMac();
         if (routerMac) {
             payload.client_router_mac = routerMac;
@@ -942,10 +951,12 @@ async function syncActivityToBackend(retried = false) {
             req.write(body);
             req.end();
         });
+
+        activityTracker.acknowledgeSync(prepared.clientIds, prepared.pollSnapshot, {
+            resetInputCounters: prepared.hadInputCounters,
+        });
         console.log(`[Activity] Synced ${payload.logs.length} segment(s) to backend.`);
 
-        // The timer can end without this process hearing about it (stopped in the web app,
-        // auto-closed by the server, renderer crash). Stop rather than keep filling a dead entry.
         if (isEntryFinishedResponse(responseBody)) {
             console.warn('[Activity] Time entry is no longer running — stopping local tracking.');
             currentSession.isTracking = false;
@@ -963,14 +974,42 @@ async function syncActivityToBackend(retried = false) {
         }
         if (err.statusCode === 404 || err.statusCode === 409) {
             console.warn('[Activity] Backend rejected the time entry — stopping local tracking.');
+            // Keep durable queue for a future entry if possible; drop entry binding.
+            activityTracker.markSyncFailed(err.message || 'Entry rejected');
             currentSession.isTracking = false;
             currentSession.timeEntryId = null;
             stopMonitoringLoop();
             requestTimerResync();
             return;
         }
+        activityTracker.markSyncFailed(err.message || 'Sync error');
         console.error('[Activity] Sync error:', err.message, err.body ? `- ${err.body}` : '');
     }
+}
+
+/**
+ * Final flush used on stop/shutdown. Uses current timeEntryId if still set.
+ */
+async function flushActivityBeforeStop() {
+    const entryId = currentSession.timeEntryId;
+    if (!entryId) return;
+    const wasPaused = isPaused;
+    // Allow sync even if paused — stop must not drop queued segments.
+    if (wasPaused) {
+        isPaused = false;
+    }
+    try {
+        await syncActivityToBackend(false);
+    } finally {
+        if (wasPaused) {
+            isPaused = true;
+        }
+    }
+}
+
+function broadcastActivityLive(snapshot) {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.webContents.send('activity-live', snapshot || activityTracker.getLiveSnapshot());
 }
 
 function isEntryFinishedResponse(responseBody) {
@@ -1234,6 +1273,8 @@ function startMonitoringLoop() {
             detectSensitiveApp,
             isInternalTrackerApp,
             onSync: syncActivityToBackend,
+            onLiveUpdate: broadcastActivityLive,
+            queuePath: path.join(app.getPath('userData'), 'activity-queue.json'),
         });
     }
 
@@ -1476,7 +1517,12 @@ ipcMain.handle('start-tracking', (_event, { timeEntryId, token, screenshotInterv
 });
 
 // Called from renderer when timer stops
-ipcMain.handle('stop-tracking', () => {
+ipcMain.handle('stop-tracking', async () => {
+    try {
+        await flushActivityBeforeStop();
+    } catch (err) {
+        console.warn('[IPC] Final activity flush failed:', err.message);
+    }
     currentSession.isTracking = false;
     currentSession.timeEntryId = null;
     isPaused = false;
@@ -1484,13 +1530,21 @@ ipcMain.handle('stop-tracking', () => {
     pausedByIdle = false;
     resetPausedWorkReminder();
     stopMonitoringLoop();
+    broadcastActivityLive(activityTracker.getLiveSnapshot());
     console.log('[IPC] Tracking stopped.');
     return { success: true };
 });
 
-ipcMain.handle('pause-tracking', () => {
+ipcMain.handle('get-live-activity', () => activityTracker.getLiveSnapshot());
+
+ipcMain.handle('pause-tracking', async () => {
     if (!currentSession.isTracking) {
         return { success: false, error: 'No active tracking session' };
+    }
+    try {
+        await flushActivityBeforeStop();
+    } catch (err) {
+        console.warn('[IPC] Pause flush failed:', err.message);
     }
     // Do not clear pausedByLock / pausedByIdle here — lock and idle own those flags.
     // Clearing them broke auto-resume on unlock / return-from-idle after the renderer
@@ -1501,6 +1555,7 @@ ipcMain.handle('pause-tracking', () => {
     stopMonitoringCapture();
     startTokenRefreshLoop();
     startIdleGuard();
+    broadcastActivityLive(activityTracker.getLiveSnapshot());
     return { success: true };
 });
 
@@ -1657,6 +1712,7 @@ app.whenReady().then(() => {
             }
             if (currentSession.isTracking && !isPaused) {
                 startMonitoringLoop();
+                void syncActivityToBackend(false);
             }
             if (mainWindow && !mainWindow.isDestroyed() && windowVisible) {
                 mainWindow.webContents.send('system-resume');
@@ -1684,7 +1740,19 @@ app.whenReady().then(() => {
     }
 });
 
-app.on('before-quit', () => {
+app.on('before-quit', (event) => {
+    if (shutdownDone) return;
+    if (!appIsQuitting && currentSession.isTracking && currentSession.timeEntryId) {
+        event.preventDefault();
+        appIsQuitting = true;
+        void flushActivityBeforeStop()
+            .catch((err) => console.warn('[App] Quit flush failed:', err.message))
+            .finally(() => {
+                shutdownApp();
+                app.quit();
+            });
+        return;
+    }
     shutdownApp();
 });
 

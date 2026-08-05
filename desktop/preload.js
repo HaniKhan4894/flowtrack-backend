@@ -55,6 +55,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Activity events (fire-and-forget)
     sendActivityEvent: (type) => ipcRenderer.send('activity-event', type),
 
+    getLiveActivity: () => ipcRenderer.invoke('get-live-activity'),
+    onActivityLive: (callback) => {
+        const handler = (_event, snapshot) => callback(snapshot);
+        ipcRenderer.on('activity-live', handler);
+        return () => ipcRenderer.removeListener('activity-live', handler);
+    },
+
     // Listen for screenshot-captured event from main
     onScreenshotCaptured: (callback) => {
         ipcRenderer.on('screenshot-captured', (_event, data) => callback(data));

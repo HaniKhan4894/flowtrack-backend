@@ -240,29 +240,35 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 if (typeof window !== 'undefined') {
     void useAuthStore.getState().initAuth();
 
-    document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible' && useAuthStore.getState().isAuthenticated && !isLoginPath(window.location.pathname)) {
+    // visibilitychange + focus both fire on tab return — debounce to one ensureValidSession.
+    let sessionCheckTimer: ReturnType<typeof setTimeout> | null = null;
+    const scheduleSessionCheck = () => {
+        if (sessionCheckTimer) clearTimeout(sessionCheckTimer);
+        sessionCheckTimer = setTimeout(() => {
+            sessionCheckTimer = null;
+            if (!useAuthStore.getState().isAuthenticated) return;
+            if (isLoginPath(window.location.pathname)) return;
             void useAuthStore.getState().ensureValidSession();
+        }, 400);
+    };
+
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            scheduleSessionCheck();
         }
     });
 
     window.addEventListener('focus', () => {
-        if (useAuthStore.getState().isAuthenticated && !isLoginPath(window.location.pathname)) {
-            void useAuthStore.getState().ensureValidSession();
-        }
+        scheduleSessionCheck();
     });
 
     window.addEventListener('flowtrack-system-resume', () => {
-        if (useAuthStore.getState().isAuthenticated) {
-            void useAuthStore.getState().ensureValidSession();
-        }
+        scheduleSessionCheck();
     });
 
     if (isDesktopApp() && window.electronAPI?.onSystemResume) {
         window.electronAPI.onSystemResume(() => {
-            if (useAuthStore.getState().isAuthenticated) {
-                void useAuthStore.getState().ensureValidSession();
-            }
+            scheduleSessionCheck();
         });
     }
 }
