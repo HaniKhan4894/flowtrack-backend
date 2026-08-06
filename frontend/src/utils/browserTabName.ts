@@ -126,5 +126,10 @@ export function getBrowserTabDisplayName(windowTitle: string, url?: string): str
     return 'New Tab';
   }
 
+  // WAMP/local dev: tab title is often just the PHP filename with no URL captured.
+  if (/\.(php|tsx|ts|jsx|js|vue|html|css|json|md|sql)\b/i.test(beforeDash)) {
+    return 'Localhost';
+  }
+
   return beforeDash.length > 32 ? `${beforeDash.slice(0, 32)}…` : beforeDash;
 }

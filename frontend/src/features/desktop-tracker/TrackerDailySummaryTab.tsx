@@ -5,6 +5,7 @@ import { HourlyTimeline } from '../activity/HourlyTimeline';
 import type { HourlyTimelineData } from '../../types';
 import { computeActivityPct, shiftDateKey } from './trackerMetrics';
 import { localDateKey } from '../../utils/liveTimer';
+import { buildCollapsedTopApps, buildCursorTabsFromLogs } from '../../utils/trackerTopApps';
 
 interface Props {
   selectedDate: string;
@@ -117,6 +118,8 @@ export function TrackerDailySummaryTab({
 }: Props) {
   const [timelineData, setTimelineData] = useState<HourlyTimelineData | null>(null);
   const [topApps, setTopApps] = useState<{ app_name: string; duration_seconds?: number; percentage?: number }[]>([]);
+  const [browserTabs, setBrowserTabs] = useState<{ display_name?: string; duration_seconds?: number }[]>([]);
+  const [cursorTabs, setCursorTabs] = useState<{ label: string; duration_seconds: number }[]>([]);
   const [loggedSeconds, setLoggedSeconds] = useState<number | undefined>();
   const [yesterdayLogged, setYesterdayLogged] = useState(0);
   const [yesterdayTimeline, setYesterdayTimeline] = useState<HourlyTimelineData | null>(null);
@@ -134,9 +137,10 @@ export function TrackerDailySummaryTab({
       const yesterdayKey = shiftDateKey(selectedDate, -1);
       const yesterdayPicked = new Date(`${yesterdayKey}T12:00:00`);
 
-      const [timelineResp, appsResp, calendarResp, yesterdayTimelineResp, yesterdayCalendarResp] = await Promise.all([
+      const [timelineResp, appsResp, logsResp, calendarResp, yesterdayTimelineResp, yesterdayCalendarResp] = await Promise.all([
         reportService.getHourlyTimeline({ date: selectedDate }),
         activityService.getTopApps(range),
+        activityService.getAll(range),
         reportService.getHoursCalendar({
           year: picked.getFullYear(),
           month: picked.getMonth() + 1,
@@ -150,6 +154,8 @@ export function TrackerDailySummaryTab({
 
       setTimelineData(timelineResp.data);
       setTopApps(appsResp.data?.apps ?? []);
+      setBrowserTabs(appsResp.data?.tabs ?? []);
+      setCursorTabs(buildCursorTabsFromLogs(logsResp.data ?? []));
       const dayRow = calendarResp.data.days.find((d) => d.date === selectedDate);
       setLoggedSeconds(dayRow?.seconds ?? 0);
       const yesterdayRow = yesterdayCalendarResp.data.days.find((d) => d.date === yesterdayKey);
@@ -159,6 +165,8 @@ export function TrackerDailySummaryTab({
     } catch {
       setTimelineData(null);
       setTopApps([]);
+      setBrowserTabs([]);
+      setCursorTabs([]);
       setLoggedSeconds(undefined);
       setYesterdayLogged(0);
       setYesterdayTimeline(null);
@@ -186,37 +194,10 @@ export function TrackerDailySummaryTab({
 
   const effectiveLoggedSeconds = Math.max(loggedSeconds ?? 0, liveLoggedSeconds ?? 0);
 
-  /**
-   * Merge historical API topApps with current-session live data.
-   * We never replace API data — we add session seconds on top so the
-   * percentage is always relative to the FULL day (like Trackabi).
-   */
-  const effectiveTopApps = useMemo(() => {
-    if (!liveSessionApps || liveSessionApps.length === 0) {
-      return topApps;
-    }
-
-    const merged = new Map<string, number>();
-
-    for (const app of topApps) {
-      merged.set(app.app_name, (merged.get(app.app_name) ?? 0) + (app.duration_seconds ?? 0));
-    }
-
-    for (const app of liveSessionApps) {
-      merged.set(app.app_name, (merged.get(app.app_name) ?? 0) + (app.duration_seconds ?? 0));
-    }
-
-    const total = Array.from(merged.values()).reduce((s, v) => s + v, 0) || 1;
-
-    return Array.from(merged.entries())
-      .map(([app_name, duration_seconds]) => ({
-        app_name,
-        duration_seconds,
-        percentage: Math.round((duration_seconds / total) * 100),
-      }))
-      .sort((a, b) => b.duration_seconds - a.duration_seconds)
-      .slice(0, 5);
-  }, [liveSessionApps, topApps]);
+  const effectiveTopApps = useMemo(
+    () => buildCollapsedTopApps(topApps, browserTabs, cursorTabs, liveSessionApps, 5),
+    [liveSessionApps, topApps, browserTabs, cursorTabs],
+  );
 
   const activityTrendDelta = useMemo(() => {
     if (!timelineData || yesterdayLogged <= 0 || effectiveLoggedSeconds <= 0) return null;

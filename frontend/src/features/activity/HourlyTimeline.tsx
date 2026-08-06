@@ -38,6 +38,7 @@ interface TopApp {
   duration_seconds?: number;
   percentage?: number;
   category?: string;
+  breakdown?: { label: string; duration_seconds: number; percentage: number }[];
 }
 
 type AppCategoryGroup = 'productive' | 'unproductive' | 'neutral';
@@ -258,6 +259,7 @@ const HourAxis = ({ hours }: { hours: HourBucket[] }) => (
 export const HourlyTimeline = ({ data, isLoading, selectedDate, topApps = [], variant = 'default', loggedSeconds, activityTrendDelta = null }: HourlyTimelineProps) => {
   const [hover, setHover] = useState<HoverState | null>(null);
   const [hoveredApp, setHoveredApp] = useState<string | null>(null);
+  const [appBreakdownOpen, setAppBreakdownOpen] = useState<string | null>(null);
 
   const setHoverFromEvent = useCallback((hour: number, row: RowType, e: React.MouseEvent<HTMLElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -272,7 +274,7 @@ export const HourlyTimeline = ({ data, isLoading, selectedDate, topApps = [], va
     return d.toLocaleDateString(undefined, { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric' });
   }, [selectedDate]);
 
-  const dayTopApps = useMemo(() => {
+  const dayTopApps = useMemo((): TopApp[] => {
     if (topApps.length > 0) return topApps.slice(0, 5);
     if (!data) return [];
     const map = new Map<string, number>();
@@ -347,6 +349,7 @@ export const HourlyTimeline = ({ data, isLoading, selectedDate, topApps = [], va
   const trackedBarTotal = allTrackedSeconds || 1;
   const activityBarTotal = activitySeconds || 1;
   const trackerTopApps = dayTopApps.slice(0, 5);
+  const openBreakdownApp = trackerTopApps.find((a) => a.app_name === appBreakdownOpen);
 
   const isActive = (hour: number, row: RowType) => hover?.hour === hour && hover?.row === row;
   const isTracker = variant === 'tracker';
@@ -376,28 +379,38 @@ export const HourlyTimeline = ({ data, isLoading, selectedDate, topApps = [], va
         {isTracker ? (
           <div className="overflow-hidden rounded-2xl border border-white/[0.07] bg-[#0b0f17]/90">
             {/* ── Where time went ── */}
-            <div className="border-b border-white/[0.06] px-2.5 py-2.5">
+            <div className="relative border-b border-white/[0.06] px-2.5 py-2.5">
               <p className="mb-2 text-[10px] font-medium text-slate-500">Where time went</p>
               {trackerTopApps.length > 0 ? (
                 <div className="flex w-full items-end justify-between gap-1">
                   {trackerTopApps.map((app) => {
                     const isHot = hoveredApp === app.app_name;
+                    const isOpen = appBreakdownOpen === app.app_name;
                     const label = getAppDisplayName(app.app_name);
+                    const hasBreakdown = (app.breakdown?.length ?? 0) > 0;
                     return (
                       <button
                         key={app.app_name}
                         type="button"
+                        onClick={() => {
+                          if (!hasBreakdown) return;
+                          setAppBreakdownOpen(isOpen ? null : app.app_name);
+                        }}
                         onMouseEnter={() => setHoveredApp(app.app_name)}
                         onMouseLeave={() => setHoveredApp(null)}
                         className={cn(
-                          'flex min-w-0 flex-1 flex-col items-center justify-center gap-1.5 rounded-xl py-2 transition-colors',
-                          isHot ? 'bg-white/[0.05]' : 'hover:bg-white/[0.03]',
+                          'relative flex min-w-0 flex-1 flex-col items-center justify-center gap-1.5 rounded-xl py-2 transition-colors',
+                          isHot || isOpen ? 'bg-white/[0.05]' : 'hover:bg-white/[0.03]',
+                          hasBreakdown && 'cursor-pointer',
                         )}
-                        title={`${label} · ${app.percentage ?? 0}%`}
+                        title={hasBreakdown ? `${label} · tap for breakdown` : `${label} · ${app.percentage ?? 0}%`}
                       >
                         <AppIcon appName={app.app_name} size={44} />
                         <span className="max-w-[58px] truncate text-[9px] text-slate-500">{label.split(' ')[0]}</span>
                         <span className="text-[11px] font-bold tabular-nums text-slate-300">{app.percentage ?? 0}%</span>
+                        {hasBreakdown && (
+                          <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-sky-400/80" />
+                        )}
                       </button>
                     );
                   })}
@@ -405,6 +418,23 @@ export const HourlyTimeline = ({ data, isLoading, selectedDate, topApps = [], va
               ) : (
                 <div className="flex h-16 items-center justify-center">
                   <p className="text-[10px] text-slate-600">No app data yet</p>
+                </div>
+              )}
+
+              {openBreakdownApp?.breakdown && openBreakdownApp.breakdown.length > 0 && (
+                <div className="mt-2 rounded-xl border border-white/[0.08] bg-white/[0.03] px-2 py-2">
+                  <p className="mb-1.5 text-[9px] font-medium text-slate-500">
+                    {getAppDisplayName(openBreakdownApp.app_name)} breakdown
+                  </p>
+                  <div className="space-y-1">
+                    {openBreakdownApp.breakdown.map((item) => (
+                      <div key={item.label} className="flex items-center gap-2 rounded-lg px-1.5 py-1 hover:bg-white/[0.03]">
+                        <AppIcon appName={item.label} size={22} className="!rounded-md !p-0.5" />
+                        <span className="min-w-0 flex-1 truncate text-[10px] text-slate-300">{item.label}</span>
+                        <span className="text-[10px] font-bold tabular-nums text-slate-400">{item.percentage}%</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>

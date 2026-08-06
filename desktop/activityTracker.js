@@ -4,6 +4,7 @@
  */
 const fs = require('fs');
 const path = require('path');
+const { sessionAppLabel } = require('./browserTabName');
 const crypto = require('crypto');
 const systemInput = require('./systemInput');
 
@@ -334,13 +335,13 @@ function getSessionTopApps() {
 
     const map = new Map();
     for (const seg of segments) {
-        const name = seg.app_name || 'Unknown';
+        const name = sessionAppLabel(seg);
         map.set(name, (map.get(name) || 0) + (Number(seg.duration_seconds) || 0));
     }
     const total = [...map.values()].reduce((sum, v) => sum + v, 0) || 1;
     return [...map.entries()]
         .sort((a, b) => b[1] - a[1])
-        .slice(0, 5)
+        .slice(0, 20)
         .map(([app_name, duration_seconds]) => ({
             app_name,
             duration_seconds,

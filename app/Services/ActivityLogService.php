@@ -545,6 +545,11 @@ class ActivityLogService
             return 'New Tab';
         }
 
+        // WAMP/local dev: tab title is often just the PHP filename with no URL captured.
+        if (preg_match('/\.(php|tsx|ts|jsx|js|vue|html|css|json|md|sql)\b/i', $beforeDash)) {
+            return 'Localhost';
+        }
+
         return mb_strlen($beforeDash) > 32 ? mb_substr($beforeDash, 0, 32) . '…' : $beforeDash;
     }
 
