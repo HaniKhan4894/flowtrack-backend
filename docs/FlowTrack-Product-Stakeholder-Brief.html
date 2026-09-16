@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>FlowTrack — Product & Technology Brief</title>
+<style>
+  :root {
+    --primary: #6366F1;
+    --primary-dark: #4338CA;
+    --ink: #1e2233;
+    --muted: #6b7280;
+    --line: #e5e7eb;
+    --bg-soft: #f8f9fc;
+    --green: #059669;
+    --green-soft: #ecfdf5;
+    --amber: #b45309;
+    --amber-soft: #fffbeb;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--ink);
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  @page { size: A4; margin: 16mm 14mm; }
+  .page { max-width: 800px; margin: 0 auto; padding: 0 4px; }
+  .page-break { page-break-before: always; }
+
+  .cover {
+    background: linear-gradient(135deg, #4338CA 0%, #6366F1 55%, #7C3AED 100%);
+    color: #fff;
+    border-radius: 16px;
+    padding: 34px 32px;
+    margin-bottom: 22px;
+  }
+  .cover .brand { font-size: 13px; letter-spacing: 3px; text-transform: uppercase; opacity: .85; font-weight: 700; }
+  .cover h1 { font-size: 26px; margin: 10px 0 6px; font-weight: 800; line-height: 1.25; }
+  .cover p { margin: 0; opacity: .92; font-size: 13px; max-width: 580px; }
+  .cover .meta { margin-top: 18px; font-size: 11px; opacity: .8; }
+
+  h2.section {
+    font-size: 17px;
+    color: var(--primary-dark);
+    margin: 22px 0 4px;
+    padding-bottom: 6px;
+    border-bottom: 2px solid var(--line);
+  }
+  h3.sub {
+    font-size: 12px;
+    margin: 14px 0 6px;
+    color: var(--ink);
+    text-transform: uppercase;
+    letter-spacing: .6px;
+    font-weight: 700;
+  }
+  p.lead { color: var(--muted); margin: 4px 0 12px; }
+
+  .q-badge {
+    display: inline-block;
+    background: var(--primary);
+    color: #fff;
+    font-weight: 700;
+    font-size: 10px;
+    padding: 4px 12px;
+    border-radius: 20px;
+    letter-spacing: .5px;
+    margin-bottom: 6px;
+  }
+  .q-badge.q2 { background: #7C3AED; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 8px 0 12px;
+    font-size: 11px;
+  }
+  th, td {
+    text-align: left;
+    padding: 7px 9px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+  }
+  th {
+    background: var(--bg-soft);
+    font-weight: 700;
+    color: #374151;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: .4px;
+  }
+  tr.highlight td { background: #eef1ff; font-weight: 600; }
+  tr.green-row td { background: var(--green-soft); color: var(--green); font-weight: 700; }
+  tr.amber-row td { background: var(--amber-soft); color: var(--amber); }
+
+  .cards { display: flex; gap: 10px; margin: 12px 0; }
+  .card {
+    flex: 1;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 12px 14px;
+    background: #fff;
+  }
+  .card .k { font-size: 9px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); font-weight: 700; }
+  .card .v { font-size: 20px; font-weight: 800; margin-top: 3px; color: var(--primary-dark); }
+  .card .v.green { color: var(--green); }
+  .card .note { font-size: 9px; color: var(--muted); margin-top: 2px; }
+
+  .callout {
+    background: var(--green-soft);
+    border-left: 4px solid var(--green);
+    border-radius: 8px;
+    padding: 11px 14px;
+    margin: 12px 0;
+    font-size: 11.5px;
+  }
+  .callout b { color: var(--green); }
+  .note-box {
+    background: var(--amber-soft);
+    border-left: 4px solid #f59e0b;
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin: 10px 0;
+    font-size: 11px;
+    color: #78350f;
+  }
+
+  .flow-box {
+    background: var(--bg-soft);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin: 10px 0;
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 11px;
+    line-height: 1.7;
+    text-align: center;
+    color: #374151;
+  }
+  .flow-box .arrow { color: var(--primary); font-weight: 700; }
+
+  ul.clean { margin: 4px 0 10px; padding-left: 16px; }
+  ul.clean li { margin: 3px 0; font-size: 11px; }
+  ul.feature-grid {
+    margin: 6px 0 10px;
+    padding: 0;
+    list-style: none;
+    columns: 2;
+    column-gap: 16px;
+  }
+  ul.feature-grid li {
+    margin: 0 0 5px;
+    padding-left: 14px;
+    position: relative;
+    font-size: 11px;
+    break-inside: avoid;
+  }
+  ul.feature-grid li::before {
+    content: "✓";
+    position: absolute;
+    left: 0;
+    color: var(--green);
+    font-weight: 700;
+    font-size: 10px;
+  }
+
+  .feature-block {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    background: #fff;
+  }
+  .feature-block .title {
+    font-weight: 700;
+    font-size: 11.5px;
+    color: var(--primary-dark);
+    margin-bottom: 4px;
+  }
+  .feature-block .desc { font-size: 10.5px; color: var(--muted); margin: 0; }
+
+  .checklist { margin: 8px 0; }
+  .check-item { display: flex; gap: 8px; margin: 4px 0; font-size: 11px; align-items: flex-start; }
+  .check-item .icon { font-weight: 700; flex-shrink: 0; width: 14px; }
+  .check-item.done .icon { color: var(--green); }
+  .check-item.pending .icon { color: #9ca3af; }
+
+  .footer {
+    margin-top: 20px;
+    padding-top: 10px;
+    border-top: 1px solid var(--line);
+    font-size: 10px;
+    color: var(--muted);
+    text-align: center;
+  }
+  .answer-box {
+    background: #eef1ff;
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin: 8px 0;
+    font-size: 11.5px;
+    line-height: 1.55;
+  }
+  .answer-box strong { color: var(--primary-dark); }
+</style>
+</head>
+<body>
+
+<!-- PAGE 1: COVER + EXECUTIVE SUMMARY -->
+<div class="page">
+  <div class="cover">
+    <div class="brand">FlowTrack</div>
+<div class="meta">Prepared: August 2026 &nbsp;•&nbsp; Confidential &nbsp;•&nbsp; review</div>
+  </div>
+
+  <h2 class="section">Executive Summary</h2>
+  <p class="lead">FlowTrack is a multi-tenant SaaS platform for time tracking, activity monitoring, invoicing, and workforce operations. The product is feature-rich and functional. The remaining work is production hosting, desktop code signing, and security review.</p>
+
+
+  <span class="q-badge">QUESTION 1</span>
+  <h2 class="section">What is the complete technology stack and architecture?</h2>
+
+  <h3 class="sub">Architecture — 3-tier multi-tenant SaaS</h3>
+  <table>
+    <thead><tr><th>Component</th><th>Role</th><th>Technology</th></tr></thead>
+    <tbody>
+      <tr><td><b>Desktop Tracker</b></td><td>Real-time timer, app/browser tracking, screenshots</td><td>Electron 31</td></tr>
+      <tr><td><b>Web Application</b></td><td>Dashboard, reports, settings, marketing site</td><td>React 19 + TypeScript</td></tr>
+      <tr><td><b>Backend API</b></td><td>Business logic, auth, billing, integrations</td><td>PHP 8.1+ / CodeIgniter 4</td></tr>
+      <tr><td><b>Database</b></td><td>Tenant-scoped persistent storage</td><td>MySQL 8+</td></tr>
+    </tbody>
+  </table>
+
+ 
+</div>
+
+<!-- PAGE 2: TECH STACK DETAIL -->
+<div class="page page-break">
+  <h3 class="sub">Complete technology stack</h3>
+  <table>
+    <thead><tr><th>Layer</th><th>Technologies</th></tr></thead>
+    <tbody>
+      <tr><td><b>Backend</b></td><td>PHP 8.1+, CodeIgniter 4, Composer</td></tr>
+      <tr><td><b>Database</b></td><td>MySQL 8+ (MariaDB compatible)</td></tr>
+      <tr><td><b>API authentication</b></td><td>JWT (access + refresh), OAuth, 2FA (Google Authenticator)</td></tr>
+      <tr><td><b>Frontend</b></td><td>React 19, TypeScript, Vite 6, Tailwind CSS 4</td></tr>
+    <tr><td><b>Desktop</b></td><td>Electron 31, active-win (foreground app), electron-updater</td></tr>
+      <tr><td><b>Payments</b></td><td>Stripe (subscriptions, webhooks, platform ledger)</td></tr>
+      <tr><td><b>Documents</b></td><td>DomPDF (PDF), PhpSpreadsheet (Excel exports)</td></tr>
+      <tr><td><b>Integrations</b></td><td>Slack, Microsoft Teams, Jira, GitHub, Google/Outlook Calendar</td></tr>
+  </tbody>
+  </table>
+
+  <h3 class="sub">Security &amp; tenancy model</h3>
+  <ul class="clean">
+    <li>Each customer is an <b>organization</b>; all data scoped by <code>organization_id</code>.</li>
+    <li><b>RBAC</b> with granular permissions: Owner, Admin, Manager, Team Lead, Member.</li>
+    <li><b>Plan-based feature gating</b> enforced at API level (screenshots, activity, invoicing, etc.).</li>
+    <li>JWT auth filter on all protected routes; permission filter per endpoint.</li>
+  </ul>
+
+  
+</div>
+
+<!-- PAGE 3: PRODUCT STATUS — WORKING FEATURES (1) -->
+<div class="page page-break">
+  <span class="q-badge q2">QUESTION 2</span>
+  <h2 class="section">What is the current status of the product?</h2>
+  <p class="lead">Below is a precise breakdown of what is fully working today and what still needs development before public launch.</p>
+
+  <h3 class="sub">✅ Fully working — core product</h3>
+
+  <div class="feature-block">
+    <div class="title">Time Tracking</div>
+    <p class="desc">Start, pause, resume, stop timer (web + desktop) · Manual entries · Active session sync · Midnight split &amp; orphaned timer cleanup</p>
+  </div>
+  <div class="feature-block">
+    <div class="title">Desktop Tracker (FlowTrack Tracker)</div>
+    <p class="desc">Windows installer + auto-update · Foreground app detection · Browser tab/site breakdown (TikTok, YouTube, Chrome) · Screenshot capture &amp; cloud sync · Idle detection · Offline queue · Daily summary UI</p>
+  </div>
+  <div class="feature-block">
+    <div class="title">Activity &amp; Productivity</div>
+    <p class="desc">Activity log sync from desktop · Productivity rules (app, URL, keyword) · Productive/unproductive/neutral categorization · Bulk re-categorization · Team activity feed &amp; member monitoring</p>
+  </div>
+  <div class="feature-block">
+    <div class="title">Organization &amp; Access Control</div>
+    <p class="desc">Multi-tenant organizations · Member invitations · Role assignment · Granular permissions · Plan feature flags · Per-member monitoring settings</p>
+  </div>
+  <div class="feature-block">
+    <div class="title">Projects &amp; Tasks</div>
+    <p class="desc">Project CRUD, archive, member assignment · Tasks linked to projects · Time entries associated with projects/tasks</p>
+  </div>
+  <div class="feature-block">
+    <div class="title">Timesheets &amp; Leave</div>
+    <p class="desc">Weekly timesheet generation · Submit, approve, reject workflow · Leave types (annual, sick, casual, unpaid)</p>
+  </div>
+  <div class="feature-block">
+    <div class="title">Screenshots</div>
+    <p class="desc">Plan-based capture intervals · Thumbnail gallery, pagination, full preview · Blur/sensitivity policies · Signed/JWT-protected image URLs</p>
+  </div>
+  <div class="feature-block">
+    <div class="title">Reports &amp; Analytics</div>
+    <p class="desc">Dashboard · Hourly timeline (productive/unproductive/neutral/idle) · Top apps &amp; browser tabs · Time summary · Team analytics · Advanced monitoring reports</p>
+  </div>
+</div>
+
+<!-- PAGE 4: WORKING FEATURES (2) + REMAINING WORK -->
+<div class="page page-break">
+  
+
+  <div class="feature-block">
+    <div class="title">Billing &amp; Subscriptions</div>
+    <p class="desc">Tiered plans with feature limits · Stripe checkout, subscriptions, webhooks · Trial management, coupons · Organization billing page · Admin revenue dashboard</p>
+  </div>
+  <div class="feature-block">
+    <div class="title">Invoicing, Payroll &amp; Client Trust</div>
+    <p class="desc">Invoice generation from tracked time · Client portal (review, approve, pay) · Proof-of-Work pack with integrity score · Verifiable work certificate · Payroll runs &amp; payslip PDF export</p>
+  </div>
+  <div class="feature-block">
+    <div class="title">Integrations</div>
+    <p class="desc">Slack (commands, notifications, hub) · Microsoft Teams (commands) · Jira (issue linking, hub) · GitHub (commit context, hub) · Google/Outlook Calendar sync</p>
+  </div>
+  <div class="feature-block">
+    <div class="title">AI &amp; Insights</div>
+    <p class="desc">AI activity categorization · Daily standup generation · Ask FlowTrack / insights panels · Unusual activity detection · Wellbeing &amp; burnout signals · Predictive forecasting hooks</p>
+  </div>
+  <div class="feature-block">
+    <div class="title">Platform Admin (Super-Admin)</div>
+    <p class="desc">Organization &amp; user management · Plan &amp; feature management · Revenue, payments, coupons · Marketing campaigns · System health, audit log · User impersonation</p>
+  </div>
+  <div class="feature-block">
+    <div class="title">Marketing &amp; Onboarding</div>
+    <p class="desc">Public landing page with pricing · Registration &amp; email verification · Onboarding checklist · Privacy policy &amp; terms pages</p>
+  </div>
+  <div class="feature-block">
+    <div class="title">Development Quality</div>
+    <p class="desc">GitHub Actions CI (PHPUnit + frontend lint/build) · Health endpoint · Release checklist &amp; incident runbooks</p>
+  </div>
+
+  <h3 class="sub">🟡 Still needs work before public launch</h3>
+  <table>
+    <thead><tr><th>Area</th><th>Current state</th><th>Required before launch</th></tr></thead>
+    <tbody>
+      <tr><td><b>Production hosting</b></td><td>...</td><td>Dedicated server, SSL, custom domain</td></tr>
+      <tr><td><b>Desktop code signing</b></td><td>Windows unsigned; macOS CI documented</td><td>Apple notarization; Windows signing</td></tr>
+      <tr><td><b>Scheduled jobs</b></td><td>CLI commands implemented</td><td>Production cron (timer sweep, campaigns)</td></tr>
+      <tr><td><b>Automated testing</b></td><td>Basic PHPUnit only</td><td>API integration &amp; E2E tests</td></tr>
+    <tr><td><b>QA &amp; regression</b></td><td>Core flows verified in dev</td><td>Full pass across roles, plans, clients</td></tr>
+     <tr><td><b>Advanced AI UX</b></td><td>Backend services exist</td><td>Polish flagship AI timesheet experience</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- PAGE 5: CHECKLIST + ONE-PAGE ANSWERS -->
+<div class="page page-break">
+  <h2 class="section">Launch Readiness Checklist</h2>
+
+  <div class="two-col" style="display:flex;gap:20px;">
+    <div style="flex:1;">
+      <h3 class="sub" style="color:var(--green);">Ready for beta</h3>
+      <div class="checklist">
+        <div class="check-item done"><span class="icon">✓</span> Core time tracking (web + desktop)</div>
+        <div class="check-item done"><span class="icon">✓</span> Activity &amp; screenshot monitoring</div>
+        <div class="check-item done"><span class="icon">✓</span> Team management &amp; permissions</div>
+        <div class="check-item done"><span class="icon">✓</span> Reports &amp; analytics</div>
+        <div class="check-item done"><span class="icon">✓</span> Billing (Stripe) &amp; plan limits</div>
+        <div class="check-item done"><span class="icon">✓</span> Windows desktop installer</div>
+      </div>
+    </div>
+ 
+  </div>
+
+  <h2 class="section">In Short</h2>
+
+  <p style="font-size:11px;font-weight:700;color:var(--primary-dark);margin:10px 0 4px;">Q: What is the complete technology stack and architecture?</p>
+  <div class="answer-box">
+    FlowTrack is a <strong>3-tier multi-tenant SaaS</strong>: Electron desktop tracker + React web app → CodeIgniter 4 REST API → MySQL. Auth uses JWT, OAuth, and 2FA. Payments via Stripe. Integrations include Slack, Teams, Jira, GitHub, and Calendar. All data is organization-scoped with role-based permissions and plan-based feature gating.
+  </div>
+
+  <p style="font-size:11px;font-weight:700;color:var(--primary-dark);margin:14px 0 4px;">Q: What is fully working and what still needs development before launch?</p>
+  <div class="answer-box">
+    <strong>Working:</strong> Time tracking, desktop app (timer, app/browser tracking, screenshots), activity logs, productivity rules, projects/tasks, timesheets, leave, reports, invoicing, payroll, client portal, proof-of-work, Stripe billing, integrations, AI insights, and super-admin panel.<br><br>
+    <strong>Before launch:</strong> Production hosting, desktop code signing, production cron jobs, full QA, security review, and API documentation polish. Product is ~85–90% complete; beta is feasible now; public launch estimated at 4–6 weeks.
+  </div>
+
+  <table style="margin-top:16px;">
+    <thead><tr><th>Metric</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr class="highlight"><td>Product completeness</td><td>~85–90%</td></tr>
+      <tr class="highlight"><td>Launch readiness</td><td>~70–75%</td></tr>
+      <tr class="green-row"><td>Beta (limited users)</td><td>Feasible now on staging</td></tr>
+      <tr class="green-row"><td>Public commercial launch</td><td>~4–6 weeks with focused infra &amp; QA</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note-box">
+    <b>Note:</b> FlowTrack is not a prototype — it is a feature-rich, working product. The remaining work is production deployment, quality assurance, desktop trust (code signing), and polish.
+  </div>
+
+  <div class="footer">
+    FlowTrack — Product &amp; Technology Brief &nbsp;•&nbsp; Confidential &nbsp;•&nbsp; August 2026
+  </div>
+</div>
+
+</body>
+</html>

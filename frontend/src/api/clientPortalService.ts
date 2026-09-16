@@ -3,7 +3,7 @@ import type { Invoice } from './invoiceService';
 
 const apiBaseUrl =
   import.meta.env.VITE_API_URL ||
-  'https://548a-124-109-46-74.ngrok-free.app/flowtrack-backend/public/api/v1';
+  'https://a249-124-109-46-74.ngrok-free.app/flowtrack-backend/public/api/v1';
 
 export const usesNgrok = apiBaseUrl.includes('ngrok');
 
