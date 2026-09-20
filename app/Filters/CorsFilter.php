@@ -18,7 +18,7 @@ class CorsFilter implements FilterInterface
             'http://localhost:3000',
             'http://127.0.0.1:5173',
             'https://flowtrackhani.vercel.app',
-            'https://a249-124-109-46-74.ngrok-free.app',
+            'https://d07a-154-192-130-198.ngrok-free.app',
         ];
 
         $frontendUrl = env('app.frontendURL');

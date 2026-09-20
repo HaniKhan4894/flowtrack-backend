@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 
 const DEFAULT_API_BASE_URL =
-    'https://a249-124-109-46-74.ngrok-free.app/flowtrack-backend/public/api/v1';
+    'https://d07a-154-192-130-198.ngrok-free.app/flowtrack-backend/public/api/v1';
 const DEFAULT_FRONTEND_URL = 'https://flowtrackhani.vercel.app';
 
 function readDeployConfigFromPath(deployPath) {
@@ -83,7 +83,7 @@ function loadFrontendUrl() {
 }
 
 const DEFAULT_PUBLIC_BASE_URL =
-    'https://a249-124-109-46-74.ngrok-free.app/flowtrack-backend/public';
+    'https://d07a-154-192-130-198.ngrok-free.app/flowtrack-backend/public';
 
 function loadPublicBaseUrl() {
     if (process.env.FLOWTRACK_PUBLIC_URL) {
